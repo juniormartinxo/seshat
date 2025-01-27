@@ -1,0 +1,93 @@
+# .gitignore para o Seshat CLI
+
+# Ambiente Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Ambientes virtuais
+.env/
+.venv/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Arquivos de ambiente
+.env
+*.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# Arquivos do projeto Seshat
+.seshat
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# Sistemas operacionais
+.DS_Store
+Thumbs.db
+
+# Testes e cobertura
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Debugging
+*.log
+*.pot
+*.pid
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local development
+*.local
+
+# Builds e packaging
+/dist/
+/pip-wheel-metadata/
+
+# Arquivos temporários
+*.tmp
+*.temp
+
+# Arquivos de configuração customizados
+/config.yml
+/settings.ini
+
+# Arquivos gerados pelo usuário
+*.mo
+*.pot
