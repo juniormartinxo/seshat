@@ -35,7 +35,33 @@ class DeepSeekProvider(BaseProvider):
         
         response = requests.post(self.base_url, json=data, headers=headers)
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
+        return response.json()["choices"][0]["message"]["content"].strip()   
+    
+
+    def _build_prompt(self, diff):
+        return f"""Você é um assistente de commits especialista em Conventional Commits. 
+
+Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional Commits:
+
+{diff}
+
+Formato exigido:
+<tipo>[escopo opcional]: <descrição concisa>
+
+Tipos permitidos:
+- feat: Nova funcionalidade
+- fix: Correção de bug
+- docs: Alterações na documentação
+- style: Mudanças de formatação
+- refactor: Refatoração de código
+- perf: Melhorias de performance
+- test: Adição/ajuste de testes
+- chore: Tarefas de manutenção
+- build: Mudanças no sistema de build
+- ci: Mudanças na CI/CD
+- revert: Reversão de commit
+
+Responda APENAS com a mensagem de commit, sem comentários extras."""
 
 class ClaudeProvider(BaseProvider):
     def __init__(self):
@@ -55,14 +81,25 @@ class ClaudeProvider(BaseProvider):
     def _build_prompt(self, diff):
         return f"""Você é um assistente de commits especialista em Conventional Commits. 
 
-Analise este diff e gere uma mensagem de commit seguindo o padrão:
+Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional Commits:
 
 {diff}
 
 Formato exigido:
 <tipo>[escopo opcional]: <descrição concisa>
 
-Tipos permitidos: feat, fix, docs, style, refactor, perf, test, chore, build, ci, revert.
+Tipos permitidos:
+- feat: Nova funcionalidade
+- fix: Correção de bug
+- docs: Alterações na documentação
+- style: Mudanças de formatação
+- refactor: Refatoração de código
+- perf: Melhorias de performance
+- test: Adição/ajuste de testes
+- chore: Tarefas de manutenção
+- build: Mudanças no sistema de build
+- ci: Mudanças na CI/CD
+- revert: Reversão de commit
 
 Responda APENAS com a mensagem de commit, sem comentários extras."""
     
