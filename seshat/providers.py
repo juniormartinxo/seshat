@@ -29,7 +29,8 @@ Responda APENAS com a mensagem de commit, sem comentários extras."""
 def get_provider(provider_name):
     providers = {
         "deepseek": DeepSeekProvider,
-        "claude": ClaudeProvider
+        "claude": ClaudeProvider,
+        "ollama": OllamaProvider
     }
     return providers[provider_name]()
 
@@ -71,5 +72,20 @@ class ClaudeProvider(BaseProvider):
             messages=[{"role": "user", "content": COMMIT_PROMPT.format(diff=diff)}]
         )
         return response.content[0].text.strip()
+    
+class OllamaProvider(BaseProvider):
+    def __init__(self):
+        self.base_url = "http://localhost:11434/api/generate"
+    
+    def generate_commit_message(self, diff, **kwargs):
+        data = {
+            "model": kwargs.get('model', 'deepseek-r1'),
+            "prompt": COMMIT_PROMPT.format(diff=diff),
+            "stream": False
+        }
+        
+        response = requests.post(self.base_url, json=data)
+        response.raise_for_status()
+        return response.json()["response"].strip()
 
 __all__ = ['get_provider']
