@@ -1,148 +1,144 @@
-
 # Seshat 🤖
 
-CLI para commits automatizados usando Conventional Commits e DeepSeek API  
-*Mantenha um histórico de commits padronizado com ajuda de IA!*
+CLI para automação de commits usando Conventional Commits com suporte a múltiplos provedores de IA (DeepSeek e Claude)
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 
----
-
 ## 📦 Instalação
 
 ```bash
-# Instale via pip (recomendado)
+# Instalação via pip (recomendado)
 pip install git+https://github.com/juniormartinxo/seshat.git
 
-# Ou para desenvolvimento local
+# Para desenvolvimento local
 git clone https://github.com/juniormartinxo/seshat.git
 cd seshat
 pip install -e .
 ```
 
----
+## ⚙️ Configuração
 
-## 🔑 Primeiros Passos
+### 1. Defina o Provedor de IA
+Configure o provedor desejado através da variável de ambiente `AI_PROVIDER`:
 
-### 1. Configure sua API Key
 ```bash
-# Método persistente (armazena em ~/.seshat)
-seshat config --api-key SUA_CHAVE_DEEPSEEK
-
-# Ou via variável de ambiente
-export DEEPSEEK_API_KEY="sua_chave_aqui"
+# Via arquivo .env
+AI_PROVIDER=deepseek  # ou claude
 ```
 
-### 2. Teste o fluxo
+### 2. Configure sua API Key
+Você tem três opções para configurar sua chave de API:
+
+```bash
+# 1. Via comando (recomendado)
+seshat config --api-key SUA_CHAVE_API
+
+# 2. Via variável de ambiente
+export API_KEY="sua_chave_aqui"
+
+# 3. Via arquivo .env
+API_KEY=sua_chave_aqui
+```
+
+### 3. Modelo de IA (Opcional)
+Defina um modelo específico do provedor escolhido:
+
+```bash
+# Via arquivo .env
+AI_MODEL=deepseek-chat  # para DeepSeek
+AI_MODEL=claude-3-haiku-20240307  # para Claude
+```
+
+## 🚀 Uso
+
+### Commit Básico
 ```bash
 git add .
-seshat commit --verbose
+seshat commit
 ```
 
----
-
-## 🚀 Comandos Principais
-
-### `seshat commit`
-Gera e executa commits inteligentes:
-
-| Opção         | Descrição                              |
-|---------------|----------------------------------------|
-| `--model`     | Modelo de IA (`deepseek-coder-33b-instruct` padrão) |
-| `-y/--yes`    | Confirmação automática                 |
-| `-v/--verbose`| Detalhes técnicos do processo          |
-
-**Exemplo completo**:
+### Opções Avançadas
 ```bash
-git add -A
-seshat commit --model deepseek-coder-7b-instruct --yes
+seshat commit \
+  --provider claude \  # Força um provedor específico
+  --model claude-3-haiku-20240307 \  # Define modelo específico
+  --yes \  # Pula confirmação
+  --verbose  # Exibe detalhes do processo
 ```
 
-### `seshat config`
-Gerencia configurações:
-```bash
-# Verificar configuração atual
-seshat config
+## 🛠️ Funcionalidades
 
-# Atualizar API Key
-seshat config --api-key nova_chave_secreta
-```
+### Provedores de IA Suportados
+- **DeepSeek**: Provedor padrão
+- **Claude**: Alternativa via API da Anthropic
 
----
+### Tipos de Commit Suportados
+- `feat`: Nova funcionalidade
+- `fix`: Correção de bug
+- `docs`: Alterações na documentação
+- `style`: Mudanças de formatação
+- `refactor`: Refatoração de código
+- `perf`: Melhorias de performance
+- `test`: Adição/ajuste de testes
+- `chore`: Tarefas de manutenção
+- `build`: Mudanças no sistema de build
+- `ci`: Mudanças na CI/CD
+- `revert`: Reversão de commit
 
-## ✨ Funcionalidades
+## 📚 Arquitetura
 
-- **Análise de Diff**: Processa alterações stageadas do Git
-- **Prompt Otimizado**: Gera mensagens no padrão Conventional Commits:
-  ```text
-  feat: add user authentication middleware
-  fix: resolve session expiration bug
-  ```
-- **Multiplos Métodos de Autenticação**:
-  1. Argumento `--api-key`
-  2. Variável de ambiente `DEEPSEEK_API_KEY`
-  3. Arquivo de configuração `~/.seshat`
-
----
-
-## ⚙️ Arquitetura Técnica
-
-```mermaid
-graph TD
-    A[Git Diff] --> B[DeepSeek API]
-    B --> C{Mensagem Gerada}
-    C --> D[Confirmação]
-    D --> E[Git Commit]
-```
-
----
-
-## 🛠️ Desenvolvimento
-
-### Estrutura do Projeto
-```
+```text
 seshat/
-├── core.py        # Lógica de geração de commits
-├── cli.py         # Comandos e interface
-├── utils.py       # Configurações e helpers
-└── tests/         # Testes (em breve)
+├── cli.py         # Interface de linha de comando
+├── core.py        # Lógica central e integração com Git
+├── providers.py   # Implementação dos provedores de IA
+└── utils.py       # Utilitários e configurações
 ```
 
-### Requisitos
+## ⚠️ Requisitos
+
 - Python 3.8+
 - Git instalado
-- Acesso à API DeepSeek
+- Conta em um dos provedores suportados (DeepSeek ou Anthropic)
+- Chave de API válida
 
----
+## 🔍 Troubleshooting
 
-## ❓ FAQ
+### Erros Comuns
 
-### Como funciona o prompt interno?
-O sistema envia este template para a API:
-```text
-Analise este diff do Git e sugira uma mensagem de commit seguindo o padrão Conventional Commits. 
-Seja conciso e técnico. Destaque a intenção principal das mudanças.
-```
-
-### Posso usar modelos customizados?
-Sim! Basta especificar qualquer modelo suportado pela DeepSeek:
+1. **API Key não encontrada**
 ```bash
-seshat commit --model seu-modelo-customizado
+# Verifique a configuração atual
+seshat config
+
+# Reconfigure se necessário
+seshat config --api-key NOVA_CHAVE
 ```
+
+2. **Provedor Inválido**
+```bash
+# Certifique-se que AI_PROVIDER está configurado corretamente
+echo $AI_PROVIDER
+# Deve retornar 'deepseek' ou 'claude'
+```
+
+## 📝 Licença
+
+MIT © [Junior Martins](https://github.com/juniormartinxo)
 
 ---
 
-## ⚠️ Limitações
+## 🤝 Contribuição
 
-- Requer arquivos stageados (`git add`)
-- Dependente da disponibilidade da API DeepSeek
-- Mensagens muito longas podem ser truncadas
+1. Fork o projeto
+2. Crie sua branch (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`seshat commit`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
 
 ---
 
-Feito com ❤️ por [Junior Martins](https://github.com/juniormartinxo)  
-📄 Documentação completa: [Wiki do Projeto](https://github.com/juniormartinxo/seshat/wiki)  
-🐛 Reportar problemas: [Issues](https://github.com/juniormartinxo/seshat/issues)
-```
+🐛 [Reportar Bug](https://github.com/juniormartinxo/seshat/issues)  
+✨ [Sugerir Funcionalidade](https://github.com/juniormartinxo/seshat/issues)
