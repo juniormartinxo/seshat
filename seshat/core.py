@@ -1,5 +1,6 @@
 import subprocess
 import requests
+from .providers import get_provider
 
 def get_git_diff():
     """Obtém o diff das alterações stageadas"""
@@ -43,7 +44,7 @@ Responda APENAS com a mensagem de commit, sem comentários extras."""
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
-        "max_tokens": 100
+        "max_tokens": 200
     }
 
     response = requests.post(
@@ -54,7 +55,7 @@ Responda APENAS com a mensagem de commit, sem comentários extras."""
     response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"].strip()
 
-def commit_with_ai(api_key, model, verbose):
+def commit_with_ai(provider, model, verbose):
     """Fluxo principal de commit"""
     diff = get_git_diff()
     
@@ -62,9 +63,15 @@ def commit_with_ai(api_key, model, verbose):
         click.echo("📋 Diff analysis:")
         click.echo(diff[:500] + "...\n")
     
-    commit_msg = generate_commit_message(api_key, diff, model)
+    try:
+        provider = get_provider(provider)
+        commit_msg = provider.generate_commit_message(diff, model=model)
+    except KeyError:
+        raise ValueError(f"Provedor não suportado: {provider}")
     
     if verbose:
         click.echo("🤖 AI-generated message:")
     
     return commit_msg
+
+__all__ = ['commit_with_ai']
