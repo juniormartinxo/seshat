@@ -18,7 +18,7 @@ def cli():
 
 @cli.command()
 @click.option('--api-key', help='DeepSeek API Key')
-@click.option('--model', default='deepseek-coder-33b-instruct', show_default=True,
+@click.option('--model', default='deepseek-chat', show_default=True,
               help='Model to use for generation')
 @click.option('--yes', '-y', is_flag=True, help='Skip confirmation')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
