@@ -7,7 +7,8 @@ setup(
     install_requires=[
         'click>=8.0',
         'requests>=2.26',
-        'python-dotenv>=0.19'
+        'python-dotenv>=0.19',
+        'anthropic>=0.19'
     ],
     entry_points={
         'console_scripts': [
