@@ -6,9 +6,6 @@ import subprocess
 import json
 from pathlib import Path
 from .core import commit_with_ai
-from .utils import validate_config, display_error
-from pathlib import Path
-from .core import commit_with_ai
 from .utils import validate_config, display_error, CONFIG_PATH
 
 # Carrega variáveis do .env
@@ -21,22 +18,29 @@ def cli():
     pass
 
 @cli.command()
-@click.option('--api-key', help='DeepSeek API Key')
-@click.option('--model', 
-              default=lambda: os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat'),
+@click.option('--provider', 
+              default=lambda: os.environ.get('AI_PROVIDER', 'deepseek'),
               show_default=True,
-              help='Model to use for generation')
+              help='Provedor de IA (deepseek/claude)')
+@click.option('--model', 
+              default=lambda: os.environ.get('AI_MODEL'),
+              show_default=True,
+              help='Modelo específico do provedor')
 @click.option('--yes', '-y', is_flag=True, help='Skip confirmation')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
-def commit(api_key, model, yes, verbose):
+def commit(provider, model, yes, verbose):
     """Generate and execute AI-powered commits"""
     try:
-        # Carregar configurações
-        config = validate_config(api_key)
-        
+        provider = os.environ['AI_PROVIDER']
+
+        # Validação do provedor
+        valid_providers = ['deepseek', 'claude']
+        if provider not in valid_providers:
+            raise ValueError(f"Provedor inválido. Opções: {', '.join(valid_providers)}")
+
         # Executar fluxo principal
         commit_message = commit_with_ai(
-            api_key=config['api_key'],
+            provider=provider,
             model=model,
             verbose=verbose
         )
