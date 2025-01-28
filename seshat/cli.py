@@ -34,7 +34,7 @@ def commit(provider, model, yes, verbose):
         provider = os.environ['AI_PROVIDER']
 
         # Validação do provedor
-        valid_providers = ['deepseek', 'claude']
+        valid_providers = ['deepseek', 'claude', 'ollama']
         if provider not in valid_providers:
             raise ValueError(f"Provedor inválido. Opções: {', '.join(valid_providers)}")
 
