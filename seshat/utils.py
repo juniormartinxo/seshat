@@ -16,7 +16,7 @@ def validate_config():
         )
 
     # Valida provider
-    valid_providers = ['deepseek', 'claude']
+    valid_providers = ['deepseek', 'claude', 'ollama']
     if provider not in valid_providers:
         raise ValueError(f"Provedor inválido: {provider}. Opções válidas: {', '.join(valid_providers)}")
 
