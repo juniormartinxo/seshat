@@ -8,7 +8,8 @@ setup(
         'click>=8.0',
         'requests>=2.26',
         'python-dotenv>=0.19',
-        'anthropic>=0.19'
+        'anthropic>=0.19',
+        'setuptools>=75.8.0',
     ],
     entry_points={
         'console_scripts': [
