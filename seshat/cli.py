@@ -1,7 +1,8 @@
+import os
+from dotenv import load_dotenv
 import click
 import sys
 import subprocess
-import click
 import json
 from pathlib import Path
 from .core import commit_with_ai
@@ -9,6 +10,9 @@ from .utils import validate_config, display_error
 from pathlib import Path
 from .core import commit_with_ai
 from .utils import validate_config, display_error, CONFIG_PATH
+
+# Carrega variáveis do .env
+load_dotenv()
 
 @click.group()
 @click.version_option(version='0.1.0')
@@ -18,7 +22,9 @@ def cli():
 
 @cli.command()
 @click.option('--api-key', help='DeepSeek API Key')
-@click.option('--model', default='deepseek-chat', show_default=True,
+@click.option('--model', 
+              default=lambda: os.environ.get('DEEPSEEK_MODEL', 'deepseek-chat'),
+              show_default=True,
               help='Model to use for generation')
 @click.option('--yes', '-y', is_flag=True, help='Skip confirmation')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
