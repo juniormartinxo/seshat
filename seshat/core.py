@@ -15,7 +15,29 @@ def generate_commit_message(api_key, diff, model, verbose=False):
         "Content-Type": "application/json"
     }
 
-    prompt = f"""[...] # (manter prompt anterior)"""
+    prompt = f"""Você é um assistente de commits especialista em Conventional Commits. 
+
+Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional Commits:
+
+{diff}
+
+Formato exigido:
+<tipo>[escopo opcional]: <descrição concisa>
+
+Tipos permitidos:
+- feat: Nova funcionalidade
+- fix: Correção de bug
+- docs: Alterações na documentação
+- style: Mudanças de formatação
+- refactor: Refatoração de código
+- perf: Melhorias de performance
+- test: Adição/ajuste de testes
+- chore: Tarefas de manutenção
+- build: Mudanças no sistema de build
+- ci: Mudanças na CI/CD
+- revert: Reversão de commit
+
+Responda APENAS com a mensagem de commit, sem comentários extras."""
 
     data = {
         "model": model,
