@@ -29,11 +29,11 @@ def validate_diff_size(diff):
     
     diff_size = len(diff)
 
-    click.secho(f"Número de caracteres no diff: {diff_size}\n")
+    click.secho(f"\n🤖 Número de caracteres no diff: {diff_size}\n")
     
     if diff_size > MAX_SIZE:
         raise ValueError(
-            "Diff muito grande para um único commit!\n"
+            "\n🛑 Diff muito grande para um único commit!\n"
             "Por favor, considere:\n"
             "1. Dividir as alterações em commits menores\n"
             "2. Revisar se todas as alterações são realmente necessárias\n"
@@ -41,7 +41,7 @@ def validate_diff_size(diff):
         )
     elif diff_size > WARN_SIZE:
         click.secho(
-            "\n⚠️  Atenção: O diff está relativamente grande.\n"
+            "\n⚠️ Atenção: O diff está relativamente grande.\n"
             "Considere fazer commits menores para melhor rastreabilidade.\n",
             fg='yellow'
         )
