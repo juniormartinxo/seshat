@@ -24,10 +24,12 @@ def check_staged_files():
     
 def validate_diff_size(diff):
     """Valida o tamanho do diff para garantir commits concisos"""
-    WARN_SIZE = 6000  # Aviso a partir de 3000 caracteres
-    MAX_SIZE = 10000   # Limite máximo de 8000 caracteres
+    WARN_SIZE = 25000  # Aviso a partir de 3000 caracteres
+    MAX_SIZE = 30000   # Limite máximo de 8000 caracteres
     
-    diff_size = len(diff)
+    diff_size = len({diff})
+
+    click.secho(f"Número de caracteres no diff: {diff_size}\n")
     
     if diff_size > MAX_SIZE:
         raise ValueError(
