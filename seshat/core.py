@@ -27,7 +27,7 @@ def validate_diff_size(diff):
     WARN_SIZE = 25000  # Aviso a partir de 3000 caracteres
     MAX_SIZE = 30000   # Limite máximo de 8000 caracteres
     
-    diff_size = len({diff})
+    diff_size = len(diff)
 
     click.secho(f"Número de caracteres no diff: {diff_size}\n")
     
