@@ -62,7 +62,7 @@ class DeepSeekProvider(BaseProvider):
                 },
                 {
                     "role": "user",
-                    "content": f"Gere uma mensagem de commit para o seguinte diff:\n\n{diff}"
+                    "content": COMMIT_PROMPT.format(diff=diff)
                 }
             ],
             "temperature": 0.3,
@@ -72,12 +72,7 @@ class DeepSeekProvider(BaseProvider):
         try:
             response = requests.post(self.base_url, json=data, headers=headers)
             
-            # Log da resposta bruta para debug
-            click.echo(f"\nStatus Code: {response.status_code}")
-            click.echo(f"Response Headers: {response.headers}")
-            click.echo(f"Raw Response: {response.text[:500]}")
-            
-            # Verificar se a resposta é JSON válido
+            # Verifica se a resposta é JSON válido
             try:
                 response_json = response.json()
             except json.JSONDecodeError:
@@ -109,7 +104,7 @@ class ClaudeProvider(BaseProvider):
                 messages=[
                     {
                         "role": "user",
-                        "content": f"Gere uma mensagem de commit para o seguinte diff:\n\n{diff}"
+                        "content": COMMIT_PROMPT.format(diff=diff)
                     }
                 ]
             )
@@ -120,16 +115,84 @@ class ClaudeProvider(BaseProvider):
 class OllamaProvider(BaseProvider):
     def __init__(self):
         self.base_url = "http://localhost:11434/api/generate"
+        self.default_model = "deepseek-coder-v2"
+    
+    def check_ollama_running(self):
+        """Verifica se o Ollama está rodando localmente"""
+        try:
+            response = requests.get("http://localhost:11434/api/version")
+            return response.status_code == 200
+        except requests.exceptions.ConnectionError:
+            return False
+            
+    def check_model_available(self, model_name):
+        """Verifica se o modelo está disponível"""
+        try:
+            response = requests.get(f"http://localhost:11434/api/tags")
+            if response.ok:
+                available_models = [model['name'] for model in response.json()['models']]
+                return model_name in available_models
+            return False
+        except:
+            return False
     
     def generate_commit_message(self, diff, **kwargs):
+        if not self.check_ollama_running():
+            raise ValueError(
+                "Ollama não está rodando. Para usar o Ollama:\n"
+                "1. Instale o Ollama: https://ollama.ai\n"
+                "2. Inicie o serviço: ollama serve\n"
+                "3. Baixe o modelo: ollama pull deepseek-coder\n"
+                "\nOu use outro provedor com: seshat config --provider (deepseek|claude)"
+            )
+        
+        # Usar o modelo fornecido ou o padrão
+        model = kwargs.get('model', self.default_model)
+        
+        # Verificar se o modelo está disponível
+        if not self.check_model_available(model):
+            raise ValueError(
+                f"Modelo '{model}' não encontrado no Ollama.\n"
+                f"Execute: ollama pull {model}"
+            )
+        
         data = {
-            "model": kwargs.get('model', 'deepseek-r1'),
-            "prompt": COMMIT_PROMPT.format(diff=diff),
+            "model": model,  # Usando a mesma variável model
+            "prompt": COMMIT_PROMPT.format(diff=diff),  # Formatando o prompt com o diff
             "stream": False
         }
         
-        response = requests.post(self.base_url, json=data)
-        response.raise_for_status()
-        return response.json()["response"].strip()
+        try:
+            response = requests.post(self.base_url, json=data)
+            
+            if not response.ok:
+                raise ValueError(f"Erro na API do Ollama: {response.status_code} - {response.text}")
+            
+            try:
+                response_data = response.json()
+                commit_message = response_data.get("response", "").strip()
+                
+                if not commit_message:
+                    raise ValueError("Resposta vazia do Ollama")
+                
+                # Validar formato da mensagem
+                if not any(commit_message.startswith(t + ':') for t in ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'chore', 'build', 'ci', 'revert']):
+                    raise ValueError(
+                        f"Resposta não segue o formato Conventional Commits.\n"
+                        f"Resposta recebida: {commit_message}"
+                    )
+                
+                return commit_message
+                
+            except json.JSONDecodeError:
+                raise ValueError(f"Resposta inválida do Ollama: {response.text[:200]}")
+                
+        except requests.exceptions.RequestException as e:
+            if isinstance(e, requests.exceptions.ConnectionError):
+                raise ValueError("Não foi possível conectar ao Ollama. Verifique se o serviço está rodando.")
+            else:
+                raise ValueError(f"Erro na comunicação com Ollama: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Erro inesperado: {str(e)}")
 
 __all__ = ['get_provider']
