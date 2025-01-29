@@ -1,51 +1,63 @@
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 import click
 import sys
 import subprocess
 import json
-from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
 from .core import commit_with_ai
 from .utils import validate_config, display_error, CONFIG_PATH
 
-# Carrega variáveis do .env
-load_dotenv()
+def load_environment():
+    """Carrega configurações de várias fontes na ordem correta"""
+    # 1. Carrega configuração global do pipx
+    global_config = {}
+    if CONFIG_PATH.exists():
+        with open(CONFIG_PATH) as f:
+            global_config = json.load(f)
+    
+    # 2. Carrega .env local se existir
+    local_env = find_dotenv(usecwd=True)
+    if local_env:
+        load_dotenv(local_env)
+    
+    # 3. Define variáveis de ambiente com prioridade para configuração local
+    if 'API_KEY' in global_config and not os.getenv('API_KEY'):
+        os.environ['API_KEY'] = global_config['API_KEY']
+    
+    if 'AI_PROVIDER' in global_config and not os.getenv('AI_PROVIDER'):
+        os.environ['AI_PROVIDER'] = global_config['AI_PROVIDER']
 
 @click.group()
 @click.version_option(version='0.1.0')
 def cli():
     """AI Commit Bot using DeepSeek API and Conventional Commits"""
-    pass
+    load_environment()
 
 @cli.command()
 @click.option('--provider', 
-              default=lambda: os.environ.get('AI_PROVIDER', 'deepseek'),
-              show_default=True,
-              help='Provedor de IA (deepseek/claude)')
+              help='Provedor de IA (deepseek/claude/ollama)')
 @click.option('--model', 
-              default=lambda: os.environ.get('AI_MODEL'),
-              show_default=True,
               help='Modelo específico do provedor')
 @click.option('--yes', '-y', is_flag=True, help='Skip confirmation')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
 def commit(provider, model, yes, verbose):
     """Generate and execute AI-powered commits"""
     try:
-        provider = os.environ['AI_PROVIDER']
+        if provider:
+            os.environ['AI_PROVIDER'] = provider
 
-        # Validação do provedor
-        valid_providers = ['deepseek', 'claude', 'ollama']
-        if provider not in valid_providers:
-            raise ValueError(f"Provedor inválido. Opções: {', '.join(valid_providers)}")
+        # Validação e execução
+        provider = os.environ.get('AI_PROVIDER')
+        if not provider:
+            raise ValueError("Provedor não configurado. Use 'seshat config --provider <provider>'")
 
-        # Executar fluxo principal
         commit_message = commit_with_ai(
             provider=provider,
             model=model,
             verbose=verbose
         )
         
-        # Confirmação
         if yes or click.confirm(f"Commit with message?\n\n{commit_message}"):
             subprocess.check_call(["git", "commit", "-m", commit_message])
             click.secho("✓ Commit successful!", fg='green')
@@ -56,13 +68,11 @@ def commit(provider, model, yes, verbose):
         display_error(str(e))
         sys.exit(1)
 
-if __name__ == '__main__':
-    cli()
-
 @cli.command()
 @click.option('--api-key', help='Configure a API Key')
-def config(api_key):
-    """Configure API Key"""
+@click.option('--provider', help='Configure o provedor padrão (deepseek/claude/ollama)')
+def config(api_key, provider):
+    """Configure API Key e provedor padrão"""
     try:
         CONFIG_PATH.parent.mkdir(exist_ok=True)
         
@@ -71,14 +81,34 @@ def config(api_key):
             with open(CONFIG_PATH) as f:
                 config = json.load(f)
         
+        modified = False
         if api_key:
-            config['api_key'] = api_key
+            config['API_KEY'] = api_key
+            modified = True
+            
+        if provider:
+            valid_providers = ['deepseek', 'claude', 'ollama']
+            if provider not in valid_providers:
+                raise ValueError(f"Provedor inválido. Opções: {', '.join(valid_providers)}")
+            config['AI_PROVIDER'] = provider
+            modified = True
+            
+        if modified:
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f)
-            click.secho("✓ API Key configurada com sucesso!", fg='green')
+            click.secho("✓ Configuração atualizada com sucesso!", fg='green')
         else:
-            click.echo(f"Configuração atual: {config.get('api_key', 'não configurada')}")
+            current_config = {
+                'API_KEY': config.get('API_KEY', 'não configurada'),
+                'AI_PROVIDER': config.get('AI_PROVIDER', 'não configurado')
+            }
+            click.echo("Configuração atual:")
+            click.echo(f"API Key: {current_config['API_KEY']}")
+            click.echo(f"Provider: {current_config['AI_PROVIDER']}")
     
     except Exception as e:
         display_error(str(e))
         sys.exit(1)
+
+if __name__ == '__main__':
+    cli()
