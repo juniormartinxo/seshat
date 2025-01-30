@@ -3,6 +3,7 @@ import requests
 from anthropic import Anthropic
 import click
 import json
+from .utils import is_valid_conventional_commit
 
 COMMIT_PROMPT = """Você é um assistente de commits especialista em Conventional Commits. 
 
@@ -11,7 +12,13 @@ Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional 
 {diff}
 
 Formato exigido:
-<tipo>[escopo opcional]: <descrição concisa>
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+
+description deve iniciar sempre em minúsculo
 
 Tipos permitidos:
 - feat: Nova funcionalidade
@@ -124,17 +131,6 @@ class OllamaProvider(BaseProvider):
             return response.status_code == 200
         except requests.exceptions.ConnectionError:
             return False
-            
-    def check_model_available(self, model_name):
-        """Verifica se o modelo está disponível"""
-        try:
-            response = requests.get(f"http://localhost:11434/api/tags")
-            if response.ok:
-                available_models = [model['name'] for model in response.json()['models']]
-                return model_name in available_models
-            return False
-        except:
-            return False
     
     def generate_commit_message(self, diff, **kwargs):
         if not self.check_ollama_running():
@@ -146,19 +142,9 @@ class OllamaProvider(BaseProvider):
                 "\nOu use outro provedor com: seshat config --provider (deepseek|claude)"
             )
         
-        # Usar o modelo fornecido ou o padrão
-        model = kwargs.get('model', self.default_model)
-        
-        # Verificar se o modelo está disponível
-        if not self.check_model_available(model):
-            raise ValueError(
-                f"Modelo '{model}' não encontrado no Ollama.\n"
-                f"Execute: ollama pull {model}"
-            )
-        
         data = {
-            "model": model,  # Usando a mesma variável model
-            "prompt": COMMIT_PROMPT.format(diff=diff),  # Formatando o prompt com o diff
+            "model": self.default_model,
+            "prompt": COMMIT_PROMPT.format(diff=diff),
             "stream": False
         }
         
@@ -175,11 +161,18 @@ class OllamaProvider(BaseProvider):
                 if not commit_message:
                     raise ValueError("Resposta vazia do Ollama")
                 
-                # Validar formato da mensagem
-                if not any(commit_message.startswith(t + ':') for t in ['feat', 'fix', 'docs', 'style', 'refactor', 'perf', 'test', 'chore', 'build', 'ci', 'revert']):
+                if not is_valid_conventional_commit(commit_message):
+                    exemplos = (
+                        "Exemplos válidos:\n"
+                        "- feat: nova funcionalidade\n"
+                        "- fix(core): correção de bug\n"
+                        "- feat!: breaking change\n"
+                        "- feat(api)!: breaking change com escopo"
+                    )
                     raise ValueError(
-                        f"Resposta não segue o formato Conventional Commits.\n"
-                        f"Resposta recebida: {commit_message}"
+                        f"A mensagem não segue o padrão Conventional Commits.\n"
+                        f"Mensagem recebida: {commit_message}\n\n"
+                        f"{exemplos}"
                     )
                 
                 return commit_message
