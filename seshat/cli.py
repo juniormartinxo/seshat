@@ -33,7 +33,7 @@ def commit(provider, model, yes, verbose):
             verbose=verbose
         )
         
-        if yes or click.confirm(f"\n🤖 Mensagem de commit gerada com sucesso\n{commit_message}"):
+        if yes or click.confirm(f"\n🤖 Mensagem de commit gerada com sucesso:\n\n{commit_message}"):
             subprocess.check_call(["git", "commit", "-m", commit_message])
             click.secho("✓ Commit realizado com sucesso!", fg='green')
         else:
