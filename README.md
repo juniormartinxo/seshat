@@ -1,6 +1,6 @@
 # Seshat 🤖
 
-CLI para automação de commits usando Conventional Commits com suporte a múltiplos provedores de IA (DeepSeek e Claude)
+CLI para automação de commits usando Conventional Commits com suporte a múltiplos provedores de IA (DeepSeek, Claude e Ollama)
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
@@ -20,35 +20,32 @@ pip install -e .
 
 ## ⚙️ Configuração
 
-### 1. Defina o Provedor de IA
-Configure o provedor desejado através da variável de ambiente `AI_PROVIDER`:
+### 1. Configuração do Provedor e API Key
+
+Você pode configurar o Seshat usando o comando `config`:
 
 ```bash
-# Via arquivo .env
-AI_PROVIDER=deepseek  # ou claude
-```
+# Configurar provedor
+seshat config --provider deepseek  # ou claude/ollama
 
-### 2. Configure sua API Key
-Você tem três opções para configurar sua chave de API:
-
-```bash
-# 1. Via comando (recomendado)
+# Configurar API Key (para DeepSeek ou Claude)
 seshat config --api-key SUA_CHAVE_API
 
-# 2. Via variável de ambiente
-export API_KEY="sua_chave_aqui"
-
-# 3. Via arquivo .env
-API_KEY=sua_chave_aqui
+# Verificar configuração atual
+seshat config
 ```
 
-### 3. Modelo de IA (Opcional)
-Defina um modelo específico do provedor escolhido:
+### 2. Configuração Alternativa
+Alternativamente, você pode configurar através de variáveis de ambiente ou arquivo `.env`:
 
 ```bash
-# Via arquivo .env
-AI_MODEL=deepseek-chat  # para DeepSeek
-AI_MODEL=claude-3-haiku-20240307  # para Claude
+# Via variáveis de ambiente
+export AI_PROVIDER=deepseek  # ou claude/ollama
+export API_KEY=sua_chave_aqui
+
+# Ou via arquivo .env
+AI_PROVIDER=deepseek
+API_KEY=sua_chave_aqui
 ```
 
 ## 🚀 Uso
@@ -71,8 +68,23 @@ seshat commit \
 ## 🛠️ Funcionalidades
 
 ### Provedores de IA Suportados
-- **DeepSeek**: Provedor padrão
-- **Claude**: Alternativa via API da Anthropic
+- **DeepSeek**: Integração via API DeepSeek
+- **Claude**: Integração via API Anthropic
+- **Ollama**: Integração local com modelos do Ollama
+
+### Configuração do Ollama
+Para usar o Ollama como provedor:
+
+1. Instale o Ollama: https://ollama.ai
+2. Inicie o serviço: `ollama serve`
+3. Baixe o modelo padrão: `ollama pull deepseek-coder-v2`
+4. Configure o Seshat: `seshat config --provider ollama`
+
+### Validações e Segurança
+- Verificação de arquivos staged antes do commit
+- Validação do tamanho do diff (alertas em 2500 caracteres, limite em 3000)
+- Confirmação interativa das mensagens geradas
+- Validação do formato Conventional Commits
 
 ### Tipos de Commit Suportados
 - `feat`: Nova funcionalidade
@@ -91,37 +103,46 @@ seshat commit \
 
 ```text
 seshat/
-├── cli.py         # Interface de linha de comando
-├── core.py        # Lógica central e integração com Git
+├── cli.py         # Interface de linha de comando e comandos
+├── core.py        # Lógica central, validações e integração Git
 ├── providers.py   # Implementação dos provedores de IA
-└── utils.py       # Utilitários e configurações
+└── utils.py       # Utilitários e gerenciamento de configuração
 ```
 
 ## ⚠️ Requisitos
 
 - Python 3.8+
 - Git instalado
-- Conta em um dos provedores suportados (DeepSeek ou Anthropic)
-- Chave de API válida
+- Para DeepSeek/Claude: Chave de API válida
+- Para Ollama: Servidor Ollama local
 
 ## 🔍 Troubleshooting
 
 ### Erros Comuns
 
-1. **API Key não encontrada**
+1. **Configuração Inválida**
 ```bash
 # Verifique a configuração atual
 seshat config
 
 # Reconfigure se necessário
+seshat config --provider deepseek
 seshat config --api-key NOVA_CHAVE
 ```
 
-2. **Provedor Inválido**
+2. **Erro com Ollama**
 ```bash
-# Certifique-se que AI_PROVIDER está configurado corretamente
-echo $AI_PROVIDER
-# Deve retornar 'deepseek' ou 'claude'
+# Verifique se o servidor está rodando
+curl http://localhost:11434/api/version
+
+# Verifique se o modelo está instalado
+ollama list
+```
+
+3. **Diff muito grande**
+```bash
+# Divida suas alterações em commits menores
+git add -p  # Adicione alterações interativamente
 ```
 
 ## 📝 Licença
