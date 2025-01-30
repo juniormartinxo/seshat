@@ -27,6 +27,10 @@ def commit(provider, model, yes, verbose):
         if not provider:
             raise ValueError("Provedor não configurado. Use 'seshat config --provider <provider>'")
 
+        # Ignorar modelo se provider for ollama
+        if provider == 'ollama':
+            model = None
+
         commit_message = commit_with_ai(
             provider=provider,
             model=model,
