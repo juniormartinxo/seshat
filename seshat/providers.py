@@ -18,7 +18,7 @@ Formato exigido:
 
 [optional footer(s)]
 
-description deve iniciar sempre em minúsculo
+<description> deve iniciar sempre em minúsculo e não pode ter mais de 100 caracteres.
 
 Tipos permitidos:
 - feat: Nova funcionalidade
@@ -73,7 +73,7 @@ class DeepSeekProvider(BaseProvider):
                 }
             ],
             "temperature": 0.3,
-            "max_tokens": 100
+            "max_tokens": 400
         }
         
         try:
@@ -106,7 +106,7 @@ class ClaudeProvider(BaseProvider):
         try:
             response = self.client.messages.create(
                 model=kwargs.get('model', 'claude-3-haiku-20240307'),
-                max_tokens=100,
+                max_tokens=400,
                 temperature=0.3,
                 messages=[
                     {
