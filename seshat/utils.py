@@ -16,6 +16,14 @@ def validate_config():
             "Defina no .env: AI_PROVIDER=deepseek ou AI_PROVIDER=claude"
         )
 
+    # Verifica model primeiro
+    model = os.getenv('AI_MODEL')
+    if not model:
+        raise ValueError(
+            "Variável AI_MODEL não configurada!\n"
+            "Defina no .env: AI_MODEL"
+        )
+
     # Valida provider
     valid_providers = ['deepseek', 'claude', 'ollama']
     if provider not in valid_providers:
@@ -29,6 +37,7 @@ def validate_config():
     # Validar chaves de API
     provider = config['provider']
     api_key = os.getenv('API_KEY')
+    model = config['model']
     
     if not api_key:
         raise ValueError(
