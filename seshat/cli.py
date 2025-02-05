@@ -50,7 +50,8 @@ def commit(provider, model, yes, verbose):
 @cli.command()
 @click.option('--api-key', help='Configure a API Key')
 @click.option('--provider', help='Configure o provedor padrão (deepseek/claude/ollama)')
-def config(api_key, provider):
+@click.option('--model', help='Configure o modelo padrão para o seu provider')
+def config(api_key, provider, model):
     """Configure API Key e provedor padrão"""
     try:
         CONFIG_PATH.parent.mkdir(exist_ok=True)
@@ -72,6 +73,10 @@ def config(api_key, provider):
             config['AI_PROVIDER'] = provider
             modified = True
             
+        if model:
+            config['AI_MODEL'] = model
+            modified = True
+            
         if modified:
             with open(CONFIG_PATH, 'w') as f:
                 json.dump(config, f)
@@ -79,11 +84,13 @@ def config(api_key, provider):
         else:
             current_config = {
                 'API_KEY': config.get('API_KEY', 'não configurada'),
-                'AI_PROVIDER': config.get('AI_PROVIDER', 'não configurado')
+                'AI_PROVIDER': config.get('AI_PROVIDER', 'não configurado'),
+                'AI_MODEL': config.get('AI_MODEL', 'não configurado')
             }
             click.echo("Configuração atual:")
             click.echo(f"API Key: {current_config['API_KEY']}")
             click.echo(f"Provider: {current_config['AI_PROVIDER']}")
+            click.echo(f"Model: {current_config['AI_MODEL']}")
     
     except Exception as e:
         display_error(str(e))
