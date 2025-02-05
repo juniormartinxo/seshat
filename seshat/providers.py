@@ -12,7 +12,9 @@ Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional 
 {diff}
 
 Formato exigido:
-<type>[optional scope]: <description>
+<type>(optional scope): <description>
+
+<description> deve iniciar sempre em minúsculo
 
 [optional body]
 
@@ -105,8 +107,9 @@ class ClaudeProvider(BaseProvider):
     def generate_commit_message(self, diff, **kwargs):
         try:
             response = self.client.messages.create(
-                model=kwargs.get('model', 'claude-3-haiku-20240307'),
-                max_tokens=400,
+                #model=kwargs.get('model', 'claude-3-haiku-20240307'),
+                model=kwargs.get('model', 'claude-3-sonnet-20240229'),
+                max_tokens=100,
                 temperature=0.3,
                 messages=[
                     {
