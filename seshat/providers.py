@@ -51,8 +51,14 @@ class BaseProvider:
 class DeepSeekProvider(BaseProvider):
     def __init__(self):
         self.api_key = os.getenv("API_KEY")
+
         if not self.api_key:
             raise ValueError("API_KEY não configurada para DeepSeek")
+
+        self.model = os.getenv("AI_MODEL")
+        if not self.model:
+            raise ValueError("AI_MODEL não configurada para DeepSeek")
+
         self.base_url = "https://api.deepseek.com/v1/chat/completions"
     
     def generate_commit_message(self, diff, **kwargs):
@@ -62,7 +68,7 @@ class DeepSeekProvider(BaseProvider):
         }
         
         data = {
-            "model": "deepseek-chat",
+            "model": self.model,
             "messages": [
                 {
                     "role": "system",
@@ -101,13 +107,21 @@ class DeepSeekProvider(BaseProvider):
 
 class ClaudeProvider(BaseProvider):
     def __init__(self):
-        self.client = Anthropic(api_key=os.getenv("API_KEY"))
+        self.api_key = os.getenv("API_KEY")
+        if not self.api_key:
+            raise ValueError("API_KEY não configurada para Claude")
+
+        self.client = Anthropic(api_key=self.api_key)
+
+        self.model = os.getenv("AI_MODEL")
+        if not self.model:
+            raise ValueError("AI_MODEL não configurada para Claude")
     
     def generate_commit_message(self, diff, **kwargs):
         try:
             response = self.client.messages.create(
                 #model=kwargs.get('model', 'claude-3-haiku-20240307'),
-                model=kwargs.get('model', 'claude-3-sonnet-20240229'),
+                model=kwargs.get('model', self.model),
                 max_tokens=100,
                 temperature=0.3,
                 messages=[
