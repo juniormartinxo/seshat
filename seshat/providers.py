@@ -14,13 +14,12 @@ Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional 
 Formato exigido:
 <type>(optional scope): <description>
 
-<description> deve iniciar sempre em minúsculo
-
 [optional body]
 
 [optional footer(s)]
 
-<description> deve iniciar sempre em minúsculo e não pode ter mais de 100 caracteres.
+É obrigatório:
+- <description> deve ser sempre em minúsculo
 
 Tipos permitidos:
 - feat: Nova funcionalidade
