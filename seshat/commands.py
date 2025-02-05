@@ -23,6 +23,9 @@ def load_environment():
     
     if 'AI_PROVIDER' in global_config and not os.getenv('AI_PROVIDER'):
         os.environ['AI_PROVIDER'] = global_config['AI_PROVIDER']
+    
+    if 'AI_MODEL' in global_config and not os.getenv('AI_MODEL'):
+        os.environ['AI_MODEL'] = global_config['AI_MODEL']
 
 @click.group()
 @click.version_option(version='0.1.0')
