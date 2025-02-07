@@ -121,7 +121,7 @@ class ClaudeProvider(BaseProvider):
         try:
             response = self.client.messages.create(
                 #model=kwargs.get('model', 'claude-3-haiku-20240307'),
-                model=kwargs.get('model', self.model),
+                model=self.model,
                 max_tokens=100,
                 temperature=0.3,
                 messages=[
