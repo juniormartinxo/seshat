@@ -59,8 +59,8 @@ Seshat suporta os seguintes provedores de IA:
 
 1.  **Obtenha sua Chave de API:**
 
-      * **DeepSeek:**  [Link para a documentação do DeepSeek](https://www.google.com/url?sa=E&source=gmail&q=https://platform.deepseek.com/docs) (Adicione o link correto aqui)
-      * **Claude:** [Link para a documentação do Claude](https://www.google.com/url?sa=E&source=gmail&q=https://docs.anthropic.com/claude/reference/getting-started-with-claude) (Adicione o link correto aqui)
+      * **DeepSeek:**  [Link para a documentação do DeepSeek](https://platform.deepseek.com/docs)
+      * **Claude:** [Link para a documentação do Claude](https://console.anthropic.com/dashboard)
 
 2.  **Configure via CLI:**
 
