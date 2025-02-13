@@ -152,8 +152,9 @@ seshat commit
 seshat config
 
 # Redefinir a configuração
-seshat config --provider deepseek  # Ou outro provedor
+seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama
 seshat config --api-key SUA_NOVA_CHAVE
+seshat config --model MODELO_DO_SEU_PROVIDER
 ```
 
 **Problemas com o Ollama:**
