@@ -65,9 +65,9 @@ Seshat suporta os seguintes provedores de IA:
 2.  **Configure via CLI:**
 
     ```bash
-    seshat config --provider deepseek  # Ou claude
+    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama
     seshat config --api-key SUA_CHAVE_API
-    seshat config --model seu-modelo #ex: deepseek-coder-v2, claude-3-haiku-20240307
+    seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307
     ```
 
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
@@ -154,7 +154,7 @@ seshat config
 # Redefinir a configuração
 seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama
 seshat config --api-key SUA_NOVA_CHAVE
-seshat config --model MODELO_DO_SEU_PROVIDER
+seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-coder-v2, claude-3-haiku-20240307
 ```
 
 **Problemas com o Ollama:**
