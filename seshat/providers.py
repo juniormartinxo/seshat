@@ -7,7 +7,7 @@ from .utils import is_valid_conventional_commit
 
 COMMIT_PROMPT = """Você é um assistente de commits especialista em Conventional Commits. 
 
-Analise este diff e gere uma mensagem de commit seguindo o padrão Conventional Commits:
+Analise este diff e gere uma mensagem de commit, EM PORTUGUÊS DO BRASIL,  seguindo o padrão Conventional Commits:
 
 {diff}
 
