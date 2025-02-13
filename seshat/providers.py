@@ -113,8 +113,8 @@ class ClaudeProvider(BaseProvider):
         if not self.api_key:
             raise ValueError("API_KEY não configurada para Claude")
 
-        #self.client = Anthropic(api_key=self.api_key)
-        self.client = Anthropic()
+        # Inicializa o cliente com a api_key corretamente
+        self.client = Anthropic(api_key=self.api_key)
 
         self.model = os.getenv("AI_MODEL")
         if not self.model:
@@ -122,18 +122,15 @@ class ClaudeProvider(BaseProvider):
 
     def generate_commit_message(self, diff, **kwargs):
         try:
-            headers = {
-                "x-api-key": {self.api_key},
-                "anthropic-version": "2023-06-01",
-                "content-Type": "application/json",
-            }
-
+            # Remove a configuração manual de headers pois o cliente já gerencia isso
             response = self.client.messages.create(
-                # model=kwargs.get('model', 'claude-3-haiku-20240307'),
                 model=self.model,
                 max_tokens=100,
                 temperature=0.3,
-                messages=[{"role": "user", "content": COMMIT_PROMPT.format(diff=diff)}],
+                messages=[{
+                    "role": "user", 
+                    "content": COMMIT_PROMPT.format(diff=diff)
+                }]
             )
             return response.content[0].text.strip()
         except Exception as e:
