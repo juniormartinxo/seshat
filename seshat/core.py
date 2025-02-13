@@ -81,7 +81,9 @@ def commit_with_ai(provider, model, verbose, no=False):
 
     try:
         selectedProvider = get_provider(provider)
-        click.echo(f"🤖 Commit gerado com {provider}:")
+        # Obtém o nome do provider a partir do objeto selecionado
+        provider_name = selectedProvider.name if hasattr(selectedProvider, 'name') else provider
+        click.echo(f"🤖 Commit gerado com {provider_name}:")
         commit_msg = selectedProvider.generate_commit_message(diff, model=model)
     except KeyError:
         raise ValueError(f"Provedor não suportado: {provider}")
