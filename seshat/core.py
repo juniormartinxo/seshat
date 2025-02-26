@@ -24,8 +24,7 @@ def check_staged_files():
         raise ValueError(f"Erro ao verificar arquivos em stage: {e}")
 
 
-@click.option("--no", "-n", is_flag=False, help="Skip confirmation")
-def validate_diff_size(diff, no=False):
+def validate_diff_size(diff, skip_confirmation=False):
     """Valida o tamanho do diff para garantir commits concisos"""
     # Obter limites configurados ou usar os valores padrão
     WARN_SIZE = int(os.getenv("WARN_DIFF_SIZE", "2500"))  # Aviso a partir de 2500 caracteres
@@ -47,7 +46,7 @@ def validate_diff_size(diff, no=False):
             "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
             "4. Aumentar o limite com: seshat config --max-diff <número>\n"
         )
-        if not no and not click.confirm("📢 Deseja continuar?"):
+        if not skip_confirmation and not click.confirm("📢 Deseja continuar?"):
             click.secho("❌ Commit cancelado!", fg="red")
             sys.exit(0)
 
@@ -63,7 +62,7 @@ def validate_diff_size(diff, no=False):
     return True
 
 
-def get_git_diff(no=False):
+def get_git_diff(skip_confirmation=False):
     """Obtém o diff das alterações stageadas"""
     check_staged_files()
 
@@ -71,14 +70,14 @@ def get_git_diff(no=False):
         ["git", "diff", "--staged"], stderr=subprocess.STDOUT
     ).decode("utf-8")
 
-    validate_diff_size(diff, no)
+    validate_diff_size(diff, skip_confirmation)
 
     return diff
 
 
-def commit_with_ai(provider, model, verbose, no=False):
+def commit_with_ai(provider, model, verbose, skip_confirmation=False):
     """Fluxo principal de commit"""
-    diff = get_git_diff(no)
+    diff = get_git_diff(skip_confirmation)
 
     if verbose:
         click.echo("📋 Diff analysis:")
