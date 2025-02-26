@@ -27,6 +27,10 @@ def load_environment():
 
     if "AI_MODEL" in global_config and not os.getenv("AI_MODEL"):
         os.environ["AI_MODEL"] = global_config["AI_MODEL"]
+        
+    # Configuração para data padrão
+    if "DEFAULT_DATE" in global_config and not os.getenv("DEFAULT_DATE"):
+        os.environ["DEFAULT_DATE"] = global_config["DEFAULT_DATE"]
 
 
 @click.group()
