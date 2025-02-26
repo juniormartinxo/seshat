@@ -1,6 +1,7 @@
 import sys
 import subprocess
 import click
+import os
 from .providers import get_provider
 from .utils import display_error
 
@@ -85,6 +86,12 @@ def commit_with_ai(provider, model, verbose, no=False):
         provider_name = selectedProvider.name if hasattr(selectedProvider, 'name') else provider
         click.echo(f"🤖 Commit gerado com {provider_name}:")
         commit_msg = selectedProvider.generate_commit_message(diff, model=model)
+        
+        # Verifica se existe uma data padrão configurada
+        default_date = os.getenv("DEFAULT_DATE")
+        if default_date and verbose:
+            click.echo(f"📅 Data padrão configurada: {default_date}")
+            
     except KeyError:
         raise ValueError(f"Provedor não suportado: {provider}")
 
