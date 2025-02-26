@@ -27,8 +27,9 @@ def check_staged_files():
 @click.option("--no", "-n", is_flag=False, help="Skip confirmation")
 def validate_diff_size(diff, no=False):
     """Valida o tamanho do diff para garantir commits concisos"""
-    WARN_SIZE = 2500  # Aviso a partir de 2500 caracteres
-    MAX_SIZE = 3000  # Limite máximo de 3000 caracteres
+    # Obter limites configurados ou usar os valores padrão
+    WARN_SIZE = int(os.getenv("WARN_DIFF_SIZE", "2500"))  # Aviso a partir de 2500 caracteres
+    MAX_SIZE = int(os.getenv("MAX_DIFF_SIZE", "3000"))  # Limite máximo de 3000 caracteres
 
     diff_size = len(diff)
 
@@ -44,6 +45,7 @@ def validate_diff_size(diff, no=False):
             "1. Dividir as alterações em commits menores\n"
             "2. Revisar se todas as alterações são realmente necessárias\n"
             "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
+            "4. Aumentar o limite com: seshat config --max-diff <número>\n"
         )
         if not no and not click.confirm("📢 Deseja continuar?"):
             click.secho("❌ Commit cancelado!", fg="red")
@@ -52,6 +54,8 @@ def validate_diff_size(diff, no=False):
     elif diff_size > WARN_SIZE:
         click.secho(
             "\n⚠️ Atenção: O diff está relativamente grande.\n"
+            f"Limite de aviso: {WARN_SIZE} caracteres\n"
+            f"Tamanho atual: {diff_size} caracteres\n"
             "Considere fazer commits menores para melhor rastreabilidade.\n",
             fg="yellow",
         )
@@ -79,6 +83,11 @@ def commit_with_ai(provider, model, verbose, no=False):
     if verbose:
         click.echo("📋 Diff analysis:")
         click.echo(diff[:500] + "...\n")
+        
+        # Mostrar limites configurados
+        max_diff = os.getenv("MAX_DIFF_SIZE", "3000")
+        warn_diff = os.getenv("WARN_DIFF_SIZE", "2500")
+        click.echo(f"📏 Limites configurados: max={max_diff}, warn={warn_diff}")
 
     try:
         selectedProvider = get_provider(provider)
@@ -86,11 +95,6 @@ def commit_with_ai(provider, model, verbose, no=False):
         provider_name = selectedProvider.name if hasattr(selectedProvider, 'name') else provider
         click.echo(f"🤖 Commit gerado com {provider_name}:")
         commit_msg = selectedProvider.generate_commit_message(diff, model=model)
-        
-        # Verifica se existe uma data padrão configurada
-        default_date = os.getenv("DEFAULT_DATE")
-        if default_date and verbose:
-            click.echo(f"📅 Data padrão configurada: {default_date}")
             
     except KeyError:
         raise ValueError(f"Provedor não suportado: {provider}")
