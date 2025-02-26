@@ -37,7 +37,7 @@ def load_environment():
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version="0.1.3")  # Atualizado para a nova versão
 def cli():
     """AI Commit Bot using DeepSeek API and Conventional Commits"""
     load_environment()
