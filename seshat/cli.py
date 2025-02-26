@@ -38,7 +38,8 @@ def commit(provider, model, yes, verbose, date, max_diff):
         if max_diff:
             os.environ["MAX_DIFF_SIZE"] = str(max_diff)
 
-        commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose)
+        # Passar o parâmetro yes como skip_confirmation para commit_with_ai
+        commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose, skip_confirmation=yes)
 
         if yes or click.confirm(
             f"\n🤖 Mensagem de commit gerada com sucesso:\n\n{commit_message}"
@@ -91,6 +92,10 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff):
 
         if model:
             config["AI_MODEL"] = model
+            modified = True
+            
+        if default_date:
+            config["DEFAULT_DATE"] = default_date
             modified = True
             
         if max_diff is not None:
