@@ -15,7 +15,8 @@ from .commands import cli
 @click.option("--model", help="Modelo específico do provedor")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-def commit(provider, model, yes, verbose):
+@click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
+def commit(provider, model, yes, verbose, date):
     """Generate and execute AI-powered commits"""
     try:
         if provider:
@@ -37,8 +38,13 @@ def commit(provider, model, yes, verbose):
         if yes or click.confirm(
             f"\n🤖 Mensagem de commit gerada com sucesso:\n\n{commit_message}"
         ):
-            subprocess.check_call(["git", "commit", "-m", commit_message])
-            click.secho("✓ Commit realizado com sucesso!", fg="green")
+            # Se a data for fornecida, use o parâmetro --date do Git
+            if date:
+                subprocess.check_call(["git", "commit", "--date", date, "-m", commit_message])
+                click.secho(f"✓ Commit realizado com sucesso (data: {date})!", fg="green")
+            else:
+                subprocess.check_call(["git", "commit", "-m", commit_message])
+                click.secho("✓ Commit realizado com sucesso!", fg="green")
         else:
             click.secho("❌ Commit cancelado", fg="red")
 
@@ -51,7 +57,8 @@ def commit(provider, model, yes, verbose):
 @click.option("--api-key", help="Configure a API Key")
 @click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama)")
 @click.option("--model", help="Configure o modelo padrão para o seu provider")
-def config(api_key, provider, model):
+@click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
+def config(api_key, provider, model, default_date):
     """Configure API Key e provedor padrão"""
     try:
         CONFIG_PATH.parent.mkdir(exist_ok=True)
@@ -78,6 +85,10 @@ def config(api_key, provider, model):
         if model:
             config["AI_MODEL"] = model
             modified = True
+            
+        if default_date:
+            config["DEFAULT_DATE"] = default_date
+            modified = True
 
         if modified:
             with open(CONFIG_PATH, "w") as f:
@@ -88,11 +99,13 @@ def config(api_key, provider, model):
                 "API_KEY": config.get("API_KEY", "não configurada"),
                 "AI_PROVIDER": config.get("AI_PROVIDER", "não configurado"),
                 "AI_MODEL": config.get("AI_MODEL", "não configurado"),
+                "DEFAULT_DATE": config.get("DEFAULT_DATE", "não configurada"),
             }
             click.echo("Configuração atual:")
             click.echo(f"API Key: {current_config['API_KEY']}")
             click.echo(f"Provider: {current_config['AI_PROVIDER']}")
             click.echo(f"Model: {current_config['AI_MODEL']}")
+            click.echo(f"Data padrão: {current_config['DEFAULT_DATE']}")
 
     except Exception as e:
         display_error(str(e))
