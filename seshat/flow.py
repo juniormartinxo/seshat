@@ -77,7 +77,7 @@ def flow(count, provider, model, yes, verbose, date, path):
                 
                 # Gerar e executar commit
                 click.echo("🤖 Gerando commit...")
-                commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose)
+                commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose, skip_confirmation=yes)
                 
                 if yes or click.confirm(f"\n📝 Mensagem de commit:\n\n{commit_message}\n\n✓ Confirmar?"):
                     # Executar commit
