@@ -16,7 +16,8 @@ from .commands import cli
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
-def commit(provider, model, yes, verbose, date):
+@click.option("--max-diff", type=int, help="Limite máximo de caracteres para o diff")
+def commit(provider, model, yes, verbose, date, max_diff):
     """Generate and execute AI-powered commits"""
     try:
         if provider:
@@ -32,6 +33,10 @@ def commit(provider, model, yes, verbose, date):
         # Ignorar modelo se provider for ollama
         if provider == "ollama":
             model = None
+
+        # Aplicar limite do diff personalizado para este comando
+        if max_diff:
+            os.environ["MAX_DIFF_SIZE"] = str(max_diff)
 
         commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose)
 
@@ -58,7 +63,9 @@ def commit(provider, model, yes, verbose, date):
 @click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama)")
 @click.option("--model", help="Configure o modelo padrão para o seu provider")
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
-def config(api_key, provider, model, default_date):
+@click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
+@click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
+def config(api_key, provider, model, default_date, max_diff, warn_diff):
     """Configure API Key e provedor padrão"""
     try:
         CONFIG_PATH.parent.mkdir(exist_ok=True)
@@ -86,8 +93,16 @@ def config(api_key, provider, model, default_date):
             config["AI_MODEL"] = model
             modified = True
             
-        if default_date:
-            config["DEFAULT_DATE"] = default_date
+        if max_diff is not None:
+            if max_diff <= 0:
+                raise ValueError("O limite máximo do diff deve ser maior que zero")
+            config["MAX_DIFF_SIZE"] = max_diff
+            modified = True
+            
+        if warn_diff is not None:
+            if warn_diff <= 0:
+                raise ValueError("O limite de aviso do diff deve ser maior que zero")
+            config["WARN_DIFF_SIZE"] = warn_diff
             modified = True
 
         if modified:
@@ -99,13 +114,15 @@ def config(api_key, provider, model, default_date):
                 "API_KEY": config.get("API_KEY", "não configurada"),
                 "AI_PROVIDER": config.get("AI_PROVIDER", "não configurado"),
                 "AI_MODEL": config.get("AI_MODEL", "não configurado"),
-                "DEFAULT_DATE": config.get("DEFAULT_DATE", "não configurada"),
+                "MAX_DIFF_SIZE": config.get("MAX_DIFF_SIZE", 3000),
+                "WARN_DIFF_SIZE": config.get("WARN_DIFF_SIZE", 2500),
             }
             click.echo("Configuração atual:")
             click.echo(f"API Key: {current_config['API_KEY']}")
             click.echo(f"Provider: {current_config['AI_PROVIDER']}")
             click.echo(f"Model: {current_config['AI_MODEL']}")
-            click.echo(f"Data padrão: {current_config['DEFAULT_DATE']}")
+            click.echo(f"Limite máximo do diff: {current_config['MAX_DIFF_SIZE']} caracteres")
+            click.echo(f"Limite de aviso do diff: {current_config['WARN_DIFF_SIZE']} caracteres")
 
     except Exception as e:
         display_error(str(e))
