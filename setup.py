@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="seshat",
-    version="0.1.1",  # Versão incrementada por causa da nova funcionalidade
+    version="0.1.2",  # Versão incrementada por causa das novas funcionalidades
     packages=find_packages(),
     install_requires=[
         "click>=8.0",
