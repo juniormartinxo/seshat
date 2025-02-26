@@ -9,11 +9,13 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 ## ✨ Recursos
 
 *   ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic) e Ollama (local).
-*   📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes (acima de 2500 caracteres), incentivando commits menores e mais focados.
+*   📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes, com limites configuráveis.
 *   🔍 **Verificação de Arquivos Staged:** Garante que você não se esqueça de adicionar arquivos ao commit.
 *   📝 **Suporte Completo a Conventional Commits:**  Gera mensagens de commit padronizadas e significativas.
 *   🤝 **Confirmação Interativa:**  Permite revisar e editar a mensagem de commit gerada pela IA antes de confirmar.
 *   ⚙️ **Altamente Configurável:**  Configure o provedor de IA, chave de API, modelo e outras opções.
+*   📅 **Data de Commit Personalizada:** Defina datas específicas para seus commits.
+*   🔄 **Fluxo de Commits em Lote:** Processe múltiplos arquivos, gerando um commit individual para cada um.
 
 ## 🚀 Instalação
 
@@ -27,7 +29,7 @@ python3 -m pip install --user pipx
 python3 -m pipx ensurepath
 
 # 2. Instalar Seshat
-pipx install git+[https://github.com/juniormartinxo/seshat.git](https://github.com/juniormartinxo/seshat.git)
+pipx install git+https://github.com/juniormartinxo/seshat.git
 ````
 
 ### Instalação para Desenvolvimento
@@ -36,7 +38,7 @@ Para contribuir com o desenvolvimento do Seshat, siga estas etapas:
 
 ```bash
 # 1. Clonar o repositório
-git clone [https://github.com/juniormartinxo/seshat.git](https://github.com/juniormartinxo/seshat.git)
+git clone https://github.com/juniormartinxo/seshat.git
 cd seshat
 
 # 2. Criar um ambiente virtual (altamente recomendado)
@@ -71,7 +73,11 @@ Seshat suporta os seguintes provedores de IA:
     ```
 
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
-    ` bash AI_PROVIDER=deepseek|claude|ollama API_KEY=sua_chave_aqui AI_MODEL=seu-modelo  `
+    ```bash
+    AI_PROVIDER=deepseek|claude|ollama 
+    API_KEY=sua_chave_aqui 
+    AI_MODEL=seu-modelo
+    ```
 
 ### Configuração do Ollama (IA Local)
 
@@ -84,48 +90,105 @@ Seshat suporta os seguintes provedores de IA:
     ```bash
     ollama pull deepseek-coder
     ```
-    (Você pode encontrar outros modelos em [https://ollama.ai/library](https://www.google.com/url?sa=E&source=gmail&q=https://ollama.ai/library))
+    (Você pode encontrar outros modelos em [https://ollama.ai/library](https://ollama.ai/library))
 4.  **Configure o Seshat**
     ```bash
      seshat config --provider ollama
     ```
 
+### Configuração dos Limites de Diff
+
+Você pode configurar os limites para o tamanho do diff:
+
+```bash
+# Configurar limite máximo (padrão: 3000 caracteres)
+seshat config --max-diff 5000
+
+# Configurar limite de aviso (padrão: 2500 caracteres)
+seshat config --warn-diff 4000
+```
+
 ## 💻 Uso
 
-**Exemplo Básico:**
+### Commit Básico
 
 ```bash
 git add .
 seshat commit
 ```
 
-**Exemplos Avançados:**
+### Commits com Data Personalizada
 
-  * Commit com escopo e confirmação automática:
+```bash
+# Commit com data específica
+seshat commit --date="2025-02-20 14:30:00"
+
+# Usar descrições relativas
+seshat commit --date="yesterday"
+seshat commit --date="1 week ago"
+seshat commit --date="last Friday 17:00"
+```
+
+### Fluxo de Commits em Lote
+
+Processe e comite múltiplos arquivos individualmente:
+
+```bash
+# Processar os primeiros 5 arquivos modificados
+seshat flow 5
+
+# Processar todos os arquivos modificados
+seshat flow
+
+# Processar os 3 primeiros arquivos sem confirmação
+seshat flow 3 --yes
+
+# Processar arquivos em um diretório específico
+seshat flow 10 --path ./src
+```
+
+### Exemplos Avançados
+
+  * Commit com confirmação automática e limite de diff personalizado:
 
     ```bash
     git add src/
-    seshat commit --scope core --yes
+    seshat commit --yes --max-diff 10000
     ```
 
-  * Commit do tipo "feat" com breaking change:
+  * Commit com provedor específico e data:
 
     ```bash
-    git add .
-    seshat commit --type feat --breaking "Esta mudança quebra a compatibilidade da API."
+    seshat commit --provider claude --date="yesterday 14:00" --verbose
     ```
 
-  * Especificando o provedor e modelo (sobrescreve a configuração):
+  * Fluxo de commits com data específica:
 
     ```bash
-    seshat commit --provider claude --model claude-3-haiku-20240307 --verbose
+    seshat flow 5 --date="2025-02-20" --yes
     ```
 
-      * `--yes`: Confirma a mensagem de commit gerada automaticamente, sem interação.
-      * `--verbose`: Exibe informações detalhadas sobre o processo.
-      * `--type`: Força a utilização de um tipo de commit.
-      * `--scope`: Adiciona um escopo (contexto) ao commit.
-      * `--breaking`: Adiciona uma descrição para um *breaking change*.
+### Opções Disponíveis
+
+* **Comando `commit`**:
+  * `--yes` ou `-y`: Pula todas as confirmações.
+  * `--verbose` ou `-v`: Exibe informações detalhadas sobre o processo.
+  * `--date` ou `-d`: Define a data do commit.
+  * `--max-diff`: Sobrescreve o limite máximo do diff para este commit.
+  * `--provider`: Especifica o provedor de IA.
+  * `--model`: Especifica o modelo de IA.
+
+* **Comando `flow`**:
+  * Todas as opções do comando `commit` mais:
+  * `--path` ou `-p`: Caminho para buscar arquivos modificados.
+  * `COUNT`: Número máximo de arquivos a processar (argumento posicional).
+
+* **Comando `config`**:
+  * `--api-key`: Configura a chave de API.
+  * `--provider`: Configura o provedor padrão.
+  * `--model`: Configura o modelo padrão.
+  * `--max-diff`: Configura o limite máximo do diff.
+  * `--warn-diff`: Configura o limite de aviso do diff.
 
 ## 📚 Tipos de Commit (Conventional Commits)
 
@@ -171,9 +234,16 @@ ollama list
 
 **Diff Muito Grande:**
 
-Se o `git diff` for muito grande (acima de 2500 caracteres), o Seshat irá avisá-lo.  Considere dividir suas alterações em commits menores:
+Se o diff for muito grande (acima do limite configurado), o Seshat irá avisá-lo. Você pode:
 
 ```bash
+# Aumentar o limite para este commit
+seshat commit --max-diff 10000
+
+# Aumentar o limite global
+seshat config --max-diff 10000
+
+# Ou dividir suas alterações em commits menores
 git add -p  # Adiciona as mudanças interativamente, em pedaços
 ```
 
@@ -182,13 +252,21 @@ git add -p  # Adiciona as mudanças interativamente, em pedaços
   * Verifique se sua chave de API está correta e não expirou.
   * Verifique se você tem permissão para usar o modelo especificado.
 
+**Problemas com o Comando Flow:**
+
+Se o comando `flow` não for reconhecido, verifique se a instalação está atualizada:
+
+```bash
+pip install --upgrade git+https://github.com/juniormartinxo/seshat.git
+```
+
 ## 🤝 Contribuindo
 
-Contribuições são bem-vindas\!  Se você encontrar um bug, tiver uma sugestão ou quiser adicionar uma nova funcionalidade:
+Contribuições são bem-vindas! Se você encontrar um bug, tiver uma sugestão ou quiser adicionar uma nova funcionalidade:
 
 1.  Faça um fork do repositório.
 2.  Crie um branch para sua feature: `git checkout -b minha-nova-feature`
-3.  Faça commit das suas mudanças: `seshat commit` (use a própria ferramenta\!)
+3.  Faça commit das suas mudanças: `seshat commit` (use a própria ferramenta!)
 4.  Faça push para o branch: `git push origin minha-nova-feature`
 5.  Abra um Pull Request.
 
