@@ -28,9 +28,12 @@ def load_environment():
     if "AI_MODEL" in global_config and not os.getenv("AI_MODEL"):
         os.environ["AI_MODEL"] = global_config["AI_MODEL"]
         
-    # Configuração para data padrão
-    if "DEFAULT_DATE" in global_config and not os.getenv("DEFAULT_DATE"):
-        os.environ["DEFAULT_DATE"] = global_config["DEFAULT_DATE"]
+    # Configurações para limites do diff
+    if "MAX_DIFF_SIZE" in global_config and not os.getenv("MAX_DIFF_SIZE"):
+        os.environ["MAX_DIFF_SIZE"] = str(global_config["MAX_DIFF_SIZE"])
+        
+    if "WARN_DIFF_SIZE" in global_config and not os.getenv("WARN_DIFF_SIZE"):
+        os.environ["WARN_DIFF_SIZE"] = str(global_config["WARN_DIFF_SIZE"])
 
 
 @click.group()
