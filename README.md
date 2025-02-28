@@ -55,6 +55,7 @@ Seshat suporta os seguintes provedores de IA:
 
   * **DeepSeek API:**  Um provedor de IA online.
   * **Claude API (Anthropic):** Outro provedor de IA online.
+  * **OpenAI API (Anthropic):** Outro provedor de IA online, muito conhecido como chatgpt.
   * **Ollama (Local):**  Execute modelos de IA localmente usando Ollama.
 
 ### Configuração Rápida (DeepSeek/Claude)
@@ -63,11 +64,12 @@ Seshat suporta os seguintes provedores de IA:
 
       * **DeepSeek:**  [Link para a documentação do DeepSeek](https://platform.deepseek.com/docs)
       * **Claude:** [Link para a documentação do Claude](https://console.anthropic.com/dashboard)
+      * **OpenAI:** [Link para a documentação do OpenAI](https://platform.openai.com/)
 
 2.  **Configure via CLI:**
 
     ```bash
-    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama
+    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai
     seshat config --api-key SUA_CHAVE_API
     seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307
     ```
