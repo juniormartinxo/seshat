@@ -11,7 +11,7 @@ from .commands import cli
 
 
 @cli.command()
-@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama)")
+@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai)")
 @click.option("--model", help="Modelo específico do provedor")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
@@ -61,7 +61,7 @@ def commit(provider, model, yes, verbose, date, max_diff):
 
 @cli.command()
 @click.option("--api-key", help="Configure a API Key")
-@click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama)")
+@click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama/openai)")
 @click.option("--model", help="Configure o modelo padrão para o seu provider")
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
@@ -82,7 +82,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff):
             modified = True
 
         if provider:
-            valid_providers = ["deepseek", "claude", "ollama"]
+            valid_providers = ["deepseek", "claude", "ollama","openai"]
             if provider not in valid_providers:
                 raise ValueError(
                     f"Provedor inválido. Opções: {', '.join(valid_providers)}"
