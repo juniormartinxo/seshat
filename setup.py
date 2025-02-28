@@ -10,6 +10,7 @@ setup(
         "python-dotenv>=0.19",
         "anthropic>=0.19",
         "setuptools>=75.8.0",
+        "openai==1.65.1"
     ],
     python_requires=">=3.8",  # Especifica versão mínima do Python
     entry_points={
