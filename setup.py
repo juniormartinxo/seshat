@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="seshat",
-    version="0.1.4",  # Versão incrementada por causa da correção
+    version="0.1.5",  # Versão incrementada por causa da correção
     packages=find_packages(),
     install_requires=[
         "click>=8.0",
@@ -10,6 +10,7 @@ setup(
         "python-dotenv>=0.19",
         "anthropic>=0.19",
         "setuptools>=75.8.0",
+        "openai==1.65.1"
     ],
     python_requires=">=3.8",  # Especifica versão mínima do Python
     entry_points={

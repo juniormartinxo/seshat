@@ -1,6 +1,8 @@
 import os
 import requests
 from anthropic import Anthropic
+from openai import OpenAI
+
 import click
 import json
 from .utils import is_valid_conventional_commit
@@ -42,6 +44,7 @@ def get_provider(provider_name):
         "deepseek": DeepSeekProvider,
         "claude": ClaudeProvider,
         "ollama": OllamaProvider,
+        "openai": OpenAIProvider
     }
     return providers[provider_name]()
 
@@ -157,7 +160,7 @@ class OllamaProvider(BaseProvider):
                 "1. Instale o Ollama: https://ollama.ai\n"
                 "2. Inicie o serviço: ollama serve\n"
                 "3. Baixe o modelo: ollama pull deepseek-coder\n"
-                "\nOu use outro provedor com: seshat config --provider (deepseek|claude)"
+                "\nOu use outro provedor com: seshat config --provider (deepseek|claude|openai)"
             )
 
         data = {
@@ -210,5 +213,38 @@ class OllamaProvider(BaseProvider):
         except Exception as e:
             raise ValueError(f"Erro inesperado: {str(e)}")
 
+class OpenAIProvider(BaseProvider):
+    
+    def __init__(self):
+        self.api_key = os.getenv("API_KEY")
+        if not self.api_key:
+            raise ValueError("API_KEY não configurada para OpenAI")
+        
+        self.client = OpenAI(api_key=self.api_key)
+
+        # Inicializa o cliente com a api_key
+
+        self.model = os.getenv("AI_MODEL")
+        if not self.model:
+            raise ValueError("AI_MODEL não configurada para OpenAI")
+
+    def generate_commit_message(self, diff, **kwargs):
+        try:
+            response = self.client.chat.completions.create(model=self.model,
+            max_tokens=400,
+            temperature=0.3,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
+                },
+                {
+                    "role": "user",
+                    "content": COMMIT_PROMPT.format(diff=diff)
+                }
+            ])
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            raise ValueError(f"Erro com OpenAI API: {str(e)}")
 
 __all__ = ["get_provider"]
