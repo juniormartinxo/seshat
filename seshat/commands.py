@@ -34,6 +34,10 @@ def load_environment():
         
     if "WARN_DIFF_SIZE" in global_config and not os.getenv("WARN_DIFF_SIZE"):
         os.environ["WARN_DIFF_SIZE"] = str(global_config["WARN_DIFF_SIZE"])
+        
+    # Configuração de linguagem
+    if "COMMIT_LANGUAGE" in global_config and not os.getenv("COMMIT_LANGUAGE"):
+        os.environ["COMMIT_LANGUAGE"] = global_config["COMMIT_LANGUAGE"]
 
 
 @click.group()
