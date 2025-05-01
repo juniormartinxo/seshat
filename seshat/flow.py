@@ -110,6 +110,11 @@ def flow(count, provider, model, yes, verbose, date, path):
         click.echo(f"✅ Commits realizados com sucesso: {success_count}")
         click.echo(f"❌ Falhas: {fail_count}")
         click.echo(f"⏭️ Arquivos restantes não processados: {len(all_files) - len(files_to_process)}")
+        
+        # Adicionar a linguagem ao resumo
+        language = os.getenv("COMMIT_LANGUAGE", "PT-BR")
+        click.echo(f"🔤 Linguagem dos commits: {language}")
+        
         click.echo("="*50)
         
     except Exception as e:
@@ -221,11 +226,13 @@ def process_files(count=None, path=".", skip_confirmation=False, date=None, verb
             click.secho(f"✅ Successful commits: {successful_commits}")
             click.secho(f"❌ Failures: {failed_commits}")
             click.secho(f"⏭️ Remaining unprocessed files: {len(modified_files) - (successful_commits + failed_commits)}")
+            click.secho(f"🔤 Commit language: {language}")
         else:
             click.secho("📊 Resumo da operação:")
             click.secho(f"✅ Commits realizados com sucesso: {successful_commits}")
             click.secho(f"❌ Falhas: {failed_commits}")
             click.secho(f"⏭️ Arquivos restantes não processados: {len(modified_files) - (successful_commits + failed_commits)}")
+            click.secho(f"🔤 Linguagem dos commits: {language}")
         click.secho("="*50)
         
     except Exception as e:
