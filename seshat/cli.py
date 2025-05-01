@@ -66,7 +66,8 @@ def commit(provider, model, yes, verbose, date, max_diff):
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
 @click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
-def config(api_key, provider, model, default_date, max_diff, warn_diff):
+@click.option("--language", help="Configure a linguagem das mensagens de commit (ex: PORTUGUÊS DO BRASIL, ENGLISH, ESPAÑOL)")
+def config(api_key, provider, model, default_date, max_diff, warn_diff, language):
     """Configure API Key e provedor padrão"""
     try:
         CONFIG_PATH.parent.mkdir(exist_ok=True)
@@ -110,6 +111,10 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff):
             config["WARN_DIFF_SIZE"] = warn_diff
             modified = True
 
+        if language:
+            config["COMMIT_LANGUAGE"] = language.upper()
+            modified = True
+
         if modified:
             with open(CONFIG_PATH, "w") as f:
                 json.dump(config, f)
@@ -121,6 +126,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff):
                 "AI_MODEL": config.get("AI_MODEL", "não configurado"),
                 "MAX_DIFF_SIZE": config.get("MAX_DIFF_SIZE", 3000),
                 "WARN_DIFF_SIZE": config.get("WARN_DIFF_SIZE", 2500),
+                "COMMIT_LANGUAGE": config.get("COMMIT_LANGUAGE", "PORTUGUÊS DO BRASIL"),
             }
             click.echo("Configuração atual:")
             click.echo(f"API Key: {current_config['API_KEY']}")
@@ -128,6 +134,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff):
             click.echo(f"Model: {current_config['AI_MODEL']}")
             click.echo(f"Limite máximo do diff: {current_config['MAX_DIFF_SIZE']} caracteres")
             click.echo(f"Limite de aviso do diff: {current_config['WARN_DIFF_SIZE']} caracteres")
+            click.echo(f"Linguagem dos commits: {current_config['COMMIT_LANGUAGE']}")
 
     except Exception as e:
         display_error(str(e))
