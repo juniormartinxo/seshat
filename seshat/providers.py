@@ -9,7 +9,7 @@ from .utils import is_valid_conventional_commit
 
 COMMIT_PROMPT = """Você é um assistente de commits especialista em Conventional Commits. 
 
-Analise este diff e gere uma mensagem de commit, EM PORTUGUÊS DO BRASIL,  seguindo o padrão Conventional Commits:
+Analise este diff e gere uma mensagem de commit, EM {language}, seguindo o padrão Conventional Commits:
 
 {diff}
 
@@ -53,6 +53,9 @@ class BaseProvider:
     def generate_commit_message(self, diff, **kwargs):
         raise NotImplementedError
 
+    def get_language(self):
+        return os.getenv("COMMIT_LANGUAGE", "PORTUGUÊS DO BRASIL")
+
 
 class DeepSeekProvider(BaseProvider):
     def __init__(self):
@@ -80,7 +83,7 @@ class DeepSeekProvider(BaseProvider):
                     "role": "system",
                     "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
                 },
-                {"role": "user", "content": COMMIT_PROMPT.format(diff=diff)},
+                {"role": "user", "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())},
             ],
             "temperature": 0.3,
             "max_tokens": 400,
@@ -125,14 +128,13 @@ class ClaudeProvider(BaseProvider):
 
     def generate_commit_message(self, diff, **kwargs):
         try:
-            # Remove a configuração manual de headers pois o cliente já gerencia isso
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=100,
                 temperature=0.3,
                 messages=[{
                     "role": "user", 
-                    "content": COMMIT_PROMPT.format(diff=diff)
+                    "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())
                 }]
             )
             return response.content[0].text.strip()
@@ -165,7 +167,7 @@ class OllamaProvider(BaseProvider):
 
         data = {
             "model": self.default_model,
-            "prompt": COMMIT_PROMPT.format(diff=diff),
+            "prompt": COMMIT_PROMPT.format(diff=diff, language=self.get_language()),
             "stream": False,
         }
 
@@ -240,7 +242,7 @@ class OpenAIProvider(BaseProvider):
                 },
                 {
                     "role": "user",
-                    "content": COMMIT_PROMPT.format(diff=diff)
+                    "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())
                 }
             ])
             return response.choices[0].message.content.strip()
