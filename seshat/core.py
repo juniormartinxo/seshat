@@ -29,35 +29,60 @@ def validate_diff_size(diff, skip_confirmation=False):
     # Obter limites configurados ou usar os valores padrão
     WARN_SIZE = int(os.getenv("WARN_DIFF_SIZE", "2500"))  # Aviso a partir de 2500 caracteres
     MAX_SIZE = int(os.getenv("MAX_DIFF_SIZE", "3000"))  # Limite máximo de 3000 caracteres
+    LANGUAGE = os.getenv("COMMIT_LANGUAGE", "PT-BR")
 
     diff_size = len(diff)
 
     if diff_size > MAX_SIZE:
-        click.secho(
-            "\n🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
-            f"Máximo de caracteres permitido: {MAX_SIZE}\n"
-            f"Número de caracteres no diff: {diff_size}\n",
-            fg="yellow",
-        )
-        click.secho(
-            "Por favor, considere:\n"
-            "1. Dividir as alterações em commits menores\n"
-            "2. Revisar se todas as alterações são realmente necessárias\n"
-            "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
-            "4. Aumentar o limite com: seshat config --max-diff <número>\n"
-        )
+        if LANGUAGE == "ENG":
+            click.secho(
+                "\n🤖 Maximum recommended character limit for a single commit reached!\n"
+                f"Maximum allowed characters: {MAX_SIZE}\n"
+                f"Number of characters in diff: {diff_size}\n",
+                fg="yellow",
+            )
+            click.secho(
+                "Please consider:\n"
+                "1. Splitting changes into smaller commits\n"
+                "2. Reviewing if all changes are really necessary\n"
+                "3. Following the principle of 'one commit, one logical change'\n"
+                "4. Increasing the limit with: seshat config --max-diff <number>\n"
+            )
+        else:
+            click.secho(
+                "\n🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
+                f"Máximo de caracteres permitido: {MAX_SIZE}\n"
+                f"Número de caracteres no diff: {diff_size}\n",
+                fg="yellow",
+            )
+            click.secho(
+                "Por favor, considere:\n"
+                "1. Dividir as alterações em commits menores\n"
+                "2. Revisar se todas as alterações são realmente necessárias\n"
+                "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
+                "4. Aumentar o limite com: seshat config --max-diff <número>\n"
+            )
         if not skip_confirmation and not click.confirm("📢 Deseja continuar?"):
             click.secho("❌ Commit cancelado!", fg="red")
             sys.exit(0)
 
     elif diff_size > WARN_SIZE:
-        click.secho(
-            "\n⚠️ Atenção: O diff está relativamente grande.\n"
-            f"Limite de aviso: {WARN_SIZE} caracteres\n"
-            f"Tamanho atual: {diff_size} caracteres\n"
-            "Considere fazer commits menores para melhor rastreabilidade.\n",
-            fg="yellow",
-        )
+        if LANGUAGE == "ENG":
+            click.secho(
+                "\n⚠️ Warning: The diff is relatively large.\n"
+                f"Warning limit: {WARN_SIZE} characters\n"
+                f"Current size: {diff_size} characters\n"
+                "Consider making smaller commits for better traceability.\n",
+                fg="yellow",
+            )
+        else:
+            click.secho(
+                "\n⚠️ Atenção: O diff está relativamente grande.\n"
+                f"Limite de aviso: {WARN_SIZE} caracteres\n"
+                f"Tamanho atual: {diff_size} caracteres\n"
+                "Considere fazer commits menores para melhor rastreabilidade.\n",
+                fg="yellow",
+            )
 
     return True
 
