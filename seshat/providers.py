@@ -36,14 +36,6 @@ Allowed types:
 - ci: CI/CD changes
 - revert: Commit reversion
 
-Supported languages:
-- PT-BR: BRAZILIAN PORTUGUESE
-- ENG: ENGLISH
-- ESP: SPANISH
-- FRA: FRENCH
-- DEU: GERMAN
-- ITA: ITALIAN
-
 Reply ONLY with the commit message, without extra comments."""
 
 
