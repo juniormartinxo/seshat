@@ -66,7 +66,7 @@ def commit(provider, model, yes, verbose, date, max_diff):
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
 @click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
-@click.option("--language", help="Configure a linguagem das mensagens de commit (ex: PORTUGUÊS DO BRASIL, ENGLISH, ESPAÑOL)")
+@click.option("--language", help="Configure a linguagem das mensagens de commit (PT-BR, ENG, ESP, FRA, DEU, ITA)")
 def config(api_key, provider, model, default_date, max_diff, warn_diff, language):
     """Configure API Key e provedor padrão"""
     try:
@@ -112,6 +112,11 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
             modified = True
 
         if language:
+            valid_languages = ["PT-BR", "ENG", "ESP", "FRA", "DEU", "ITA"]
+            if language.upper() not in valid_languages:
+                raise ValueError(
+                    f"Linguagem inválida. Opções: {', '.join(valid_languages)}"
+                )
             config["COMMIT_LANGUAGE"] = language.upper()
             modified = True
 
@@ -126,7 +131,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
                 "AI_MODEL": config.get("AI_MODEL", "não configurado"),
                 "MAX_DIFF_SIZE": config.get("MAX_DIFF_SIZE", 3000),
                 "WARN_DIFF_SIZE": config.get("WARN_DIFF_SIZE", 2500),
-                "COMMIT_LANGUAGE": config.get("COMMIT_LANGUAGE", "PORTUGUÊS DO BRASIL"),
+                "COMMIT_LANGUAGE": config.get("COMMIT_LANGUAGE", "PT-BR"),
             }
             click.echo("Configuração atual:")
             click.echo(f"API Key: {current_config['API_KEY']}")
