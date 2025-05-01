@@ -7,36 +7,44 @@ import click
 import json
 from .utils import is_valid_conventional_commit
 
-COMMIT_PROMPT = """Você é um assistente de commits especialista em Conventional Commits. 
+COMMIT_PROMPT = """You are a commit assistant specialized in Conventional Commits.
 
-Analise este diff e gere uma mensagem de commit, EM {language}, seguindo o padrão Conventional Commits:
+Analyze this diff and generate a commit message in {language}, following the Conventional Commits pattern:
 
 {diff}
 
-Formato exigido:
+Required format:
 <type>(optional scope): <description>
 
 [optional body]
 
 [optional footer(s)]
 
-É obrigatório:
-- <description> deve ser sempre em minúsculo
+Required:
+- <description> must always be in lowercase
 
-Tipos permitidos:
-- feat: Nova funcionalidade
-- fix: Correção de bug
-- docs: Alterações na documentação
-- style: Mudanças de formatação
-- refactor: Refatoração de código
-- perf: Melhorias de performance
-- test: Adição/ajuste de testes
-- chore: Tarefas de manutenção
-- build: Mudanças no sistema de build
-- ci: Mudanças na CI/CD
-- revert: Reversão de commit
+Allowed types:
+- feat: New feature
+- fix: Bug fix
+- docs: Documentation changes
+- style: Formatting changes
+- refactor: Code refactoring
+- perf: Performance improvements
+- test: Test additions/adjustments
+- chore: Maintenance tasks
+- build: Build system changes
+- ci: CI/CD changes
+- revert: Commit reversion
 
-Responda APENAS com a mensagem de commit, sem comentários extras."""
+Supported languages:
+- PT-BR: BRAZILIAN PORTUGUESE
+- ENG: ENGLISH
+- ESP: SPANISH
+- FRA: FRENCH
+- DEU: GERMAN
+- ITA: ITALIAN
+
+Reply ONLY with the commit message, without extra comments."""
 
 
 def get_provider(provider_name):
@@ -54,7 +62,16 @@ class BaseProvider:
         raise NotImplementedError
 
     def get_language(self):
-        return os.getenv("COMMIT_LANGUAGE", "PORTUGUÊS DO BRASIL")
+        language = os.getenv("COMMIT_LANGUAGE", "PT-BR")
+        language_map = {
+            "PT-BR": "BRAZILIAN PORTUGUESE",
+            "ENG": "ENGLISH",
+            "ESP": "SPANISH",
+            "FRA": "FRENCH",
+            "DEU": "GERMAN",
+            "ITA": "ITALIAN"
+        }
+        return language_map.get(language.upper(), "BRAZILIAN PORTUGUESE")
 
 
 class DeepSeekProvider(BaseProvider):
