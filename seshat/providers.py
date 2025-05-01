@@ -54,6 +54,7 @@ class BaseProvider:
         raise NotImplementedError
 
     def get_language(self):
+        print(os.getenv("COMMIT_LANGUAGE"))
         language = os.getenv("COMMIT_LANGUAGE", "PT-BR")
         language_map = {
             "PT-BR": "BRAZILIAN PORTUGUESE",
