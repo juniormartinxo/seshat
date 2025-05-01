@@ -8,14 +8,14 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 
 ## ✨ Recursos
 
-*   ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic) e Ollama (local).
-*   📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes, com limites configuráveis.
-*   🔍 **Verificação de Arquivos Staged:** Garante que você não se esqueça de adicionar arquivos ao commit.
-*   📝 **Suporte Completo a Conventional Commits:**  Gera mensagens de commit padronizadas e significativas.
-*   🤝 **Confirmação Interativa:**  Permite revisar e editar a mensagem de commit gerada pela IA antes de confirmar.
-*   ⚙️ **Altamente Configurável:**  Configure o provedor de IA, chave de API, modelo e outras opções.
-*   📅 **Data de Commit Personalizada:** Defina datas específicas para seus commits.
-*   🔄 **Fluxo de Commits em Lote:** Processe múltiplos arquivos, gerando um commit individual para cada um.
+* ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic) e Ollama (local).
+* 📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes, com limites configuráveis.
+* 🔍 **Verificação de Arquivos Staged:** Garante que você não se esqueça de adicionar arquivos ao commit.
+* 📝 **Suporte Completo a Conventional Commits:**  Gera mensagens de commit padronizadas e significativas.
+* 🤝 **Confirmação Interativa:**  Permite revisar e editar a mensagem de commit gerada pela IA antes de confirmar.
+* ⚙️ **Altamente Configurável:**  Configure o provedor de IA, chave de API, modelo e outras opções.
+* 📅 **Data de Commit Personalizada:** Defina datas específicas para seus commits.
+* 🔄 **Fluxo de Commits em Lote:** Processe múltiplos arquivos, gerando um commit individual para cada um.
 
 ## 🚀 Instalação
 
@@ -30,7 +30,7 @@ python3 -m pipx ensurepath
 
 # 2. Instalar Seshat
 pipx install git+https://github.com/juniormartinxo/seshat.git
-````
+```
 
 ### Instalação para Desenvolvimento
 
@@ -53,20 +53,20 @@ pip install -e .
 
 Seshat suporta os seguintes provedores de IA:
 
-  * **DeepSeek API:**  Um provedor de IA online.
-  * **Claude API (Anthropic):** Outro provedor de IA online.
-  * **OpenAI API (Anthropic):** Outro provedor de IA online, muito conhecido como chatgpt.
-  * **Ollama (Local):**  Execute modelos de IA localmente usando Ollama.
+* **DeepSeek API:**  Um provedor de IA online.
+* **Claude API (Anthropic):** Outro provedor de IA online.
+* **OpenAI API (Anthropic):** Outro provedor de IA online, muito conhecido como chatgpt.
+* **Ollama (Local):**  Execute modelos de IA localmente usando Ollama.
 
 ### Configuração Rápida (DeepSeek/Claude)
 
-1.  **Obtenha sua Chave de API:**
+1. **Obtenha sua Chave de API:**
 
       * **DeepSeek:**  [Link para a documentação do DeepSeek](https://platform.deepseek.com/docs)
       * **Claude:** [Link para a documentação do Claude](https://console.anthropic.com/dashboard)
       * **OpenAI:** [Link para a documentação do OpenAI](https://platform.openai.com/)
 
-2.  **Configure via CLI:**
+2. **Configure via CLI:**
 
     ```bash
     seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai
@@ -75,6 +75,7 @@ Seshat suporta os seguintes provedores de IA:
     ```
 
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
+
     ```bash
     AI_PROVIDER=deepseek|claude|ollama 
     API_KEY=sua_chave_aqui 
@@ -83,19 +84,26 @@ Seshat suporta os seguintes provedores de IA:
 
 ### Configuração do Ollama (IA Local)
 
-1.  **Instale o Ollama:** Siga as instruções de instalação em [https://ollama.ai](https://ollama.ai).
-2.  **Inicie o Servidor Ollama:**
+1. **Instale o Ollama:** Siga as instruções de instalação em [https://ollama.ai](https://ollama.ai).
+
+2. **Inicie o Servidor Ollama:**
+
     ```bash
     ollama serve
     ```
-3.  **Baixe um Modelo Compatível:**  Por exemplo, o `deepseek-coder`:
+
+3. **Baixe um Modelo Compatível:** Por exemplo, o `deepseek-coder`:
+
+  ```bash
+  ollama pull deepseek-coder
+  ```
+
+(Você pode encontrar outros modelos em [https://ollama.ai/library](https://ollama.ai/library))
+
+1. **Configure o Seshat**
+
     ```bash
-    ollama pull deepseek-coder
-    ```
-    (Você pode encontrar outros modelos em [https://ollama.ai/library](https://ollama.ai/library))
-4.  **Configure o Seshat**
-    ```bash
-     seshat config --provider ollama
+    seshat config --provider ollama
     ```
 
 ### Configuração dos Limites de Diff
@@ -151,20 +159,20 @@ seshat flow 10 --path ./src
 
 ### Exemplos Avançados
 
-  * Commit com confirmação automática e limite de diff personalizado:
+* Commit com confirmação automática e limite de diff personalizado:
 
     ```bash
     git add src/
     seshat commit --yes --max-diff 10000
     ```
 
-  * Commit com provedor específico e data:
+* Commit com provedor específico e data:
 
     ```bash
     seshat commit --provider claude --date="yesterday 14:00" --verbose
     ```
 
-  * Fluxo de commits com data específica:
+* Fluxo de commits com data específica:
 
     ```bash
     seshat flow 5 --date="2025-02-20" --yes
@@ -251,8 +259,8 @@ git add -p  # Adiciona as mudanças interativamente, em pedaços
 
 **Erros de Autenticação:**
 
-  * Verifique se sua chave de API está correta e não expirou.
-  * Verifique se você tem permissão para usar o modelo especificado.
+* Verifique se sua chave de API está correta e não expirou.
+* Verifique se você tem permissão para usar o modelo especificado.
 
 **Problemas com o Comando Flow:**
 
@@ -266,11 +274,11 @@ pip install --upgrade git+https://github.com/juniormartinxo/seshat.git
 
 Contribuições são bem-vindas! Se você encontrar um bug, tiver uma sugestão ou quiser adicionar uma nova funcionalidade:
 
-1.  Faça um fork do repositório.
-2.  Crie um branch para sua feature: `git checkout -b minha-nova-feature`
-3.  Faça commit das suas mudanças: `seshat commit` (use a própria ferramenta!)
-4.  Faça push para o branch: `git push origin minha-nova-feature`
-5.  Abra um Pull Request.
+1. Faça um fork do repositório.
+2. Crie um branch para sua feature: `git checkout -b minha-nova-feature`
+3. Faça commit das suas mudanças: `seshat commit` (use a própria ferramenta!)
+4. Faça push para o branch: `git push origin minha-nova-feature`
+5. Abra um Pull Request.
 
 🐛 [Reportar Bug](https://github.com/juniormartinxo/seshat/issues)
 
