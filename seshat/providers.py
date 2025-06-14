@@ -44,7 +44,7 @@ def get_provider(provider_name):
         "deepseek": DeepSeekProvider,
         "claude": ClaudeProvider,
         "ollama": OllamaProvider,
-        "openai": OpenAIProvider
+        "openai": OpenAIProvider,
     }
     return providers[provider_name]()
 
@@ -61,7 +61,7 @@ class BaseProvider:
             "ESP": "SPANISH",
             "FRA": "FRENCH",
             "DEU": "GERMAN",
-            "ITA": "ITALIAN"
+            "ITA": "ITALIAN",
         }
         return language_map.get(language.upper(), "BRAZILIAN PORTUGUESE")
 
@@ -92,7 +92,12 @@ class DeepSeekProvider(BaseProvider):
                     "role": "system",
                     "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
                 },
-                {"role": "user", "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())},
+                {
+                    "role": "user",
+                    "content": COMMIT_PROMPT.format(
+                        diff=diff, language=self.get_language()
+                    ),
+                },
             ],
             "temperature": 0.3,
             "max_tokens": 400,
@@ -141,10 +146,14 @@ class ClaudeProvider(BaseProvider):
                 model=self.model,
                 max_tokens=100,
                 temperature=0.3,
-                messages=[{
-                    "role": "user", 
-                    "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())
-                }]
+                messages=[
+                    {
+                        "role": "user",
+                        "content": COMMIT_PROMPT.format(
+                            diff=diff, language=self.get_language()
+                        ),
+                    }
+                ],
             )
             return response.content[0].text.strip()
         except Exception as e:
@@ -154,7 +163,7 @@ class ClaudeProvider(BaseProvider):
 class OllamaProvider(BaseProvider):
     def __init__(self):
         self.base_url = "http://localhost:11434/api/generate"
-        self.default_model = "deepseek-coder-v2"
+        self.default_model = "tavernari/git-commit-message"
 
     def check_ollama_running(self):
         """Verifica se o Ollama está rodando localmente"""
@@ -224,13 +233,13 @@ class OllamaProvider(BaseProvider):
         except Exception as e:
             raise ValueError(f"Erro inesperado: {str(e)}")
 
+
 class OpenAIProvider(BaseProvider):
-    
     def __init__(self):
         self.api_key = os.getenv("API_KEY")
         if not self.api_key:
             raise ValueError("API_KEY não configurada para OpenAI")
-        
+
         self.client = OpenAI(api_key=self.api_key)
 
         # Inicializa o cliente com a api_key
@@ -241,21 +250,26 @@ class OpenAIProvider(BaseProvider):
 
     def generate_commit_message(self, diff, **kwargs):
         try:
-            response = self.client.chat.completions.create(model=self.model,
-            max_tokens=400,
-            temperature=0.3,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
-                },
-                {
-                    "role": "user",
-                    "content": COMMIT_PROMPT.format(diff=diff, language=self.get_language())
-                }
-            ])
+            response = self.client.chat.completions.create(
+                model=self.model,
+                max_tokens=400,
+                temperature=0.3,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
+                    },
+                    {
+                        "role": "user",
+                        "content": COMMIT_PROMPT.format(
+                            diff=diff, language=self.get_language()
+                        ),
+                    },
+                ],
+            )
             return response.choices[0].message.content.strip()
         except Exception as e:
             raise ValueError(f"Erro com OpenAI API: {str(e)}")
+
 
 __all__ = ["get_provider"]
