@@ -163,7 +163,7 @@ class ClaudeProvider(BaseProvider):
 class OllamaProvider(BaseProvider):
     def __init__(self):
         self.base_url = "http://localhost:11434/api/generate"
-        self.default_model = "tavernari/git-commit-message"
+        self.model = os.getenv("AI_MODEL")
 
     def check_ollama_running(self):
         """Verifica se o Ollama está rodando localmente"""
@@ -184,7 +184,7 @@ class OllamaProvider(BaseProvider):
             )
 
         data = {
-            "model": self.default_model,
+            "model": self.model,
             "prompt": COMMIT_PROMPT.format(diff=diff, language=self.get_language()),
             "stream": False,
         }
