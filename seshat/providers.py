@@ -3,7 +3,6 @@ import requests
 from anthropic import Anthropic
 from openai import OpenAI
 
-import click
 import json
 from .utils import is_valid_conventional_commit
 
