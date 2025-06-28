@@ -20,9 +20,7 @@ def validate_config():
     # Verifica model primeiro
     model = os.getenv("AI_MODEL")
     if not model:
-        raise ValueError(
-            "Variável AI_MODEL não configurada!\n" "Defina no .env: AI_MODEL"
-        )
+        raise ValueError("Variável AI_MODEL não configurada!\nDefina no .env: AI_MODEL")
 
     # Valida provider
     valid_providers = ["deepseek", "claude", "ollama", "openai"]
@@ -54,6 +52,34 @@ def validate_config():
 def display_error(message):
     """Exibe erros formatados"""
     click.secho(f"🚨 Erro: {message}", fg="red")
+
+
+def clean_think_tags(message):
+    """
+    Remove as tags <think> e todo o conteúdo entre elas da mensagem.
+
+    Alguns modelos retornam tags <think> com conteúdo de raciocínio interno,
+    que deve ser removido para evitar erros na validação do Conventional Commits.
+
+    Args:
+        message (str): A mensagem que pode conter tags <think>
+
+    Returns:
+        str: A mensagem limpa sem as tags <think> e seu conteúdo
+    """
+    if not message:
+        return message
+
+    # Remove tudo entre <think> e </think>, incluindo as tags
+    # Usa re.DOTALL para que . corresponda a quebras de linha também
+    clean_message = re.sub(
+        r"<think>.*?</think>", "", message, flags=re.DOTALL | re.IGNORECASE
+    )
+
+    # Remove espaços em branco extras que podem ter ficado
+    clean_message = clean_message.strip()
+
+    return clean_message
 
 
 def is_valid_conventional_commit(message):
