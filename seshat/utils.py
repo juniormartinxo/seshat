@@ -1,7 +1,6 @@
 import re
 import click
 import os
-import json
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".seshat"
