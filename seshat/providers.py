@@ -4,7 +4,7 @@ from anthropic import Anthropic
 from openai import OpenAI
 
 import json
-from .utils import is_valid_conventional_commit
+from .utils import is_valid_conventional_commit, clean_think_tags
 
 COMMIT_PROMPT = """You are a commit assistant specialized in Conventional Commits.
 
@@ -118,6 +118,8 @@ class DeepSeekProvider(BaseProvider):
                 raise ValueError(f"API Error ({response.status_code}): {error_msg}")
 
             commit_message = response_json["choices"][0]["message"]["content"].strip()
+            # Remove tags <think> e seu conteúdo antes de retornar
+            commit_message = clean_think_tags(commit_message)
             return commit_message
 
         except requests.exceptions.RequestException as e:
@@ -154,7 +156,9 @@ class ClaudeProvider(BaseProvider):
                     }
                 ],
             )
-            return response.content[0].text.strip()
+            commit_message = response.content[0].text.strip()
+            # Remove tags <think> e seu conteúdo antes de retornar
+            return clean_think_tags(commit_message)
         except Exception as e:
             raise ValueError(f"Erro com Claude API: {str(e)}")
 
@@ -199,6 +203,9 @@ class OllamaProvider(BaseProvider):
             try:
                 response_data = response.json()
                 commit_message = response_data.get("response", "").strip()
+
+                # Remove tags <think> e seu conteúdo antes de validar
+                commit_message = clean_think_tags(commit_message)
 
                 if not commit_message:
                     raise ValueError("Resposta vazia do Ollama")
@@ -266,7 +273,9 @@ class OpenAIProvider(BaseProvider):
                     },
                 ],
             )
-            return response.choices[0].message.content.strip()
+            commit_message = response.choices[0].message.content.strip()
+            # Remove tags <think> e seu conteúdo antes de retornar
+            return clean_think_tags(commit_message)
         except Exception as e:
             raise ValueError(f"Erro com OpenAI API: {str(e)}")
 
