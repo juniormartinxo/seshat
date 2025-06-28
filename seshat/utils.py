@@ -138,18 +138,28 @@ def is_valid_conventional_commit(message):
     if not header_match:
         return False
 
-    # Se tem corpo ou footer, verifica se há BREAKING CHANGE
+    # Verifica se há breaking changes
+    footer_pattern = r"BREAKING[ -]CHANGE: .*"
+    has_breaking_change = bool(
+        header_match.group("breaking")
+        or re.search(footer_pattern, body_and_footer, re.IGNORECASE)
+    )
+
+    # Se tem corpo ou footer, aplica validações adicionais
     if body_and_footer:
-        # Footers devem estar separados por linha em branco do corpo
-        footer_pattern = r"BREAKING[ -]CHANGE: .*"
+        # Valida que breaking changes estão bem formados
+        if has_breaking_change:
+            # Se tem ! no header, deve ter descrição adequada
+            if (
+                header_match.group("breaking")
+                and len(header_match.group("description")) < 10
+            ):
+                return False
+            # Se tem BREAKING CHANGE no footer, deve ter descrição após ":"
+            footer_match = re.search(footer_pattern, body_and_footer, re.IGNORECASE)
+            if footer_match and len(footer_match.group(0).split(":", 1)[1].strip()) < 5:
+                return False
 
-        # Se tem ! no header ou BREAKING CHANGE no footer, é válido
-        has_breaking_change = bool(
-            header_match.group("breaking")
-            or re.search(footer_pattern, body_and_footer, re.IGNORECASE)
-        )
-
-        # Se não tem breaking change mas tem conteúdo, é só um corpo normal
         return True
 
     return True
