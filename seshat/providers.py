@@ -4,7 +4,7 @@ from anthropic import Anthropic
 from openai import OpenAI
 
 import json
-from .utils import is_valid_conventional_commit, clean_think_tags
+from .utils import is_valid_conventional_commit, clean_think_tags, format_commit_message
 
 COMMIT_PROMPT = """You are a commit assistant specialized in Conventional Commits.
 
@@ -118,8 +118,10 @@ class DeepSeekProvider(BaseProvider):
                 raise ValueError(f"API Error ({response.status_code}): {error_msg}")
 
             commit_message = response_json["choices"][0]["message"]["content"].strip()
-            # Remove tags <think> e seu conteúdo antes de retornar
+            # Remove tags <think> e seu conteúdo antes de processar
             commit_message = clean_think_tags(commit_message)
+            # Processa quebras de linha na mensagem
+            commit_message = format_commit_message(commit_message)
             return commit_message
 
         except requests.exceptions.RequestException as e:
@@ -157,8 +159,11 @@ class ClaudeProvider(BaseProvider):
                 ],
             )
             commit_message = response.content[0].text.strip()
-            # Remove tags <think> e seu conteúdo antes de retornar
-            return clean_think_tags(commit_message)
+            # Remove tags <think> e seu conteúdo antes de processar
+            commit_message = clean_think_tags(commit_message)
+            # Processa quebras de linha na mensagem
+            commit_message = format_commit_message(commit_message)
+            return commit_message
         except Exception as e:
             raise ValueError(f"Erro com Claude API: {str(e)}")
 
@@ -206,6 +211,8 @@ class OllamaProvider(BaseProvider):
 
                 # Remove tags <think> e seu conteúdo antes de validar
                 commit_message = clean_think_tags(commit_message)
+                # Processa quebras de linha na mensagem
+                commit_message = format_commit_message(commit_message)
 
                 if not commit_message:
                     raise ValueError("Resposta vazia do Ollama")
@@ -274,8 +281,11 @@ class OpenAIProvider(BaseProvider):
                 ],
             )
             commit_message = response.choices[0].message.content.strip()
-            # Remove tags <think> e seu conteúdo antes de retornar
-            return clean_think_tags(commit_message)
+            # Remove tags <think> e seu conteúdo antes de processar
+            commit_message = clean_think_tags(commit_message)
+            # Processa quebras de linha na mensagem
+            commit_message = format_commit_message(commit_message)
+            return commit_message
         except Exception as e:
             raise ValueError(f"Erro com OpenAI API: {str(e)}")
 
