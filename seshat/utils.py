@@ -163,3 +163,34 @@ def is_valid_conventional_commit(message):
         return True
 
     return True
+
+
+def format_commit_message(message):
+    """
+    Processa a mensagem de commit para tratar quebras de linha adequadamente.
+
+    Alguns modelos de IA podem retornar quebras de linha como strings literais "\\n"
+    em vez de caracteres de quebra de linha reais. Esta função converte essas
+    strings literais em quebras de linha reais.
+
+    Args:
+        message (str): A mensagem de commit que pode conter strings "\\n"
+
+    Returns:
+        str: A mensagem processada com quebras de linha reais
+    """
+    if not message:
+        return message
+
+    # Converter strings literais "\n" em quebras de linha reais
+    processed_message = message.replace("\\n", "\n")
+
+    # Limpar espaços em branco extras no final de cada linha
+    lines = processed_message.split("\n")
+    cleaned_lines = [line.rstrip() for line in lines]
+
+    # Remover linhas vazias no final
+    while cleaned_lines and not cleaned_lines[-1].strip():
+        cleaned_lines.pop()
+
+    return "\n".join(cleaned_lines)
