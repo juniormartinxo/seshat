@@ -12,8 +12,6 @@ Analyze this diff and generate a commit message in {language}, following the Con
 
 {diff}
 
-🎯 Prompt for AI: Enforce Strict Compliance with Conventional Commits 1.0.0
-
 Follow the Conventional Commits 1.0.0 specification exactly as described below when generating or validating commit messages:
 
 ✅ Required Commit Message Format
