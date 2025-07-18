@@ -12,105 +12,158 @@ Analyze this diff and generate a commit message in {language}, following the Con
 
 {diff}
 
-Follow the Conventional Commits 1.0.0 specification exactly as described below when generating or validating commit messages:
+Perfeito! Aqui está a versão aprimorada do prompt, em **inglês**, com instruções adicionais que considero essenciais para garantir que uma IA (ou qualquer automação) siga **rigorosamente** a especificação *Conventional Commits 1.0.0*, com foco em clareza, padronização e consistência semântica:
 
-✅ Required Commit Message Format
-vbnet
-Copiar
-Editar
+---
+
+### 🎯 **Prompt for AI: Enforce Strict Compliance with Conventional Commits 1.0.0**
+
+You are responsible for **generating, validating, or rewriting Git commit messages** that strictly follow the [Conventional Commits 1.0.0 specification](https://www.conventionalcommits.org/en/v1.0.0/). Do not deviate from the structure or rules.
+
+---
+
+### ✅ **Commit Message Format**
+
+Every commit MUST follow this structure:
+
+```
 <type>[optional scope][!]: <short description>
 
 [optional body]
 
 [optional footer(s)]
-📌 Allowed Commit Types
-Required types (affect SemVer):
+```
 
-feat: Introduces a new feature (correlates with MINOR)
+---
 
-fix: Fixes a bug (correlates with PATCH)
+### 📘 **Required Rules and Behaviors**
 
-Optional types (valid but do not affect SemVer unless marked as breaking):
+1. **Type (`feat`, `fix`, etc.) is mandatory and must be lowercase**
 
-build, chore, ci, docs, style, refactor, perf, test, revert
+   * Use `feat` for new features (MINOR bump)
+   * Use `fix` for bug fixes (PATCH bump)
+   * Optional but accepted types: `build`, `chore`, `ci`, `docs`, `style`, `refactor`, `perf`, `test`, `revert`
+   * If an invalid type is used (e.g., `feet`, `Fixes`, `update`), **reject or correct it**
 
-🧠 Scope (optional)
-Placed in parentheses directly after the type:
+2. **Scope is optional**, but when used, it must be a single lowercase noun in parentheses:
 
-pgsql
-Copiar
-Editar
-feat(parser): add ability to parse arrays
-⚠️ Breaking Changes
-Can be indicated in two ways:
+   * ✅ `feat(auth): add JWT token support`
+   * ❌ `feat(Auth Module): add JWT` → must be `feat(auth): ...`
 
-With a ! after the type or scope:
+3. **Descriptions MUST**:
 
-makefile
-Copiar
-Editar
-feat!: update API authentication flow
-Or using a BREAKING CHANGE: footer:
+   * Be short (max \~72 characters)
+   * Start with a **lowercase letter**, unless it’s a proper noun
+   * Avoid punctuation at the end (no periods, exclamation marks, etc.)
+   * Clearly describe what was done
 
-arduino
-Copiar
-Editar
-BREAKING CHANGE: environment variables now take precedence over config files
-When ! is used, the BREAKING CHANGE footer is optional if the breaking info is in the description.
+4. **Breaking changes MUST be flagged explicitly**:
 
-📝 Body (optional)
-Starts one blank line after the short description
+   * Either with `!` after type or scope:
+     `feat(api)!: migrate from REST to GraphQL`
 
-May contain multiple paragraphs for context and details
+   * Or with a footer:
+     `BREAKING CHANGE: completely replaced the authentication module`
 
-📎 Footers (optional)
-Each footer follows the Git trailer format:
+   > If both `!` and `BREAKING CHANGE:` are used, ensure the description and footer do not contradict.
 
-makefile
-Copiar
-Editar
-Token: value
-Examples:
+5. **Body (optional)**:
 
-Reviewed-by: Alice
+   * Start the body with a blank line
+   * Can include detailed technical explanation, implementation notes, and motivation
 
-Refs: #123
+6. **Footers (optional)**:
 
-BREAKING CHANGE: the config format has changed
+   * Must follow Git trailer format: `Token: value`
+   * Use `BREAKING CHANGE:` for API changes
+   * Use `Refs: #123`, `Reviewed-by: Name`, etc.
+   * Tokens must use hyphens instead of spaces (except `BREAKING CHANGE` which can have space)
 
-Tokens must use hyphens instead of spaces (e.g., Acked-by)
+---
 
-Exception: BREAKING CHANGE must be uppercase and may contain spaces
+### 🧠 Additional Behavioral Instructions
 
-⚙️ Rules & Conventions
-Commit types must be lowercase for consistency (e.g., feat, not FEAT)
+* ⚠️ **Never mix multiple concerns in one commit**. If a change involves both a fix and a feature, **split it into two commits**.
 
-Descriptions must start with a lowercase letter unless grammatically required
+* ✅ **Ensure consistency across commits in the same repository**. Prefer using a known and limited set of scopes.
 
-BREAKING CHANGE must be all uppercase (or BREAKING-CHANGE, which is equivalent)
+* ❌ **Do NOT allow commit messages like**:
 
-🔁 Revert Commits
-Use the revert: type and include a footer referencing the original SHAs:
+  * `updated stuff`
+  * `fixed bugs`
+  * `feature: something new`
+  * `Fix: fixed login` (capital F)
+  * `chore:`
 
-makefile
-Copiar
-Editar
-revert: undo the database migration logic
+* 🔁 **Revert commits**:
 
-Refs: a1b2c3d
-✅ Valid Examples
-feat: allow provided config object to extend other configs
+  * Use `revert:` as the type
+  * Explain the reason in the description/body
+  * Add a `Refs: <SHA>` footer with the reverted commit(s)
 
-fix(lang): correct Polish pluralization rules
+* 🔍 **Validate semantic meaning**:
 
-chore!: drop support for Node 6
+  * Make sure the type chosen reflects the actual change being made
+  * Example: adding logging is **not** `feat`, it's usually `chore` or `perf`
 
-feat(api)!: send an email to the customer when a product is shipped
+* 📦 **Use semantic versioning logic** to classify commits:
 
-revert: let us never again speak of the noodle incident
-Refs: 676104e, a215868
+  * `fix:` → PATCH
+  * `feat:` → MINOR
+  * `BREAKING CHANGE` or `!` → MAJOR
 
-🚫 Reject or reword any commit message that does not strictly conform to this format."""
+* 📓 **Avoid ambiguous wording**:
+
+  * Bad: `feat: update API`
+  * Good: `feat(api): add user endpoint with pagination support`
+
+---
+
+### ✅ **Valid Commit Examples**
+
+```
+feat: add user registration form
+
+feat(api): introduce new /users endpoint
+
+fix(auth): prevent token expiration race condition
+
+docs: correct typo in README
+
+refactor(db): remove redundant joins
+
+chore!: drop Node.js v12 support
+
+feat!: rewrite auth flow to use OAuth 2.0
+
+BREAKING CHANGE: previous tokens are now invalid
+```
+
+---
+
+### ❌ **Invalid Commit Examples**
+
+```
+fix bug in code
+update files
+added some changes
+Feature: Add login
+feat(auth)!: Add login functionality. BREAKING CHANGE: changed DB
+```
+
+---
+
+### 📎 Output Format
+
+Always return a commit message **exactly as it should appear in Git**, using newline characters where required.
+
+---
+
+💡 *If you're rewriting existing commits, preserve the original intent and split multiple concerns into separate commits as needed.*
+
+**Reject or flag anything that does not conform. This is non-negotiable.**
+
+"""
 
 
 def get_provider(provider_name):
