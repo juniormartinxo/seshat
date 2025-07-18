@@ -12,30 +12,107 @@ Analyze this diff and generate a commit message in {language}, following the Con
 
 {diff}
 
-Required format:
-<type>(optional scope): <description>
+🎯 Prompt for AI: Enforce Strict Compliance with Conventional Commits 1.0.0
+
+Follow the Conventional Commits 1.0.0 specification exactly as described below when generating or validating commit messages:
+
+✅ Required Commit Message Format
+vbnet
+Copiar
+Editar
+<type>[optional scope][!]: <short description>
 
 [optional body]
 
 [optional footer(s)]
+📌 Allowed Commit Types
+Required types (affect SemVer):
 
-Required:
-- <description> must always be in lowercase
+feat: Introduces a new feature (correlates with MINOR)
 
-Allowed types:
-- feat: New feature
-- fix: Bug fix
-- docs: Documentation changes
-- style: Formatting changes
-- refactor: Code refactoring
-- perf: Performance improvements
-- test: Test additions/adjustments
-- chore: Maintenance tasks
-- build: Build system changes
-- ci: CI/CD changes
-- revert: Commit reversion
+fix: Fixes a bug (correlates with PATCH)
 
-Reply ONLY with the commit message, without extra comments."""
+Optional types (valid but do not affect SemVer unless marked as breaking):
+
+build, chore, ci, docs, style, refactor, perf, test, revert
+
+🧠 Scope (optional)
+Placed in parentheses directly after the type:
+
+pgsql
+Copiar
+Editar
+feat(parser): add ability to parse arrays
+⚠️ Breaking Changes
+Can be indicated in two ways:
+
+With a ! after the type or scope:
+
+makefile
+Copiar
+Editar
+feat!: update API authentication flow
+Or using a BREAKING CHANGE: footer:
+
+arduino
+Copiar
+Editar
+BREAKING CHANGE: environment variables now take precedence over config files
+When ! is used, the BREAKING CHANGE footer is optional if the breaking info is in the description.
+
+📝 Body (optional)
+Starts one blank line after the short description
+
+May contain multiple paragraphs for context and details
+
+📎 Footers (optional)
+Each footer follows the Git trailer format:
+
+makefile
+Copiar
+Editar
+Token: value
+Examples:
+
+Reviewed-by: Alice
+
+Refs: #123
+
+BREAKING CHANGE: the config format has changed
+
+Tokens must use hyphens instead of spaces (e.g., Acked-by)
+
+Exception: BREAKING CHANGE must be uppercase and may contain spaces
+
+⚙️ Rules & Conventions
+Commit types must be lowercase for consistency (e.g., feat, not FEAT)
+
+Descriptions must start with a lowercase letter unless grammatically required
+
+BREAKING CHANGE must be all uppercase (or BREAKING-CHANGE, which is equivalent)
+
+🔁 Revert Commits
+Use the revert: type and include a footer referencing the original SHAs:
+
+makefile
+Copiar
+Editar
+revert: undo the database migration logic
+
+Refs: a1b2c3d
+✅ Valid Examples
+feat: allow provided config object to extend other configs
+
+fix(lang): correct Polish pluralization rules
+
+chore!: drop support for Node 6
+
+feat(api)!: send an email to the customer when a product is shipped
+
+revert: let us never again speak of the noodle incident
+Refs: 676104e, a215868
+
+🚫 Reject or reword any commit message that does not strictly conform to this format."""
 
 
 def get_provider(provider_name):
