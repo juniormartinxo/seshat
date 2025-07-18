@@ -1,9 +1,80 @@
 import re
 import click
 import os
+import sys
+import time
+import threading
 from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".seshat"
+
+
+def show_thinking_animation(stop_event):
+    """
+    Mostra uma animação de "pensando" no terminal.
+
+    Args:
+        stop_event: threading.Event para parar a animação
+    """
+    animation_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+    messages = [
+        "Analisando o diff...",
+        "Identificando mudanças...",
+        "Gerando mensagem de commit...",
+        "Validando formato...",
+        "Aplicando Conventional Commits...",
+        "Finalizando...",
+    ]
+
+    i = 0
+    message_index = 0
+    start_time = time.time()
+
+    while not stop_event.is_set():
+        # Rotaciona entre os caracteres de animação
+        char = animation_chars[i % len(animation_chars)]
+
+        # Rotaciona entre as mensagens a cada 2 segundos
+        elapsed = time.time() - start_time
+        message_index = int(elapsed / 2) % len(messages)
+        message = messages[message_index]
+
+        # Limpa a linha atual e mostra a animação
+        click.echo(f"\r{char} {message}", nl=False)
+        sys.stdout.flush()
+
+        time.sleep(0.1)  # Atualiza a cada 100ms
+        i += 1
+
+    # Limpa a linha final
+    click.echo("\r" + " " * 50 + "\r", nl=False)
+
+
+def start_thinking_animation():
+    """
+    Inicia a animação de "pensando" em uma thread separada.
+
+    Returns:
+        tuple: (stop_event, thread) para parar a animação
+    """
+    stop_event = threading.Event()
+    thread = threading.Thread(target=show_thinking_animation, args=(stop_event,))
+    thread.daemon = True
+    thread.start()
+    return stop_event, thread
+
+
+def stop_thinking_animation(stop_event, thread):
+    """
+    Para a animação de "pensando".
+
+    Args:
+        stop_event: threading.Event para parar a animação
+        thread: thread da animação
+    """
+    stop_event.set()
+    thread.join(timeout=1)  # Aguarda até 1 segundo para a thread terminar
+    click.echo()  # Nova linha após a animação
 
 
 def validate_config():

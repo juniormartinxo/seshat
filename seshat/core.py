@@ -3,7 +3,7 @@ import subprocess
 import click
 import os
 from .providers import get_provider
-from .utils import display_error
+from .utils import display_error, start_thinking_animation, stop_thinking_animation
 
 
 def check_staged_files():
@@ -27,8 +27,12 @@ def check_staged_files():
 def validate_diff_size(diff, skip_confirmation=False):
     """Valida o tamanho do diff para garantir commits concisos"""
     # Obter limites configurados ou usar os valores padrão
-    WARN_SIZE = int(os.getenv("WARN_DIFF_SIZE", "2500"))  # Aviso a partir de 2500 caracteres
-    MAX_SIZE = int(os.getenv("MAX_DIFF_SIZE", "3000"))  # Limite máximo de 3000 caracteres
+    WARN_SIZE = int(
+        os.getenv("WARN_DIFF_SIZE", "2500")
+    )  # Aviso a partir de 2500 caracteres
+    MAX_SIZE = int(
+        os.getenv("MAX_DIFF_SIZE", "3000")
+    )  # Limite máximo de 3000 caracteres
     LANGUAGE = os.getenv("COMMIT_LANGUAGE", "PT-BR")
 
     diff_size = len(diff)
@@ -107,7 +111,7 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
     if verbose:
         click.echo("📋 Diff analysis:")
         click.echo(diff[:500] + "...\n")
-        
+
         # Mostrar limites configurados
         max_diff = os.getenv("MAX_DIFF_SIZE", "3000")
         warn_diff = os.getenv("WARN_DIFF_SIZE", "2500")
@@ -116,10 +120,20 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
     try:
         selectedProvider = get_provider(provider)
         # Obtém o nome do provider a partir do objeto selecionado
-        provider_name = selectedProvider.name if hasattr(selectedProvider, 'name') else provider
-        click.echo(f"🤖 Commit gerado com {provider_name}:")
-        commit_msg = selectedProvider.generate_commit_message(diff, model=model)
-            
+        provider_name = (
+            selectedProvider.name if hasattr(selectedProvider, "name") else provider
+        )
+        click.echo(f"🤖 Gerando commit com {provider_name}...")
+
+        # Inicia a animação de "pensando"
+        stop_event, animation_thread = start_thinking_animation()
+
+        try:
+            commit_msg = selectedProvider.generate_commit_message(diff, model=model)
+        finally:
+            # Para a animação
+            stop_thinking_animation(stop_event, animation_thread)
+
     except KeyError:
         raise ValueError(f"Provedor não suportado: {provider}")
 
