@@ -165,6 +165,59 @@ def is_valid_conventional_commit(message):
     return True
 
 
+def clean_explanatory_text(message):
+    """
+    Remove texto explicativo que pode vir antes da mensagem de commit.
+
+    Alguns modelos de IA retornam explicações como "Analisando o diff, identifiquei..."
+    antes da mensagem de commit real. Esta função remove esse texto.
+
+    Args:
+        message (str): A mensagem que pode conter texto explicativo
+
+    Returns:
+        str: A mensagem limpa, contendo apenas a mensagem de commit
+    """
+    if not message:
+        return message
+
+    # Tipos de commit válidos
+    valid_types = [
+        "feat",
+        "fix",
+        "docs",
+        "style",
+        "refactor",
+        "perf",
+        "test",
+        "chore",
+        "build",
+        "ci",
+        "revert",
+    ]
+
+    # Dividir em linhas
+    lines = message.split("\n")
+
+    # Procurar pela primeira linha que começa com um tipo de commit válido
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if line:
+            # Verificar se a linha começa com um tipo válido seguido de ":"
+            for commit_type in valid_types:
+                # Padrão para tipo simples: "fix:"
+                if line.lower().startswith(f"{commit_type}:"):
+                    # Retornar a partir desta linha
+                    return "\n".join(lines[i:]).strip()
+                # Padrão para tipo com escopo: "fix(scope):"
+                if re.match(rf"^{commit_type}\([^)]+\):", line, re.IGNORECASE):
+                    # Retornar a partir desta linha
+                    return "\n".join(lines[i:]).strip()
+
+    # Se não encontrar um padrão de commit válido, retornar a mensagem original
+    return message.strip()
+
+
 def format_commit_message(message):
     """
     Processa a mensagem de commit para tratar quebras de linha adequadamente.

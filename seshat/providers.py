@@ -4,35 +4,32 @@ from anthropic import Anthropic
 from openai import OpenAI
 
 import json
-from .utils import is_valid_conventional_commit, clean_think_tags, format_commit_message
+from .utils import (
+    is_valid_conventional_commit,
+    clean_think_tags,
+    format_commit_message,
+    clean_explanatory_text,
+)
 
-COMMIT_PROMPT = """You are a commit assistant specialized in Conventional Commits.
+COMMIT_PROMPT = """Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits 1.0.0.
 
-Analyze this diff and generate a commit message in {language}, following the Conventional Commits pattern:
+Analise o diff fornecido e gere APENAS uma mensagem de commit em {language}, seguindo rigorosamente a especificação Conventional Commits.
 
-{diff}
+IMPORTANTE: Retorne APENAS a mensagem de commit, sem explicações, comentários ou texto adicional.
 
-Perfeito! Aqui está a versão aprimorada do prompt, em **inglês**, com instruções adicionais que considero essenciais para garantir que uma IA (ou qualquer automação) siga **rigorosamente** a especificação *Conventional Commits 1.0.0*, com foco em clareza, padronização e consistência semântica:
-
----
-
-### 🎯 **Prompt for AI: Enforce Strict Compliance with Conventional Commits 1.0.0**
-
-You are responsible for **generating, validating, or rewriting Git commit messages** that strictly follow the [Conventional Commits 1.0.0 specification](https://www.conventionalcommits.org/en/v1.0.0/). Do not deviate from the structure or rules.
-
----
-
-### ✅ **Commit Message Format**
-
-Every commit MUST follow this structure:
-
-```
-<type>[optional scope][!]: <short description>
+Formato obrigatório:
+<type>[optional scope][!]: <description>
 
 [optional body]
 
 [optional footer(s)]
-"""
+
+Tipos permitidos: feat, fix, docs, style, refactor, perf, test, chore, build, ci, revert
+
+Diff para análise:
+{diff}
+
+Retorne apenas a mensagem de commit:"""
 
 
 def get_provider(provider_name):
@@ -86,7 +83,7 @@ class DeepSeekProvider(BaseProvider):
             "messages": [
                 {
                     "role": "system",
-                    "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
+                    "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits 1.0.0. Retorne APENAS a mensagem de commit, sem explicações ou comentários adicionais.",
                 },
                 {
                     "role": "user",
@@ -117,6 +114,8 @@ class DeepSeekProvider(BaseProvider):
             commit_message = response_json["choices"][0]["message"]["content"].strip()
             # Remove tags <think> e seu conteúdo antes de processar
             commit_message = clean_think_tags(commit_message)
+            # Remove texto explicativo
+            commit_message = clean_explanatory_text(commit_message)
             # Processa quebras de linha na mensagem
             commit_message = format_commit_message(commit_message)
             return commit_message
@@ -158,6 +157,8 @@ class ClaudeProvider(BaseProvider):
             commit_message = response.content[0].text.strip()
             # Remove tags <think> e seu conteúdo antes de processar
             commit_message = clean_think_tags(commit_message)
+            # Remove texto explicativo
+            commit_message = clean_explanatory_text(commit_message)
             # Processa quebras de linha na mensagem
             commit_message = format_commit_message(commit_message)
             return commit_message
@@ -208,6 +209,8 @@ class OllamaProvider(BaseProvider):
 
                 # Remove tags <think> e seu conteúdo antes de validar
                 commit_message = clean_think_tags(commit_message)
+                # Remove texto explicativo
+                commit_message = clean_explanatory_text(commit_message)
                 # Processa quebras de linha na mensagem
                 commit_message = format_commit_message(commit_message)
 
@@ -267,7 +270,7 @@ class OpenAIProvider(BaseProvider):
                 messages=[
                     {
                         "role": "system",
-                        "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits.",
+                        "content": "Você é um assistente especializado em gerar mensagens de commit seguindo o padrão Conventional Commits 1.0.0. Retorne APENAS a mensagem de commit, sem explicações ou comentários adicionais.",
                     },
                     {
                         "role": "user",
@@ -280,6 +283,8 @@ class OpenAIProvider(BaseProvider):
             commit_message = response.choices[0].message.content.strip()
             # Remove tags <think> e seu conteúdo antes de processar
             commit_message = clean_think_tags(commit_message)
+            # Remove texto explicativo
+            commit_message = clean_explanatory_text(commit_message)
             # Processa quebras de linha na mensagem
             commit_message = format_commit_message(commit_message)
             return commit_message
