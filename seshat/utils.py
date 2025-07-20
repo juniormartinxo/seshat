@@ -30,6 +30,9 @@ def show_thinking_animation(stop_event):
     message_index = 0
     start_time = time.time()
 
+    # Inicia em uma nova linha para não sobrepor texto anterior
+    click.echo()
+
     while not stop_event.is_set():
         # Rotaciona entre os caracteres de animação
         char = animation_chars[i % len(animation_chars)]
@@ -46,8 +49,9 @@ def show_thinking_animation(stop_event):
         time.sleep(0.1)  # Atualiza a cada 100ms
         i += 1
 
-    # Limpa a linha final
+    # Limpa a linha final e volta uma linha para não deixar espaço extra
     click.echo("\r" + " " * 50 + "\r", nl=False)
+    click.echo("\033[A", nl=False)  # Move o cursor para cima
 
 
 def start_thinking_animation():
