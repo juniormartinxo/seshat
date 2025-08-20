@@ -2,6 +2,7 @@ import os
 import requests
 from anthropic import Anthropic
 from openai import OpenAI
+from google import genai
 
 import json
 from .utils import (
@@ -151,6 +152,7 @@ def get_provider(provider_name):
         "claude": ClaudeProvider,
         "ollama": OllamaProvider,
         "openai": OpenAIProvider,
+        "gemini": GeminiProvider,
     }
     return providers[provider_name]()
 
@@ -403,6 +405,39 @@ class OpenAIProvider(BaseProvider):
             return commit_message
         except Exception as e:
             raise ValueError(f"Erro com OpenAI API: {str(e)}")
+
+
+class GeminiProvider(BaseProvider):
+    def __init__(self):
+        self.api_key = os.getenv("API_KEY")
+        if not self.api_key:
+            raise ValueError("API_KEY não configurada para Gemini")
+
+        # Configura o cliente Gemini
+        os.environ["GEMINI_API_KEY"] = self.api_key
+        self.client = genai.Client()
+
+        self.model = os.getenv("AI_MODEL", "gemini-2.5-flash")
+
+    def generate_commit_message(self, diff, **kwargs):
+        try:
+            response = self.client.models.generate_content(
+                model=self.model,
+                contents=COMMIT_PROMPT.format(
+                    diff=diff, language=self.get_language()
+                ),
+            )
+            
+            commit_message = response.text.strip()
+            # Remove tags <think> e seu conteúdo antes de processar
+            commit_message = clean_think_tags(commit_message)
+            # Remove texto explicativo
+            commit_message = clean_explanatory_text(commit_message)
+            # Processa quebras de linha na mensagem
+            commit_message = format_commit_message(commit_message)
+            return commit_message
+        except Exception as e:
+            raise ValueError(f"Erro com Gemini API: {str(e)}")
 
 
 __all__ = ["get_provider"]
