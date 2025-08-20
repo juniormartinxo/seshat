@@ -88,7 +88,7 @@ def validate_config():
     if not provider:
         raise ValueError(
             "Variável AI_PROVIDER não configurada!\n"
-            "Defina no .env: AI_PROVIDER=deepseek ou AI_PROVIDER=claude ou AI_PROVIDER=openai"
+            "Defina no .env: AI_PROVIDER=deepseek ou AI_PROVIDER=claude ou AI_PROVIDER=openai ou AI_PROVIDER=gemini"
         )
 
     # Verifica model primeiro
@@ -97,7 +97,7 @@ def validate_config():
         raise ValueError("Variável AI_MODEL não configurada!\nDefina no .env: AI_MODEL")
 
     # Valida provider
-    valid_providers = ["deepseek", "claude", "ollama", "openai"]
+    valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini"]
     if provider not in valid_providers:
         raise ValueError(
             f"Provedor inválido: {provider}. Opções válidas: {', '.join(valid_providers)}"
