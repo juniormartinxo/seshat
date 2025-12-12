@@ -11,11 +11,12 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic), OpenAI API, Gemini API (Google) e Ollama (local).
 * 📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes, com limites configuráveis.
 * 🔍 **Verificação de Arquivos Staged:** Garante que você não se esqueça de adicionar arquivos ao commit.
-* 📝 **Suporte Completo a Conventional Commits:**  Gera mensagens de commit padronizadas e significativas.
+* 📝 **Conventional Commits com Validação:** Gera mensagens seguindo o padrão e bloqueia commits com mensagem vazia ou inválida.
 * 🤝 **Confirmação Interativa:**  Permite revisar e editar a mensagem de commit gerada pela IA antes de confirmar.
 * ⚙️ **Altamente Configurável:**  Configure o provedor de IA, chave de API, modelo e outras opções.
 * 📅 **Data de Commit Personalizada:** Defina datas específicas para seus commits.
 * 🔄 **Fluxo de Commits em Lote:** Processe múltiplos arquivos, gerando um commit individual para cada um.
+* 🧹 **Saída de Terminal Profissional:** UI consistente, progresso em tempo real e saída do Git silenciosa por padrão (use `--verbose` para detalhes).
 
 ## 🚀 Instalação
 
@@ -120,6 +121,22 @@ seshat config --max-diff 5000
 seshat config --warn-diff 4000
 ```
 
+### Configuração da Linguagem dos Commits
+
+Escolha o idioma das mensagens geradas pela IA (também afeta alertas da CLI):
+
+```bash
+# PT-BR (padrão), ENG, ESP, FRA, DEU, ITA
+seshat config --language PT-BR
+seshat config --language ENG
+```
+
+Ou via `.env`:
+
+```bash
+COMMIT_LANGUAGE=PT-BR|ENG|ESP|FRA|DEU|ITA
+```
+
 ## 💻 Uso
 
 ### Commit Básico
@@ -128,6 +145,9 @@ seshat config --warn-diff 4000
 git add .
 seshat commit
 ```
+
+Por padrão, o Seshat executa o `git commit` em modo silencioso para manter a saída limpa.  
+Use `--verbose` para ver o diff analisado e a saída completa do Git.
 
 ### Commits com Data Personalizada
 
@@ -184,7 +204,7 @@ seshat flow 10 --path ./src
 
 * **Comando `commit`**:
   * `--yes` ou `-y`: Pula todas as confirmações.
-  * `--verbose` ou `-v`: Exibe informações detalhadas sobre o processo.
+  * `--verbose` ou `-v`: Exibe diff analisado e saída do Git.
   * `--date` ou `-d`: Define a data do commit.
   * `--max-diff`: Sobrescreve o limite máximo do diff para este commit.
   * `--provider`: Especifica o provedor de IA.
@@ -201,6 +221,7 @@ seshat flow 10 --path ./src
   * `--model`: Configura o modelo padrão.
   * `--max-diff`: Configura o limite máximo do diff.
   * `--warn-diff`: Configura o limite de aviso do diff.
+  * `--language`: Configura a linguagem das mensagens (PT-BR, ENG, ESP, FRA, DEU, ITA).
 
 ## 📚 Tipos de Commit (Conventional Commits)
 
@@ -258,6 +279,15 @@ seshat config --max-diff 10000
 # Ou dividir suas alterações em commits menores
 git add -p  # Adiciona as mudanças interativamente, em pedaços
 ```
+
+**Mensagem de Commit Vazia ou Inválida:**
+
+Se a IA retornar uma mensagem vazia ou fora do padrão Conventional Commits, o Seshat aborta antes do Git.
+Tente:
+
+1. Rodar novamente o comando (`seshat commit`/`seshat flow`).
+2. Reduzir ou organizar o diff (commits menores ajudam).
+3. Fazer o commit manualmente, se necessário.
 
 **Erros de Autenticação:**
 
