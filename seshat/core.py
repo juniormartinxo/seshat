@@ -3,7 +3,12 @@ import subprocess
 import click
 import os
 from .providers import get_provider
-from .utils import display_error, start_thinking_animation, stop_thinking_animation
+from .utils import (
+    display_error,
+    start_thinking_animation,
+    stop_thinking_animation,
+    is_valid_conventional_commit,
+)
 
 
 def check_staged_files():
@@ -139,6 +144,26 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
 
     if verbose:
         click.echo("🤖 AI-generated message:")
+
+    commit_msg = (commit_msg or "").strip()
+    if not commit_msg:
+        raise ValueError(
+            "Mensagem de commit vazia retornada pela IA. "
+            "Tente novamente ou ajuste o diff."
+        )
+
+    if not is_valid_conventional_commit(commit_msg):
+        exemplos = (
+            "Exemplos válidos:\n"
+            "- feat: nova funcionalidade\n"
+            "- fix(core): correção de bug\n"
+            "- feat!: breaking change\n"
+            "- feat(api)!: breaking change com escopo"
+        )
+        raise ValueError(
+            "A mensagem não segue o padrão Conventional Commits.\n"
+            f"Mensagem recebida: {commit_msg}\n\n{exemplos}"
+        )
 
     return commit_msg
 
