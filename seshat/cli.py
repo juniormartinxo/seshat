@@ -6,8 +6,9 @@ import subprocess
 import json
 from dotenv import load_dotenv, find_dotenv
 from .core import commit_with_ai
-from .utils import validate_config, display_error, CONFIG_PATH
+from .utils import validate_config, display_error, CONFIG_PATH, get_last_commit_summary
 from .commands import cli
+from . import ui
 
 
 @cli.command()
@@ -38,21 +39,32 @@ def commit(provider, model, yes, verbose, date, max_diff):
         if max_diff:
             os.environ["MAX_DIFF_SIZE"] = str(max_diff)
 
+        language = os.environ.get("COMMIT_LANGUAGE", "PT-BR")
+        ui.title(f"Seshat Commit · {provider} · {language}")
+
         # Passar o parâmetro yes como skip_confirmation para commit_with_ai
         commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose, skip_confirmation=yes)
 
         if yes or click.confirm(
-            f"\n🤖 Mensagem de commit gerada com sucesso:\n\n{commit_message}"
+            f"\nMensagem sugerida:\n\n{commit_message}\n"
         ):
             # Se a data for fornecida, use o parâmetro --date do Git
+            git_args = ["git", "commit"]
+            if not verbose:
+                git_args.append("--quiet")
             if date:
-                subprocess.check_call(["git", "commit", "--date", date, "-m", commit_message])
-                click.secho(f"✓ Commit realizado com sucesso (data: {date})!", fg="green")
+                git_args.extend(["--date", date])
             else:
-                subprocess.check_call(["git", "commit", "-m", commit_message])
-                click.secho("✓ Commit realizado com sucesso!", fg="green")
+                pass
+            git_args.extend(["-m", commit_message])
+            subprocess.check_call(git_args)
+            summary = get_last_commit_summary() or commit_message.splitlines()[0]
+            if date:
+                ui.success(f"Commit criado: {summary} (data: {date})")
+            else:
+                ui.success(f"Commit criado: {summary}")
         else:
-            click.secho("❌ Commit cancelado", fg="red")
+            ui.warning("Commit cancelado")
 
     except Exception as e:
         display_error(str(e))

@@ -3,8 +3,9 @@ import click
 import sys
 import subprocess
 from .core import commit_with_ai
-from .utils import display_error
+from .utils import display_error, get_last_commit_summary
 from .commands import cli
+from . import ui
 
 
 @cli.command()
@@ -42,7 +43,7 @@ def flow(count, provider, model, yes, verbose, date, path):
         all_files = modified_files + untracked_files
         
         if not all_files:
-            click.echo("Nenhum arquivo modificado encontrado.")
+            ui.warning("Nenhum arquivo modificado encontrado.")
             return
         
         # Limitar o número de arquivos se count > 0
@@ -51,48 +52,59 @@ def flow(count, provider, model, yes, verbose, date, path):
         else:
             files_to_process = all_files
         
-        click.echo(f"🔍 Encontrados {len(all_files)} arquivos modificados.")
-        click.echo(f"🔄 Processando {len(files_to_process)} arquivos.")
+        language = os.getenv("COMMIT_LANGUAGE", "PT-BR")
+        ui.title(f"Seshat Flow · {provider} · {language}")
+        ui.info(f"Encontrados {len(all_files)} arquivo(s) modificados", icon="🔍")
+        ui.info(f"Processando {len(files_to_process)} arquivo(s)", icon="🔄")
         
         if not yes:
-            click.echo("\nArquivos a serem processados:")
+            ui.section("Arquivos a serem processados")
             for idx, file in enumerate(files_to_process, 1):
-                click.echo(f"{idx}. {file}")
+                ui.step(f"{idx}. {file}", icon="•", fg="white")
             
             if not click.confirm("\n⚠️ Deseja prosseguir com o processamento?"):
-                click.secho("❌ Operação cancelada pelo usuário.", fg="red")
+                ui.error("Operação cancelada pelo usuário.")
                 return
         
         # Processar cada arquivo individualmente
         success_count = 0
         fail_count = 0
         
+        total = len(files_to_process)
         for idx, file in enumerate(files_to_process, 1):
-            click.echo(f"\n[{idx}/{len(files_to_process)}] Processando: {file}")
+            ui.section(f"[{idx}/{total}] {file}")
             
             try:
                 # Adicionar arquivo ao stage
-                click.echo(f"📂 Adicionando arquivo ao stage: {file}")
+                ui.step("Adicionando arquivo ao stage", icon="📂")
                 subprocess.check_call(["git", "add", file])
                 
                 # Gerar e executar commit
-                click.echo("🤖 Gerando commit...")
                 commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose, skip_confirmation=yes)
+                subject = commit_message.splitlines()[0] if commit_message else ""
                 
-                if yes or click.confirm(f"\n📝 Mensagem de commit:\n\n{commit_message}\n\n✓ Confirmar?"):
+                if yes or click.confirm(f"\nMensagem sugerida:\n\n{commit_message}\n\nConfirmar commit?"):
                     # Executar commit
+                    git_args = ["git", "commit"]
+                    if not verbose:
+                        git_args.append("--quiet")
                     if date:
-                        subprocess.check_call(["git", "commit", "--date", date, "-m", commit_message])
-                        click.secho(f"✓ Commit realizado com sucesso (data: {date})!", fg="green")
+                        git_args.extend(["--date", date])
                     else:
-                        subprocess.check_call(["git", "commit", "-m", commit_message])
-                        click.secho("✓ Commit realizado com sucesso!", fg="green")
+                        pass
+                    git_args.extend(["-m", commit_message])
+                    subprocess.check_call(git_args)
+                    summary = get_last_commit_summary() or subject
+                    if date:
+                        ui.success(f"Commit criado: {summary} (data: {date})")
+                    else:
+                        ui.success(f"Commit criado: {summary}")
                     
                     success_count += 1
                 else:
                     # Reverter o stage do arquivo
                     subprocess.check_call(["git", "reset", "HEAD", file])
-                    click.secho("❌ Commit cancelado para este arquivo.", fg="red")
+                    ui.warning("Commit cancelado para este arquivo.")
                     fail_count += 1
             
             except Exception as e:
@@ -105,17 +117,16 @@ def flow(count, provider, model, yes, verbose, date, path):
                 fail_count += 1
         
         # Resumo final
-        click.echo("\n" + "="*50)
-        click.echo(f"📊 Resumo da operação:")
-        click.echo(f"✅ Commits realizados com sucesso: {success_count}")
-        click.echo(f"❌ Falhas: {fail_count}")
-        click.echo(f"⏭️ Arquivos restantes não processados: {len(all_files) - len(files_to_process)}")
-        
-        # Adicionar a linguagem ao resumo
-        language = os.getenv("COMMIT_LANGUAGE", "PT-BR")
-        click.echo(f"🔤 Linguagem dos commits: {language}")
-        
-        click.echo("="*50)
+        remaining = len(all_files) - len(files_to_process)
+        ui.section("Resumo da operação")
+        ui.success(f"Commits realizados com sucesso: {success_count}", icon="✅")
+        if fail_count:
+            ui.error(f"Falhas: {fail_count}", icon="❌")
+        else:
+            ui.success("Falhas: 0", icon="✅")
+        ui.info(f"Arquivos restantes não processados: {remaining}", icon="⏭️")
+        ui.info(f"Linguagem dos commits: {language}", icon="🔤")
+        ui.hr()
         
     except Exception as e:
         display_error(str(e))

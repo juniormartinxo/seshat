@@ -2,6 +2,7 @@ import re
 import click
 import os
 import sys
+import subprocess
 import time
 import threading
 from pathlib import Path
@@ -127,6 +128,20 @@ def validate_config():
 def display_error(message):
     """Exibe erros formatados"""
     click.secho(f"🚨 Erro: {message}", fg="red")
+
+
+def get_last_commit_summary():
+    """Obtém resumo do último commit (hash curto + subject)."""
+    try:
+        return (
+            subprocess.check_output(
+                ["git", "log", "-1", "--pretty=%h %s"], stderr=subprocess.STDOUT
+            )
+            .decode("utf-8")
+            .strip()
+        )
+    except Exception:
+        return None
 
 
 def clean_think_tags(message):
