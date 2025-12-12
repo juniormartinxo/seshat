@@ -9,6 +9,7 @@ from .utils import (
     stop_thinking_animation,
     is_valid_conventional_commit,
 )
+from . import ui
 
 
 def check_staged_files():
@@ -128,7 +129,7 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
         provider_name = (
             selectedProvider.name if hasattr(selectedProvider, "name") else provider
         )
-        click.echo(f"🤖 Gerando commit com {provider_name}...")
+        ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
 
         # Inicia a animação de "pensando"
         stop_event, animation_thread = start_thinking_animation()
