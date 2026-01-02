@@ -44,8 +44,17 @@ def show_thinking_animation(stop_event, get_message):
 
 
 class ThinkingAnimation:
-    def __init__(self, initial_message="Analisando o diff..."):
-        self._message = initial_message
+    def __init__(self, messages=None, interval_seconds=2.0):
+        self._override_message = None
+        self._start_time = time.time()
+        self._interval_seconds = interval_seconds
+        self._messages = messages or [
+            "Analisando diff...",
+            "Identificando mudanças...",
+            "Preparando prompt...",
+            "Consultando a IA...",
+            "Aguardando resposta da IA...",
+        ]
         self._lock = threading.Lock()
         self.stop_event = threading.Event()
         self.thread = threading.Thread(
@@ -57,21 +66,28 @@ class ThinkingAnimation:
 
     def update(self, message):
         with self._lock:
-            self._message = message
+            self._override_message = message
 
     def get_message(self):
         with self._lock:
-            return self._message
+            if self._override_message:
+                return self._override_message
+
+            elapsed = time.time() - self._start_time
+            index = int(elapsed / self._interval_seconds)
+            if index >= len(self._messages):
+                index = len(self._messages) - 1
+            return self._messages[index]
 
 
-def start_thinking_animation(initial_message="Analisando o diff..."):
+def start_thinking_animation(messages=None, interval_seconds=2.0):
     """
     Inicia a animação de "pensando" em uma thread separada.
 
     Returns:
         ThinkingAnimation: controlador da animação
     """
-    return ThinkingAnimation(initial_message=initial_message)
+    return ThinkingAnimation(messages=messages, interval_seconds=interval_seconds)
 
 
 def stop_thinking_animation(animation):
