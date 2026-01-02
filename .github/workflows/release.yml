@@ -5,9 +5,10 @@ on:
     types: [published] # Roda quando você publica uma release nova na interface do GitHub
 
 permissions:
-  id-token: write      # OBRIGATÓRIO: Para gerar o token OIDC do Sigstore
-  attestations: write  # OBRIGATÓRIO: Para gravar a atestação no GitHub
-  contents: read       # Para ler o código
+  id-token: write      # Para assinar (Sigstore)
+  attestations: write  # Para salvar a atestação
+  contents: write      # OBRIGATÓRIO: Para o softprops/action-gh-release fazer upload
+  packages: write      # OBRIGATÓRIO: Para dar push no Docker (GHCR)
 
 jobs:
   build-and-attest:
