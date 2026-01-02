@@ -3,6 +3,7 @@
 [![Seshat CI](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml/badge.svg)](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml) ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
 ![License](https://img.shields.io/badge/License-MIT-orange)
+[![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 
 Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o padrão Conventional Commits, utilizando o poder da Inteligência Artificial.
 
