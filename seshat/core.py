@@ -125,48 +125,50 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
 
     try:
         selectedProvider = get_provider(provider)
-        # Obtém o nome do provider a partir do objeto selecionado
-        provider_name = (
-            selectedProvider.name if hasattr(selectedProvider, "name") else provider
-        )
-        ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
-
-        # Inicia a animação de "pensando"
-        stop_event, animation_thread = start_thinking_animation()
-
-        try:
-            commit_msg = selectedProvider.generate_commit_message(diff, model=model)
-        finally:
-            # Para a animação
-            stop_thinking_animation(stop_event, animation_thread)
-
-    except (KeyError, ValueError) as e:
+    except ValueError as e:
         raise ValueError(f"Provedor não suportado: {provider}") from e
 
-    if verbose:
-        click.echo("🤖 AI-generated message:")
+    # Obtém o nome do provider a partir do objeto selecionado
+    provider_name = (
+        selectedProvider.name if hasattr(selectedProvider, "name") else provider
+    )
+    ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
 
-    commit_msg = (commit_msg or "").strip()
-    if not commit_msg:
-        raise ValueError(
-            "Mensagem de commit vazia retornada pela IA. "
-            "Tente novamente ou ajuste o diff."
-        )
+    # Inicia a animação de "pensando"
+    animation = start_thinking_animation("Gerando mensagem de commit...")
 
-    if not is_valid_conventional_commit(commit_msg):
-        exemplos = (
-            "Exemplos válidos:\n"
-            "- feat: nova funcionalidade\n"
-            "- fix(core): correção de bug\n"
-            "- feat!: breaking change\n"
-            "- feat(api)!: breaking change com escopo"
-        )
-        raise ValueError(
-            "A mensagem não segue o padrão Conventional Commits.\n"
-            f"Mensagem recebida: {commit_msg}\n\n{exemplos}"
-        )
+    try:
+        commit_msg = selectedProvider.generate_commit_message(diff, model=model)
+        animation.update("Validando formato...")
 
-    return commit_msg
+        if verbose:
+            click.echo("🤖 AI-generated message:")
+
+        commit_msg = (commit_msg or "").strip()
+        if not commit_msg:
+            raise ValueError(
+                "Mensagem de commit vazia retornada pela IA. "
+                "Tente novamente ou ajuste o diff."
+            )
+
+        if not is_valid_conventional_commit(commit_msg):
+            exemplos = (
+                "Exemplos válidos:\n"
+                "- feat: nova funcionalidade\n"
+                "- fix(core): correção de bug\n"
+                "- feat!: breaking change\n"
+                "- feat(api)!: breaking change com escopo"
+            )
+            raise ValueError(
+                "A mensagem não segue o padrão Conventional Commits.\n"
+                f"Mensagem recebida: {commit_msg}\n\n{exemplos}"
+            )
+
+        animation.update("Finalizando...")
+        return commit_msg
+    finally:
+        # Para a animação
+        stop_thinking_animation(animation)
 
 
 __all__ = ["commit_with_ai"]
