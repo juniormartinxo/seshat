@@ -7,7 +7,8 @@ from .utils import display_error, get_last_commit_summary
 from .config import load_config, normalize_config, validate_config as validate_conf, save_config
 from .commands import cli
 from . import ui
-from . import flow # Register flow command
+# Import for side effects: register flow command.
+from . import flow  # noqa: F401
 
 
 
