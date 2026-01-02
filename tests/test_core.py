@@ -1,5 +1,3 @@
-import pytest
-import os
 from seshat.utils import is_valid_conventional_commit, clean_think_tags
 
 def test_conventional_commit_validation():
