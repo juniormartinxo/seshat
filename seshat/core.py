@@ -4,7 +4,6 @@ import click
 import os
 from .providers import get_provider
 from .utils import (
-    display_error,
     start_thinking_animation,
     stop_thinking_animation,
     is_valid_conventional_commit,
