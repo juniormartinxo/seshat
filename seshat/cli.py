@@ -1,14 +1,14 @@
 import os
-from pathlib import Path
 import click
 import sys
 import subprocess
-import json
-from dotenv import load_dotenv, find_dotenv
 from .core import commit_with_ai
-from .utils import validate_config, display_error, CONFIG_PATH, get_last_commit_summary
+from .utils import display_error, get_last_commit_summary
+from .config import load_config, normalize_config, validate_config as validate_conf, save_config
 from .commands import cli
 from . import ui
+from . import flow # Register flow command
+
 
 
 @cli.command()
@@ -21,29 +21,57 @@ from . import ui
 def commit(provider, model, yes, verbose, date, max_diff):
     """Generate and execute AI-powered commits"""
     try:
+        # Carrega configuração unificada
+        config = load_config()
+        
+        # Sobrescreve com flags da CLI se fornecidas
         if provider:
-            os.environ["AI_PROVIDER"] = provider
-
-        # Validação e execução
-        provider = os.environ.get("AI_PROVIDER")
-        if not provider:
-            raise ValueError(
-                "Provedor não configurado. Use 'seshat config --provider <provider>'"
-            )
-
-        # Ignorar modelo se provider for ollama
-        if provider == "ollama":
-            model = None
-
-        # Aplicar limite do diff personalizado para este comando
+            config["AI_PROVIDER"] = provider
+        if model:
+            config["AI_MODEL"] = model
         if max_diff:
-            os.environ["MAX_DIFF_SIZE"] = str(max_diff)
+            config["MAX_DIFF_SIZE"] = max_diff
 
-        language = os.environ.get("COMMIT_LANGUAGE", "PT-BR")
-        ui.title(f"Seshat Commit · {provider} · {language}")
+        config = normalize_config(config)
 
-        # Passar o parâmetro yes como skip_confirmation para commit_with_ai
-        commit_message = commit_with_ai(provider=provider, model=model, verbose=verbose, skip_confirmation=yes)
+        # Valida configuração final
+        is_valid, error_msg = validate_conf(config)
+        if not is_valid:
+            if error_msg:
+                raise ValueError(error_msg)
+
+        # Atualiza variáveis de ambiente para que o resto do sistema (providers) veja
+        # Isso é temporário até refatorarmos providers.py para aceitar config dict
+        if config.get("API_KEY"):
+            os.environ["API_KEY"] = config["API_KEY"]
+        if config.get("AI_PROVIDER"):
+            os.environ["AI_PROVIDER"] = config["AI_PROVIDER"]
+        if config.get("AI_MODEL"):
+            os.environ["AI_MODEL"] = config["AI_MODEL"]
+        if config.get("MAX_DIFF_SIZE"):
+            os.environ["MAX_DIFF_SIZE"] = str(config["MAX_DIFF_SIZE"])
+        if config.get("WARN_DIFF_SIZE"):
+            os.environ["WARN_DIFF_SIZE"] = str(config["WARN_DIFF_SIZE"])
+        if config.get("COMMIT_LANGUAGE"):
+            os.environ["COMMIT_LANGUAGE"] = config["COMMIT_LANGUAGE"]
+        if config.get("DEFAULT_DATE"):
+            os.environ["DEFAULT_DATE"] = config["DEFAULT_DATE"]
+
+        provider_name = config.get("AI_PROVIDER")
+        language = config.get("COMMIT_LANGUAGE", "PT-BR")
+        
+        if not date and config.get("DEFAULT_DATE"):
+            date = config["DEFAULT_DATE"]
+
+        ui.title(f"Seshat Commit · {provider_name} · {language}")
+
+        # Passar parâmetros
+        commit_message = commit_with_ai(
+            provider=provider_name, 
+            model=config.get("AI_MODEL"), 
+            verbose=verbose, 
+            skip_confirmation=yes
+        )
 
         if yes or click.confirm(
             f"\nMensagem sugerida:\n\n{commit_message}\n"
@@ -54,8 +82,7 @@ def commit(provider, model, yes, verbose, date, max_diff):
                 git_args.append("--quiet")
             if date:
                 git_args.extend(["--date", date])
-            else:
-                pass
+            
             git_args.extend(["-m", commit_message])
             subprocess.check_call(git_args)
             summary = get_last_commit_summary() or commit_message.splitlines()[0]
@@ -82,16 +109,11 @@ def commit(provider, model, yes, verbose, date, max_diff):
 def config(api_key, provider, model, default_date, max_diff, warn_diff, language):
     """Configure API Key e provedor padrão"""
     try:
-        CONFIG_PATH.parent.mkdir(exist_ok=True)
-
-        config = {}
-        if CONFIG_PATH.exists():
-            with open(CONFIG_PATH) as f:
-                config = json.load(f)
-
+        updates = {}
         modified = False
+
         if api_key:
-            config["API_KEY"] = api_key
+            updates["API_KEY"] = api_key
             modified = True
 
         if provider:
@@ -100,27 +122,27 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
                 raise ValueError(
                     f"Provedor inválido. Opções: {', '.join(valid_providers)}"
                 )
-            config["AI_PROVIDER"] = provider
+            updates["AI_PROVIDER"] = provider
             modified = True
 
         if model:
-            config["AI_MODEL"] = model
+            updates["AI_MODEL"] = model
             modified = True
             
         if default_date:
-            config["DEFAULT_DATE"] = default_date
+            updates["DEFAULT_DATE"] = default_date
             modified = True
             
         if max_diff is not None:
             if max_diff <= 0:
                 raise ValueError("O limite máximo do diff deve ser maior que zero")
-            config["MAX_DIFF_SIZE"] = max_diff
+            updates["MAX_DIFF_SIZE"] = max_diff
             modified = True
             
         if warn_diff is not None:
             if warn_diff <= 0:
                 raise ValueError("O limite de aviso do diff deve ser maior que zero")
-            config["WARN_DIFF_SIZE"] = warn_diff
+            updates["WARN_DIFF_SIZE"] = warn_diff
             modified = True
 
         if language:
@@ -129,41 +151,45 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
                 raise ValueError(
                     f"Linguagem inválida. Opções: {', '.join(valid_languages)}"
                 )
-            config["COMMIT_LANGUAGE"] = language.upper()
+            updates["COMMIT_LANGUAGE"] = language.upper()
             modified = True
 
         if modified:
-            with open(CONFIG_PATH, "w") as f:
-                json.dump(config, f)
+            save_config(updates)
             click.secho("✓ Configuração atualizada com sucesso!", fg="green")
         else:
-            current_config = {
-                "API_KEY": config.get("API_KEY", "não configurada"),
-                "AI_PROVIDER": config.get("AI_PROVIDER", "não configurado"),
-                "AI_MODEL": config.get("AI_MODEL", "não configurado"),
-                "MAX_DIFF_SIZE": config.get("MAX_DIFF_SIZE", 3000),
-                "WARN_DIFF_SIZE": config.get("WARN_DIFF_SIZE", 2500),
-                "COMMIT_LANGUAGE": config.get("COMMIT_LANGUAGE", "PT-BR"),
-            }
+            current_config = load_config()
             
-            # Verifica a linguagem configurada para exibir as mensagens no idioma correto
-            language = current_config["COMMIT_LANGUAGE"]
+            def mask_api_key(key, language):
+                if not key:
+                    return "not set" if language == "ENG" else "não configurada"
+                if len(key) <= 8:
+                    return "***"
+                return f"{key[:4]}...{key[-4:]}"
+
+            language = current_config.get("COMMIT_LANGUAGE", "PT-BR")
+            masked_key = mask_api_key(current_config.get("API_KEY"), language)
+            provider_value = current_config.get("AI_PROVIDER") or ("not set" if language == "ENG" else "não configurado")
+            model_value = current_config.get("AI_MODEL") or ("not set" if language == "ENG" else "não configurado")
+            
             if language == "ENG":
                 click.echo("Current configuration:")
-                click.echo(f"API Key: {current_config['API_KEY']}")
-                click.echo(f"Provider: {current_config['AI_PROVIDER']}")
-                click.echo(f"Model: {current_config['AI_MODEL']}")
-                click.echo(f"Maximum diff limit: {current_config['MAX_DIFF_SIZE']} characters")
-                click.echo(f"Warning diff limit: {current_config['WARN_DIFF_SIZE']} characters")
-                click.echo(f"Commit language: {current_config['COMMIT_LANGUAGE']}")
+                click.echo(f"API Key: {masked_key}")
+                click.echo(f"Provider: {provider_value}")
+                click.echo(f"Model: {model_value}")
+                click.echo(f"Maximum diff limit: {current_config.get('MAX_DIFF_SIZE')}")
+                click.echo(f"Warning diff limit: {current_config.get('WARN_DIFF_SIZE')}")
+                click.echo(f"Commit language: {current_config.get('COMMIT_LANGUAGE')}")
+                click.echo(f"Default date: {current_config.get('DEFAULT_DATE') or 'not set'}")
             else:
                 click.echo("Configuração atual:")
-                click.echo(f"API Key: {current_config['API_KEY']}")
-                click.echo(f"Provider: {current_config['AI_PROVIDER']}")
-                click.echo(f"Model: {current_config['AI_MODEL']}")
-                click.echo(f"Limite máximo do diff: {current_config['MAX_DIFF_SIZE']} caracteres")
-                click.echo(f"Limite de aviso do diff: {current_config['WARN_DIFF_SIZE']} caracteres")
-                click.echo(f"Linguagem dos commits: {current_config['COMMIT_LANGUAGE']}")
+                click.echo(f"API Key: {masked_key}")
+                click.echo(f"Provider: {provider_value}")
+                click.echo(f"Model: {model_value}")
+                click.echo(f"Limite máximo do diff: {current_config.get('MAX_DIFF_SIZE')}")
+                click.echo(f"Limite de aviso do diff: {current_config.get('WARN_DIFF_SIZE')}")
+                click.echo(f"Linguagem dos commits: {current_config.get('COMMIT_LANGUAGE')}")
+                click.echo(f"Data padrão: {current_config.get('DEFAULT_DATE') or 'não configurada'}")
 
     except Exception as e:
         display_error(str(e))

@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seshat"
+dynamic = ["version"]
+description = "CLI para commits automatizados usando Conventional Commits e DeepSeek API"
+readme = "README.md"
+requires-python = ">=3.8"
+authors = [
+    { name = "Junior Martins", email = "amjr.box@gmail.com" }
+]
+keywords = ["git", "commit", "conventional-commits", "ai", "deepseek"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Version Control :: Git",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "click>=8.0",
+    "requests>=2.26",
+    "python-dotenv>=0.19",
+    "anthropic>=0.19",
+    "openai==1.65.1",
+    "google-genai",
+    "keyring>=24.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/juniormartinxo/seshat"
+Repository = "https://github.com/juniormartinxo/seshat.git"
+
+[project.scripts]
+seshat = "seshat.cli:cli"
+
+[tool.setuptools.dynamic]
+version = {attr = "seshat.__version__"}
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+

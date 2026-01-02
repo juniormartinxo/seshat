@@ -1,6 +1,6 @@
 # Seshat 🤖
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/juniormartinxo/seshat) ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
+[![SEShat CI](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml/badge.svg)](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml) ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 
@@ -26,6 +26,12 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 
 ```bash
 # 1. Instalar pipx (se você ainda não tiver)
+# Debian/Ubuntu (PEP 668): prefira o pacote do sistema
+sudo apt update
+sudo apt install pipx
+pipx ensurepath
+
+# Outras distros
 python3 -m pip install --user pipx
 python3 -m pipx ensurepath
 

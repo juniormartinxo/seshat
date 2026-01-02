@@ -140,8 +140,8 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
             # Para a animação
             stop_thinking_animation(stop_event, animation_thread)
 
-    except KeyError:
-        raise ValueError(f"Provedor não suportado: {provider}")
+    except (KeyError, ValueError) as e:
+        raise ValueError(f"Provedor não suportado: {provider}") from e
 
     if verbose:
         click.echo("🤖 AI-generated message:")

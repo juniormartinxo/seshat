@@ -1,3 +1,1 @@
-# Importa todos os comandos para garantir que sejam registrados
-from .commands import cli
-from . import flow
+__version__ = "0.1.6"
