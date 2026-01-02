@@ -1,4 +1,4 @@
-name: SEShat CI
+name: Seshat CI
 
 on:
   push:
@@ -23,7 +23,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff mypy pytest
+        pip install ruff mypy pytest types-requests
         pip install -e .
         
     - name: Lint with ruff
