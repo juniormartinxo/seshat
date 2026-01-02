@@ -300,3 +300,57 @@ def format_commit_message(message):
         cleaned_lines.pop()
 
     return "\n".join(cleaned_lines)
+
+
+def normalize_commit_subject_case(message):
+    """
+    Garante que a descrição do header comece com letra minúscula.
+
+    Ex: "feat(core): Adiciona algo" -> "feat(core): adiciona algo"
+    """
+    if not message:
+        return message
+
+    types = [
+        "feat",
+        "fix",
+        "docs",
+        "style",
+        "refactor",
+        "perf",
+        "test",
+        "chore",
+        "build",
+        "ci",
+        "revert",
+    ]
+
+    lines = message.split("\n")
+    header = lines[0].strip()
+
+    header_pattern = (
+        r"^("
+        r"(?P<type>" + "|".join(types) + r")"
+        r"(?:\((?P<scope>[^)]+)\))?"
+        r"(?P<breaking>!)?"
+        r": "
+        r"(?P<description>.+)"
+        r")$"
+    )
+
+    match = re.match(header_pattern, header, re.IGNORECASE)
+    if not match:
+        return message
+
+    description = match.group("description")
+    if not description:
+        return message
+
+    first_char = description[0]
+    if first_char.isalpha() and first_char.isupper():
+        description = first_char.lower() + description[1:]
+        header = header[: header.rfind(": ") + 2] + description
+        lines[0] = header
+        return "\n".join(lines)
+
+    return message
