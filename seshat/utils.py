@@ -1,13 +1,9 @@
 import re
 import click
-import os
 import sys
 import subprocess
 import time
 import threading
-from pathlib import Path
-
-
 
 def show_thinking_animation(stop_event, get_message):
     """
