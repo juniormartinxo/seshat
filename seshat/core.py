@@ -8,6 +8,7 @@ from .utils import (
     start_thinking_animation,
     stop_thinking_animation,
     is_valid_conventional_commit,
+    normalize_commit_subject_case,
 )
 from . import ui
 
@@ -145,6 +146,7 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
             click.echo("🤖 AI-generated message:")
 
         commit_msg = (commit_msg or "").strip()
+        commit_msg = normalize_commit_subject_case(commit_msg)
         if not commit_msg:
             raise ValueError(
                 "Mensagem de commit vazia retornada pela IA. "
