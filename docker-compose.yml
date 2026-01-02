@@ -1,0 +1,10 @@
+services:
+  ci:
+    build: .
+    volumes:
+      - .:/app
+    command: >
+      sh -c "pip install -e . &&
+             echo 'Running ruff...' && ruff check . &&
+             echo 'Running mypy...' && mypy . &&
+             echo 'Running pytest...' && pytest"
