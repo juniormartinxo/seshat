@@ -1,6 +1,7 @@
 # Seshat 🤖
 
-[![Seshat CI](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml/badge.svg)](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml) ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+[![Seshat CI](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml/badge.svg)](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
