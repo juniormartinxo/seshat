@@ -1,11 +1,20 @@
 from pathlib import Path
+import re
 from setuptools import setup, find_packages
 
 ROOT = Path(__file__).parent
 
+def read_version():
+    version_path = ROOT / "seshat" / "__init__.py"
+    content = version_path.read_text(encoding="utf-8")
+    match = re.search(r'__version__\s*=\s*"([^"]+)"', content)
+    if not match:
+        raise RuntimeError("Unable to find __version__ in seshat/__init__.py")
+    return match.group(1)
+
 setup(
     name="seshat",
-    version=__import__("seshat").__version__,
+    version=read_version(),
     packages=find_packages(),
     install_requires=[
         "click>=8.0",
