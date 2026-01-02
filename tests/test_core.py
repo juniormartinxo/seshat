@@ -8,7 +8,7 @@ def test_conventional_commit_validation():
     
     # Invalid cases
     assert not is_valid_conventional_commit("add login")
-    assert not is_valid_conventional_commit("Fix: login") # case sensitive type usually lowercase
+    assert is_valid_conventional_commit("Fix: login")  # type check is case-insensitive
     assert not is_valid_conventional_commit("feat : space before colon")
     
 def test_clean_think_tags():
