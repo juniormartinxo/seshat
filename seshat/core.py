@@ -136,7 +136,7 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False):
     ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
 
     # Inicia a animação de "pensando"
-    animation = start_thinking_animation("Gerando mensagem de commit...")
+    animation = start_thinking_animation()
 
     try:
         commit_msg = selectedProvider.generate_commit_message(diff, model=model)
