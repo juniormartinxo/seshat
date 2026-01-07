@@ -4,7 +4,7 @@ import sys
 from .services import BatchCommitService
 from .commands import cli
 from .config import load_config, normalize_config, validate_config
-from .tooling import SeshatConfig
+from .tooling_ts import SeshatConfig
 from . import ui
 
 @cli.command()
@@ -22,11 +22,15 @@ from . import ui
     help="Run pre-commit checks: full (all), lint, test, or typecheck",
 )
 @click.option(
-    "--review", "-r",
     is_flag=True,
     help="Include AI code review in commit message generation",
 )
-def flow(count, provider, model, yes, verbose, date, path, check, review):
+@click.option(
+    "--no-check",
+    is_flag=True,
+    help="Disable all pre-commit checks",
+)
+def flow(count, provider, model, yes, verbose, date, path, check, review, no_check):
     """Processa e comita múltiplos arquivos individualmente.
     
     COUNT é o número máximo de arquivos a processar. Se for 0, processará todos os arquivos modificados.
@@ -129,6 +133,7 @@ def flow(count, provider, model, yes, verbose, date, path, check, review):
                 confirm_callback=confirm_commit,
                 check=check,
                 code_review=review,
+                no_check=no_check,
             )
             
             if result.skipped:
