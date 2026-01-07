@@ -11,6 +11,7 @@ from .utils import (
     format_commit_message,
     clean_explanatory_text,
 )
+from .code_review import get_code_review_prompt_addon
 
 DEFAULT_TIMEOUT = 60
 
@@ -91,6 +92,13 @@ class BaseProvider:
         content = content.replace("```git commit", "").replace("```commit", "").replace("```", "").strip()
         
         return format_commit_message(content)
+    
+    def _get_system_prompt(self, language: str, code_review: bool = False) -> str:
+        """Build system prompt with optional code review addon."""
+        prompt = f"{SYSTEM_PROMPT}\nLanguage: {language}"
+        if code_review:
+            prompt += get_code_review_prompt_addon()
+        return prompt
 
 
 class DeepSeekProvider(BaseProvider):
@@ -110,10 +118,13 @@ class DeepSeekProvider(BaseProvider):
         client = _openai_client(self.api_key, base_url=self.base_url)
         
         language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
+        
         response = client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": f"{SYSTEM_PROMPT}\nLanguage: {language}"},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Diff:\n{diff}"},
             ],
             stream=False
@@ -137,11 +148,13 @@ class ClaudeProvider(BaseProvider):
         
         client = _anthropic_client(self.api_key)
         language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
         
         response = client.messages.create(
             model=self.model,
             max_tokens=1000,
-            system=f"{SYSTEM_PROMPT}\nLanguage: {language}",
+            system=system_prompt,
             messages=[
                 {"role": "user", "content": f"Diff:\n{diff}"}
             ]
@@ -165,11 +178,13 @@ class OpenAIProvider(BaseProvider):
         
         client = _openai_client(self.api_key)
         language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
         
         response = client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": f"{SYSTEM_PROMPT}\nLanguage: {language}"},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Diff:\n{diff}"},
             ]
         )
@@ -190,17 +205,12 @@ class GeminiProvider(BaseProvider):
     def generate_commit_message(self, diff, **kwargs):
         self.validate_env()
         
-        # O SDK do google genai pode usar a variável de ambiente, mas é melhor configurar explicitamente
-        # se tivermos a chave. Porém, o client novo é instanciado assim:
         client = _gemini_client(self.api_key)
-        
         language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
         
-        # Gemini 2.0 suporta system instructions no parametro config? 
-        # Ou passamos como user message? O novo SDK tem configs.
-        # Simplificando com user message + system context se necessário.
-        
-        prompt = f"{SYSTEM_PROMPT}\nLanguage: {language}\n\nDiff:\n{diff}"
+        prompt = f"{system_prompt}\n\nDiff:\n{diff}"
         
         response = client.models.generate_content(
             model=self.model,
@@ -228,7 +238,10 @@ class OllamaProvider(BaseProvider):
         self.check_ollama_running()
         
         language = self.get_language()
-        prompt = f"{SYSTEM_PROMPT}\nLanguage: {language}\n\nDiff:\n{diff}\n\nCommit Message:"
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
+        
+        prompt = f"{system_prompt}\n\nDiff:\n{diff}\n\nCommit Message:"
         
         payload = {
             "model": self.model,
