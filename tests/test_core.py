@@ -1,7 +1,7 @@
 import types
 
 from seshat import core
-from seshat.tooling import ToolResult
+from seshat.tooling_ts import ToolResult
 
 
 class DummyResult:
