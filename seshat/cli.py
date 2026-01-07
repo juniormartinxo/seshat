@@ -19,7 +19,18 @@ from . import flow  # noqa: F401
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Limite máximo de caracteres para o diff")
-def commit(provider, model, yes, verbose, date, max_diff):
+@click.option(
+    "--check", "-c",
+    type=click.Choice(["full", "lint", "test", "typecheck"]),
+    default=None,
+    help="Run pre-commit checks: full (all), lint, test, or typecheck",
+)
+@click.option(
+    "--review", "-r",
+    is_flag=True,
+    help="Include AI code review in commit message generation",
+)
+def commit(provider, model, yes, verbose, date, max_diff, check, review):
     """Generate and execute AI-powered commits"""
     try:
         # Carrega configuração unificada
@@ -67,11 +78,13 @@ def commit(provider, model, yes, verbose, date, max_diff):
         ui.title(f"Seshat Commit · {provider_name} · {language}")
 
         # Passar parâmetros
-        commit_message = commit_with_ai(
+        commit_message, review_result = commit_with_ai(
             provider=provider_name, 
             model=config.get("AI_MODEL"), 
             verbose=verbose, 
-            skip_confirmation=yes
+            skip_confirmation=yes,
+            check=check,
+            code_review=review,
         )
 
         if yes or click.confirm(
