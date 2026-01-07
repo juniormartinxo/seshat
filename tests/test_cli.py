@@ -87,3 +87,77 @@ def test_config_shows_current_config(monkeypatch):
     result = runner.invoke(cli, ["config"])
     assert result.exit_code == 0
     assert "Current configuration" in result.output
+
+
+class TestInitCommand:
+    """Tests for the init command."""
+    
+    def test_init_creates_seshat_file_for_python(self, tmp_path):
+        """Should create .seshat file for Python project."""
+        runner = CliRunner()
+        
+        # Create a Python project indicator
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        
+        assert result.exit_code == 0
+        assert (tmp_path / ".seshat").exists()
+        
+        content = (tmp_path / ".seshat").read_text()
+        assert "project_type: python" in content
+        assert "checks:" in content
+    
+    def test_init_creates_seshat_file_for_typescript(self, tmp_path):
+        """Should create .seshat file for TypeScript project."""
+        runner = CliRunner()
+        
+        # Create a TypeScript project indicator
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        
+        assert result.exit_code == 0
+        assert (tmp_path / ".seshat").exists()
+        
+        content = (tmp_path / ".seshat").read_text()
+        assert "project_type: typescript" in content
+    
+    def test_init_fails_if_seshat_exists(self, tmp_path):
+        """Should fail if .seshat already exists without --force."""
+        runner = CliRunner()
+        
+        (tmp_path / ".seshat").write_text("existing config")
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        
+        assert result.exit_code == 1
+        assert "já existe" in result.output or ".seshat" in result.output
+    
+    def test_init_force_overwrites_existing(self, tmp_path):
+        """Should overwrite existing .seshat with --force."""
+        runner = CliRunner()
+        
+        (tmp_path / ".seshat").write_text("old config")
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"])
+        
+        assert result.exit_code == 0
+        content = (tmp_path / ".seshat").read_text()
+        assert "project_type: python" in content
+        assert "old config" not in content
+    
+    def test_init_detects_available_tools(self, tmp_path, monkeypatch):
+        """Should show detected tools in output."""
+        runner = CliRunner()
+        
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        
+        assert result.exit_code == 0
+        # Should mention detected tools if available
+        assert "Ferramentas detectadas" in result.output or "checks:" in result.output
+
