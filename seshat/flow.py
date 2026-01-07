@@ -4,6 +4,7 @@ import sys
 from .services import BatchCommitService
 from .commands import cli
 from .config import load_config, normalize_config, validate_config
+from .tooling import SeshatConfig
 from . import ui
 
 @cli.command()
@@ -82,6 +83,23 @@ def flow(count, provider, model, yes, verbose, date, path, check, review):
             files = files[:count]
             
         ui.title(f"Seshat Flow · {service.provider} · {service.language}")
+        
+        # Show .seshat config notification if loaded
+        seshat_config = SeshatConfig.load(path)
+        if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
+            ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
+            details = []
+            if seshat_config.project_type:
+                details.append(f"projeto: {seshat_config.project_type}")
+            if seshat_config.checks:
+                checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
+                if checks_list:
+                    details.append(f"checks: {', '.join(checks_list)}")
+            if seshat_config.code_review.get("enabled"):
+                details.append("code_review: ativo")
+            if details:
+                ui.step(" | ".join(details), icon=" ")
+        
         ui.info(f"Processando {len(files)} arquivos", icon="🔄")
         
         if not yes:
