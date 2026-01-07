@@ -228,10 +228,145 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
                 click.echo(f"Linguagem dos commits: {current_config.get('COMMIT_LANGUAGE')}")
                 click.echo(f"Data padrão: {current_config.get('DEFAULT_DATE') or 'não configurada'}")
 
+
     except Exception as e:
         display_error(str(e))
         sys.exit(1)
 
 
+@cli.command()
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing .seshat file")
+@click.option("--path", "-p", default=".", help="Path to the project root")
+def init(force, path):
+    """Initialize a .seshat configuration file for the current project.
+    
+    Automatically detects project type and available tooling.
+    """
+    from pathlib import Path
+    from .tooling import ToolingRunner
+    
+    project_path = Path(path).resolve()
+    seshat_file = project_path / ".seshat"
+    
+    # Check if .seshat already exists
+    if seshat_file.exists() and not force:
+        ui.error("Arquivo .seshat já existe. Use --force para sobrescrever.")
+        sys.exit(1)
+    
+    ui.title("Seshat Init")
+    ui.info("Detectando configuração do projeto...", icon="🔍")
+    
+    # Initialize runner to detect project
+    runner = ToolingRunner(str(project_path))
+    project_type = runner.detect_project_type()
+    
+    if not project_type:
+        ui.warning("Tipo de projeto não detectado automaticamente.")
+        # Ask user to choose
+        choices = ["python", "typescript"]
+        ui.info("Escolha o tipo de projeto:")
+        for i, choice in enumerate(choices, 1):
+            click.echo(f"  {i}. {choice}")
+        
+        try:
+            selection = click.prompt("Opção", type=int, default=1)
+            project_type = choices[selection - 1] if 1 <= selection <= len(choices) else "python"
+        except (ValueError, IndexError):
+            project_type = "python"
+    
+    ui.step(f"Tipo de projeto: {project_type}", icon="📦")
+    
+    # Discover available tools
+    config = runner.discover_tools()
+    discovered_tools = list(config.tools.keys())
+    
+    if discovered_tools:
+        ui.step(f"Ferramentas detectadas: {', '.join(discovered_tools)}", icon="🔧")
+    else:
+        ui.warning("Nenhuma ferramenta de tooling detectada.")
+    
+    # Build the .seshat content
+    lines = [
+        "# Seshat Configuration",
+        "# Generated automatically - customize as needed",
+        "",
+        f"project_type: {project_type}",
+        "",
+        "# Pre-commit checks",
+        "checks:",
+    ]
+    
+    # Add check configurations based on discovered tools
+    check_types = ["lint", "test", "typecheck"]
+    for check_type in check_types:
+        enabled = check_type in discovered_tools
+        blocking = check_type != "test"  # tests are non-blocking by default
+        
+        lines.append(f"  {check_type}:")
+        lines.append(f"    enabled: {str(enabled).lower()}")
+        lines.append(f"    blocking: {str(blocking).lower()}")
+        
+        # Add tool-specific info as comments
+        if check_type in config.tools:
+            tool = config.tools[check_type]
+            cmd_str = " ".join(tool.command)
+            lines.append(f"    # detected: {tool.name} ({cmd_str})")
+    
+    lines.extend([
+        "",
+        "# AI Code Review",
+        "code_review:",
+        "  enabled: false",
+        "  blocking: false",
+        "",
+        "# Custom commands (uncomment and modify as needed)",
+        "# commands:",
+    ])
+    
+    # Add example commands based on project type
+    if project_type == "python":
+        lines.extend([
+            "#   ruff:",
+            "#     command: \"ruff check --fix\"",
+            "#     extensions: [\".py\"]",
+            "#   mypy:",
+            "#     command: \"mypy --strict\"",
+            "#   pytest:",
+            "#     command: \"pytest -v --cov\"",
+        ])
+    elif project_type == "typescript":
+        lines.extend([
+            "#   eslint:",
+            "#     command: \"pnpm eslint\"",
+            "#     extensions: [\".ts\", \".tsx\"]",
+            "#   tsc:",
+            "#     command: \"npm run typecheck\"",
+            "#   jest:",
+            "#     command: \"npm test -- --passWithNoTests\"",
+        ])
+    
+    lines.append("")
+    
+    # Write the file
+    content = "\n".join(lines)
+    
+    try:
+        with open(seshat_file, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        ui.success(f"Arquivo .seshat criado em {seshat_file}")
+        ui.info("Edite o arquivo para customizar as configurações.", icon="📝")
+        
+        # Show summary
+        ui.hr()
+        ui.info("Configuração gerada:")
+        click.echo(f"\n{content}")
+        
+    except Exception as e:
+        ui.error(f"Erro ao criar arquivo: {e}")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     cli()
+
