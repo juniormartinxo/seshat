@@ -1,0 +1,52 @@
+# Seshat Project Configuration
+# Copy this file to .seshat in your project root
+
+# Project type - auto-detected if omitted
+# Supported: typescript, python
+# project_type: typescript
+
+# Pre-commit checks configuration
+checks:
+  lint:
+    enabled: true
+    blocking: true  # blocks commit if fails
+    # command: "ruff check"       # custom command for Python
+    # command: "npx eslint"       # custom command for TypeScript
+    # extensions: [".py", ".pyi"] # custom file extensions
+    # pass_files: true            # pass staged files to command
+  test:
+    enabled: true
+    blocking: false  # only warns
+    # command: "pytest -x"        # custom pytest command
+    # command: "npm run test"     # custom TypeScript test command
+  typecheck:
+    enabled: true
+    blocking: true
+    # command: "mypy ."           # custom mypy command
+    # command: "npx tsc --noEmit" # custom TypeScript check
+
+# AI code review configuration
+code_review:
+  enabled: true
+  blocking: false  # only warns if issues found
+
+# Custom commands - override tool defaults
+# Use tool name or check type as key
+commands:
+  # Example for Python project:
+  # ruff:
+  #   command: "ruff check --fix"
+  #   extensions: [".py"]
+  # mypy:
+  #   command: "mypy --strict"
+  # pytest:
+  #   command: "pytest -v --cov"
+  
+  # Example for TypeScript project:
+  # eslint:
+  #   command: "pnpm eslint"
+  #   extensions: [".ts", ".tsx"]
+  # tsc:
+  #   command: "pnpm tsc --noEmit"
+  # jest:
+  #   command: "pnpm test -- --passWithNoTests"
