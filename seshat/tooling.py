@@ -41,6 +41,7 @@ class ToolCommand:
     check_type: str  # "lint", "test", "typecheck"
     blocking: bool = True
     pass_files: bool = False  # Whether to pass file paths as arguments
+    extensions: Optional[list[str]] = None  # Optional custom extensions
 
 
 @dataclass
@@ -166,7 +167,8 @@ class ToolingRunner:
     def filter_files_for_check(
         self, 
         files: list[str], 
-        check_type: str
+        check_type: str,
+        custom_extensions: Optional[list[str]] = None
     ) -> list[str]:
         """
         Filter files based on check type and valid extensions.
@@ -174,17 +176,26 @@ class ToolingRunner:
         Args:
             files: List of file paths
             check_type: Type of check (lint, test, typecheck)
+            custom_extensions: Optional list of extensions to use instead of defaults
             
         Returns:
             Filtered list of files appropriate for the check type.
         """
         filtered = []
         
+        # Normalize custom extensions to lowercase
+        custom_exts = [e.lower() for e in custom_extensions] if custom_extensions else None
+        
         for file in files:
             path = Path(file)
             suffix = path.suffix.lower()
             name = path.name.lower()
             
+            if custom_exts:
+                if suffix in custom_exts or any(name.endswith(ext) for ext in custom_exts):
+                    filtered.append(file)
+                continue
+
             if check_type == "test":
                 # Only include test files
                 if any(name.endswith(pattern) for pattern in TEST_FILE_PATTERNS):
@@ -313,6 +324,8 @@ class ToolingRunner:
                 tool.command = cmd.split() if isinstance(cmd, str) else cmd
                 # Commands from .seshat should not pass files
                 tool.pass_files = False
+            if "extensions" in check_config:
+                tool.extensions = check_config["extensions"]
         
         return tool
     
@@ -333,7 +346,9 @@ class ToolingRunner:
         """
         # Filter files based on check type
         if files:
-            relevant_files = self.filter_files_for_check(files, tool.check_type)
+            relevant_files = self.filter_files_for_check(
+                files, tool.check_type, tool.extensions
+            )
             
             # Skip if no relevant files
             if not relevant_files:
