@@ -58,9 +58,20 @@ cd seshat
 python3 -m venv .venv
 source .venv/bin/activate  # No Windows: .venv\Scripts\activate
 
-# 3. Instalar as dependências (inclui testes)
+# 3. Instalar as dependências (inclui ferramentas de dev)
 pip install -e ".[dev]"
+
+# 4. Verificar a instalação
+ruff check .      # Linting
+mypy seshat/      # Type checking
+pytest            # Testes
 ```
+
+**Dependências de desenvolvimento instaladas:**
+- `pytest` - Testes
+- `mypy` - Verificação de tipos
+- `ruff` - Linting
+- `types-PyYAML`, `types-requests` - Type stubs
 
 ## ⚙️ Configuração
 
