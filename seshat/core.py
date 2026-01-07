@@ -2,6 +2,7 @@ import sys
 import subprocess
 import click
 import os
+from typing import List, Optional
 from .providers import get_provider
 from .utils import (
     start_thinking_animation,
@@ -12,12 +13,13 @@ from .utils import (
 from . import ui
 
 
-def check_staged_files():
+def check_staged_files(paths: Optional[List[str]] = None):
     """Verifica se existem arquivos em stage"""
     try:
-        result = subprocess.run(
-            ["git", "diff", "--cached", "--name-only"], capture_output=True, text=True
-        )
+        cmd = ["git", "diff", "--cached", "--name-only"]
+        if paths:
+            cmd.extend(["--"] + paths)
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
         if not result.stdout.strip():
             raise ValueError(
@@ -97,22 +99,23 @@ def validate_diff_size(diff, skip_confirmation=False):
     return True
 
 
-def get_git_diff(skip_confirmation=False):
+def get_git_diff(skip_confirmation=False, paths: Optional[List[str]] = None):
     """Obtém o diff das alterações stageadas"""
-    check_staged_files()
+    check_staged_files(paths)
 
-    diff = subprocess.check_output(
-        ["git", "diff", "--staged"], stderr=subprocess.STDOUT
-    ).decode("utf-8")
+    cmd = ["git", "diff", "--staged"]
+    if paths:
+        cmd.extend(["--"] + paths)
+    diff = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8")
 
     validate_diff_size(diff, skip_confirmation)
 
     return diff
 
 
-def commit_with_ai(provider, model, verbose, skip_confirmation=False):
+def commit_with_ai(provider, model, verbose, skip_confirmation=False, paths: Optional[List[str]] = None):
     """Fluxo principal de commit"""
-    diff = get_git_diff(skip_confirmation)
+    diff = get_git_diff(skip_confirmation, paths=paths)
 
     if verbose:
         click.echo("📋 Diff analysis:")
