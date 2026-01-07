@@ -1,4 +1,3 @@
-import types
 
 from seshat import core
 from seshat.tooling_ts import ToolResult
