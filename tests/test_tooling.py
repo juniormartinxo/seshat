@@ -1,12 +1,7 @@
 """Tests for the tooling module."""
 
 import json
-import os
-import tempfile
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-import pytest
 
 from seshat.tooling_ts import (
     ToolingRunner,
@@ -141,6 +136,74 @@ commands:
         assert tool.extensions == [".ts", ".tsx"]
         assert tool.pass_files is True
 
+    def test_detect_python_from_pyproject_toml(self, tmp_path):
+        """Should detect Python project from pyproject.toml."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "test"')
+        
+        runner = ToolingRunner(str(tmp_path))
+        assert runner.detect_project_type() == "python"
+
+    def test_detect_python_from_setup_py(self, tmp_path):
+        """Should detect Python project from setup.py."""
+        setup_py = tmp_path / "setup.py"
+        setup_py.write_text('from setuptools import setup\nsetup(name="test")')
+        
+        runner = ToolingRunner(str(tmp_path))
+        assert runner.detect_project_type() == "python"
+
+    def test_detect_python_from_requirements_txt(self, tmp_path):
+        """Should detect Python project from requirements.txt."""
+        requirements = tmp_path / "requirements.txt"
+        requirements.write_text('requests\nclick\n')
+        
+        runner = ToolingRunner(str(tmp_path))
+        assert runner.detect_project_type() == "python"
+
+    def test_typescript_takes_priority_over_python(self, tmp_path):
+        """TypeScript should take priority when both project types exist."""
+        # Create both TypeScript and Python project files
+        pkg_json = tmp_path / "package.json"
+        pkg_json.write_text('{"name": "test"}')
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "test"')
+        
+        runner = ToolingRunner(str(tmp_path))
+        # TypeScript is first in the strategy list, so it should win
+        assert runner.detect_project_type() == "typescript"
+
+    def test_python_filter_lint_files(self, tmp_path):
+        """Should filter Python files for lint check."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "test"')
+        
+        runner = ToolingRunner(str(tmp_path))
+        files = ["src/app.py", "src/models.pyi", "README.md", "config.json"]
+        filtered = runner.filter_files_for_check(files, "lint")
+        
+        assert "src/app.py" in filtered
+        assert "src/models.pyi" in filtered
+        assert "README.md" not in filtered
+        assert "config.json" not in filtered
+
+    def test_python_filter_test_files(self, tmp_path):
+        """Should filter Python test files correctly."""
+        pyproject = tmp_path / "pyproject.toml"
+        pyproject.write_text('[project]\nname = "test"')
+        
+        runner = ToolingRunner(str(tmp_path))
+        files = [
+            "src/app.py",
+            "tests/test_app.py",
+            "tests/conftest.py",
+            "src/utils_test.py",
+        ]
+        filtered = runner.filter_files_for_check(files, "test")
+        
+        assert "tests/test_app.py" in filtered
+        assert "tests/conftest.py" in filtered
+        assert "src/utils_test.py" in filtered
+        assert "src/app.py" not in filtered
 
 class TestToolResult:
     """Tests for ToolResult dataclass."""
@@ -200,9 +263,13 @@ class TestToolingConfig:
 class TestFileFiltering:
     """Tests for file filtering logic in ToolingRunner."""
     
-    def test_filter_lint_files(self):
+    def test_filter_lint_files(self, tmp_path):
         """Should filter only lint-relevant files by default."""
-        runner = ToolingRunner()
+        # Create a TypeScript project
+        pkg_json = tmp_path / "package.json"
+        pkg_json.write_text('{"name": "test"}')
+        
+        runner = ToolingRunner(str(tmp_path))
         files = ["src/app.ts", "src/style.css", "README.md", "src/utils.js"]
         filtered = runner.filter_files_for_check(files, "lint")
         
@@ -211,9 +278,13 @@ class TestFileFiltering:
         assert "src/style.css" not in filtered
         assert "README.md" not in filtered
 
-    def test_filter_test_files(self):
+    def test_filter_test_files(self, tmp_path):
         """Should filter only test files by default."""
-        runner = ToolingRunner()
+        # Create a TypeScript project
+        pkg_json = tmp_path / "package.json"
+        pkg_json.write_text('{"name": "test"}')
+        
+        runner = ToolingRunner(str(tmp_path))
         files = ["src/app.ts", "src/app.test.ts", "src/utils.spec.js", "src/utils.js"]
         filtered = runner.filter_files_for_check(files, "test")
         
@@ -222,9 +293,13 @@ class TestFileFiltering:
         assert "src/app.ts" not in filtered
         assert "src/utils.js" not in filtered
 
-    def test_filter_custom_extensions(self):
+    def test_filter_custom_extensions(self, tmp_path):
         """Should use custom extensions when provided."""
-        runner = ToolingRunner()
+        # Create a TypeScript project
+        pkg_json = tmp_path / "package.json"
+        pkg_json.write_text('{"name": "test"}')
+        
+        runner = ToolingRunner(str(tmp_path))
         files = ["src/app.ts", "src/app.py", "src/config.yaml"]
         
         # Override lint to include .yaml
@@ -233,3 +308,4 @@ class TestFileFiltering:
         assert "src/app.ts" in filtered
         assert "src/config.yaml" in filtered
         assert "src/app.py" not in filtered
+
