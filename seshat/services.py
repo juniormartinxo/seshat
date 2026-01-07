@@ -44,7 +44,8 @@ class BatchCommitService:
                     skip_confirm: bool = False,
                     confirm_callback: Optional[Callable[[str, str], bool]] = None,
                     check: Optional[str] = None,
-                    code_review: bool = False) -> ProcessResult:
+                    code_review: bool = False,
+                    no_check: bool = False) -> ProcessResult:
         """
         Processa um único arquivo: git add -> gera commit -> confirma -> git commit
         
@@ -112,6 +113,7 @@ class BatchCommitService:
                     paths=[file],
                     check=check,
                     code_review=code_review,
+                    no_check=no_check,
                 )
             except Exception as e:
                 # Se falhar na geração, reset o arquivo
