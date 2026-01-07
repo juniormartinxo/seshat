@@ -2,6 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 [![Seshat CI](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml/badge.svg)](https://github.com/juniormartinxo/seshat/actions/workflows/main.yml)
+![Tests](https://img.shields.io/badge/tests-pytest-brightgreen)
 ![Git](https://img.shields.io/badge/Git-Integrado-green)
 ![License](https://img.shields.io/badge/License-MIT-orange)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
@@ -19,6 +20,9 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 📅 **Data de Commit Personalizada:** Defina datas específicas para seus commits.
 * 🔄 **Fluxo de Commits em Lote:** Processe múltiplos arquivos, gerando um commit individual para cada um.
 * 🧹 **Saída de Terminal Profissional:** UI consistente, progresso em tempo real e saída do Git silenciosa por padrão (use `--verbose` para detalhes).
+* 🛠️ **Pre-Commit Tooling (NOVO!):** Executa lint, test e typecheck automaticamente antes do commit.
+* 🔬 **Code Review via IA (NOVO!):** Analisa code smells e problemas de qualidade integrado à geração de commit.
+* 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 
 ## 🚀 Instalação
 
@@ -54,8 +58,8 @@ cd seshat
 python3 -m venv .venv
 source .venv/bin/activate  # No Windows: .venv\Scripts\activate
 
-# 3. Instalar as dependências
-pip install -e .
+# 3. Instalar as dependências (inclui testes)
+pip install -e ".[dev]"
 ```
 
 ## ⚙️ Configuração
@@ -195,6 +199,27 @@ Notas importantes sobre o fluxo:
 
 ### Exemplos Avançados
 
+## 🧪 Testes com Docker
+
+Para rodar somente os testes:
+
+```bash
+docker compose run --rm tests
+```
+
+Para rodar o pipeline completo (ruff, mypy, pytest):
+
+```bash
+docker compose run --rm ci
+```
+
+## ⚡ Comandos rápidos (Makefile)
+
+```bash
+make test
+make ci
+```
+
 * Commit com confirmação automática e limite de diff personalizado:
 
     ```bash
@@ -214,6 +239,74 @@ Notas importantes sobre o fluxo:
     seshat flow 5 --date="2025-02-20" --yes
     ```
 
+### Pre-Commit Checks (Novo!)
+
+O Seshat detecta automaticamente o tipo de projeto e executa ferramentas de tooling antes do commit:
+
+```bash
+# Executar todas as verificações (lint, test, typecheck)
+seshat commit --check full
+
+# Executar apenas lint
+seshat commit --check lint
+
+# Executar apenas testes
+seshat commit --check test
+
+# Executar apenas typecheck
+seshat commit --check typecheck
+```
+
+**Ferramentas suportadas (TypeScript/JavaScript):**
+
+| Tipo | Ferramentas |
+|------|-------------|
+| Lint | ESLint, Biome |
+| Test | Jest, Vitest |
+| Typecheck | TypeScript (tsc) |
+
+### Code Review via IA (Novo!)
+
+Solicite que a IA analise code smells e problemas de qualidade:
+
+```bash
+# Code review integrado (economia de tokens)
+seshat commit --review
+
+# Combinar com pre-commit checks
+seshat commit --check lint --review
+```
+
+O code review analisa:
+* Code smells (duplicação, métodos longos, naming)
+* Potenciais bugs ou erros de lógica
+* Problemas de segurança
+* Questões de performance
+
+### Configuração por Projeto (.seshat)
+
+Crie um arquivo `.seshat` na raiz do projeto para configurações do time:
+
+```yaml
+# .seshat
+project_type: typescript  # auto-detectado se omitido
+
+checks:
+  lint:
+    enabled: true
+    blocking: true  # bloqueia commit se falhar
+  test:
+    enabled: true
+    blocking: false  # apenas avisa
+  typecheck:
+    enabled: true
+    blocking: true
+
+code_review:
+  enabled: true
+  blocking: false
+```
+
 ### Opções Disponíveis
 
 * **Comando `commit`**:
@@ -223,6 +316,8 @@ Notas importantes sobre o fluxo:
   * `--max-diff`: Sobrescreve o limite máximo do diff para este commit.
   * `--provider`: Especifica o provedor de IA.
   * `--model`: Especifica o modelo de IA.
+  * `--check` ou `-c`: Executa verificações pre-commit (`full`, `lint`, `test`, `typecheck`).
+  * `--review` ou `-r`: Inclui code review via IA.
 
 * **Comando `flow`**:
   * Todas as opções do comando `commit` mais:
