@@ -15,6 +15,24 @@ from pathlib import Path
 import yaml
 
 
+# File extensions for TypeScript/JavaScript projects
+TS_JS_EXTENSIONS = {
+    ".js", ".mjs", ".cjs", ".jsx",  # JavaScript
+    ".ts", ".tsx", ".mts", ".cts",  # TypeScript (excluding .d.ts for lint)
+}
+
+# Extensions that should be type-checked (includes declaration files)
+TYPECHECK_EXTENSIONS = {
+    ".ts", ".tsx", ".mts", ".cts", ".d.ts", ".d.mts", ".d.cts",
+}
+
+# Patterns for test files
+TEST_FILE_PATTERNS = {
+    ".test.ts", ".test.js", ".test.tsx", ".test.jsx",
+    ".spec.ts", ".spec.js", ".spec.tsx", ".spec.jsx",
+}
+
+
 @dataclass
 class ToolCommand:
     """Represents a tooling command configuration."""
@@ -22,6 +40,7 @@ class ToolCommand:
     command: list[str]
     check_type: str  # "lint", "test", "typecheck"
     blocking: bool = True
+    pass_files: bool = False  # Whether to pass file paths as arguments
 
 
 @dataclass
@@ -32,6 +51,8 @@ class ToolResult:
     success: bool
     output: str = ""
     blocking: bool = True
+    skipped: bool = False
+    skip_reason: str = ""
 
 
 @dataclass
@@ -86,31 +107,37 @@ class ToolingRunner:
             name="eslint",
             command=["npx", "eslint"],
             check_type="lint",
+            pass_files=True,
         ),
         "biome": ToolCommand(
             name="biome",
             command=["npx", "@biomejs/biome", "check"],
             check_type="lint",
+            pass_files=True,
         ),
         "prettier": ToolCommand(
             name="prettier",
             command=["npx", "prettier", "--check"],
             check_type="lint",
+            pass_files=True,
         ),
         "tsc": ToolCommand(
             name="tsc",
             command=["npx", "tsc", "--noEmit"],
             check_type="typecheck",
+            pass_files=False,  # tsc should check entire project
         ),
         "jest": ToolCommand(
             name="jest",
             command=["npx", "jest", "--passWithNoTests"],
             check_type="test",
+            pass_files=True,
         ),
         "vitest": ToolCommand(
             name="vitest",
             command=["npx", "vitest", "run"],
             check_type="test",
+            pass_files=False,
         ),
     }
     
@@ -135,6 +162,47 @@ class ToolingRunner:
         
         # Future: Python, Go, Rust detection
         return None
+    
+    def filter_files_for_check(
+        self, 
+        files: list[str], 
+        check_type: str
+    ) -> list[str]:
+        """
+        Filter files based on check type and valid extensions.
+        
+        Args:
+            files: List of file paths
+            check_type: Type of check (lint, test, typecheck)
+            
+        Returns:
+            Filtered list of files appropriate for the check type.
+        """
+        filtered = []
+        
+        for file in files:
+            path = Path(file)
+            suffix = path.suffix.lower()
+            name = path.name.lower()
+            
+            if check_type == "test":
+                # Only include test files
+                if any(name.endswith(pattern) for pattern in TEST_FILE_PATTERNS):
+                    filtered.append(file)
+            elif check_type == "typecheck":
+                # Include TypeScript files
+                if suffix in TYPECHECK_EXTENSIONS:
+                    filtered.append(file)
+            elif check_type == "lint":
+                # Include JS/TS source files
+                if suffix in TS_JS_EXTENSIONS:
+                    filtered.append(file)
+        
+        return filtered
+    
+    def has_relevant_files(self, files: list[str], check_type: str) -> bool:
+        """Check if any files are relevant for the given check type."""
+        return len(self.filter_files_for_check(files, check_type)) > 0
     
     def discover_tools(self) -> ToolingConfig:
         """
@@ -175,14 +243,16 @@ class ToolingRunner:
         # Check for linters
         if "eslint" in deps or "@eslint/js" in deps:
             tool = self._get_tool_config("eslint", "lint")
-            # Use npm script if available
+            # Use npm script if available (don't pass files to npm scripts)
             if "lint" in scripts:
                 tool.command = ["npm", "run", "lint"]
+                tool.pass_files = False
             config.tools["lint"] = tool
         elif "@biomejs/biome" in deps:
             tool = self._get_tool_config("biome", "lint")
             if "lint" in scripts:
                 tool.command = ["npm", "run", "lint"]
+                tool.pass_files = False
             config.tools["lint"] = tool
         
         # Check for TypeScript
@@ -190,8 +260,10 @@ class ToolingRunner:
             tool = self._get_tool_config("tsc", "typecheck")
             if "typecheck" in scripts:
                 tool.command = ["npm", "run", "typecheck"]
+                tool.pass_files = False
             elif "type-check" in scripts:
                 tool.command = ["npm", "run", "type-check"]
+                tool.pass_files = False
             config.tools["typecheck"] = tool
         
         # Check for test runners
@@ -199,11 +271,13 @@ class ToolingRunner:
             tool = self._get_tool_config("jest", "test")
             if "test" in scripts:
                 tool.command = ["npm", "run", "test"]
+                tool.pass_files = False
             config.tools["test"] = tool
         elif "vitest" in deps:
             tool = self._get_tool_config("vitest", "test")
             if "test" in scripts:
                 tool.command = ["npm", "run", "test"]
+                tool.pass_files = False
             config.tools["test"] = tool
         
         return config
@@ -220,6 +294,7 @@ class ToolingRunner:
                 command=list(default.command),
                 check_type=check_type,
                 blocking=default.blocking,
+                pass_files=default.pass_files,
             )
         else:
             tool = ToolCommand(
@@ -236,10 +311,16 @@ class ToolingRunner:
             if "command" in check_config:
                 cmd = check_config["command"]
                 tool.command = cmd.split() if isinstance(cmd, str) else cmd
+                # Commands from .seshat should not pass files
+                tool.pass_files = False
         
         return tool
     
-    def run_tool(self, tool: ToolCommand, files: Optional[list[str]] = None) -> ToolResult:
+    def run_tool(
+        self, 
+        tool: ToolCommand, 
+        files: Optional[list[str]] = None
+    ) -> ToolResult:
         """
         Run a specific tool.
         
@@ -250,9 +331,29 @@ class ToolingRunner:
         Returns:
             ToolResult with success status and output.
         """
-        cmd = list(tool.command)
+        # Filter files based on check type
         if files:
-            cmd.extend(files)
+            relevant_files = self.filter_files_for_check(files, tool.check_type)
+            
+            # Skip if no relevant files
+            if not relevant_files:
+                return ToolResult(
+                    tool=tool.name,
+                    check_type=tool.check_type,
+                    success=True,
+                    output="",
+                    blocking=tool.blocking,
+                    skipped=True,
+                    skip_reason=f"Nenhum arquivo relevante para {tool.check_type}",
+                )
+        else:
+            relevant_files = []
+        
+        cmd = list(tool.command)
+        
+        # Only pass files if tool supports it and we have files
+        if tool.pass_files and relevant_files:
+            cmd.extend(relevant_files)
         
         try:
             result = subprocess.run(
@@ -326,13 +427,20 @@ class ToolingRunner:
     
     def has_blocking_failures(self, results: list[ToolResult]) -> bool:
         """Check if any blocking tool failed."""
-        return any(not r.success and r.blocking for r in results)
+        return any(
+            not r.success and r.blocking and not r.skipped 
+            for r in results
+        )
     
     def format_results(self, results: list[ToolResult], verbose: bool = False) -> str:
         """Format results for display."""
         lines = []
         
         for result in results:
+            if result.skipped:
+                lines.append(f"⏭️ {result.tool} ({result.check_type}) - {result.skip_reason}")
+                continue
+                
             status = "✅" if result.success else ("⚠️" if not result.blocking else "❌")
             lines.append(f"{status} {result.tool} ({result.check_type})")
             
@@ -346,3 +454,4 @@ class ToolingRunner:
                         lines.append(f"   {line}")
         
         return "\n".join(lines)
+
