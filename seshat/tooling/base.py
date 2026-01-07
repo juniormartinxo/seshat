@@ -199,6 +199,24 @@ class BaseLanguageStrategy(ABC):
         """Return default tool configurations for this language."""
         pass
     
+    @abstractmethod
+    def discover_tools(
+        self,
+        path: Path,
+        seshat_config: SeshatConfig,
+    ) -> ToolingConfig:
+        """
+        Discover available tools for the project.
+        
+        Args:
+            path: Path to the project root
+            seshat_config: Configuration from .seshat file
+            
+        Returns:
+            ToolingConfig with discovered tools
+        """
+        pass
+    
     def can_handle(self, path: Path) -> bool:
         """Check if this strategy can handle the project at the given path."""
         for filename in self.detection_files:
