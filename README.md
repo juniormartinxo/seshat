@@ -161,6 +161,40 @@ seshat commit
 Por padrão, o Seshat executa o `git commit` em modo silencioso para manter a saída limpa.  
 Use `--verbose` para ver o diff analisado e a saída completa do Git.
 
+### Inicialização do Projeto (NOVO!)
+
+O comando `init` detecta automaticamente o tipo de projeto e cria um arquivo `.seshat` configurado:
+
+```bash
+# Inicializar configuração no diretório atual
+seshat init
+
+# Inicializar em um caminho específico
+seshat init --path ./meu-projeto
+
+# Sobrescrever arquivo existente
+seshat init --force
+```
+
+O comando irá:
+- 🔍 Detectar o tipo de projeto (Python, TypeScript/JS)
+- 🔧 Descobrir ferramentas de tooling disponíveis (ruff, eslint, pytest, etc.)
+- 📝 Gerar um arquivo `.seshat` com configuração adequada
+
+**Exemplo de saída:**
+
+```
+──────────────────────────────────────────────────────────────
+Seshat Init
+──────────────────────────────────────────────────────────────
+🔍 Detectando configuração do projeto...
+  📦 Tipo de projeto: python
+  🔧 Ferramentas detectadas: lint, typecheck, test
+✓ Arquivo .seshat criado em /path/to/project/.seshat
+📝 Edite o arquivo para customizar as configurações.
+```
+
+
 ### Commits com Data Personalizada
 
 ```bash
@@ -370,6 +404,10 @@ commands:
   * `--max-diff`: Configura o limite máximo do diff.
   * `--warn-diff`: Configura o limite de aviso do diff.
   * `--language`: Configura a linguagem das mensagens (PT-BR, ENG, ESP, FRA, DEU, ITA).
+
+* **Comando `init`**:
+  * `--path` ou `-p`: Caminho para o diretório do projeto (padrão: diretório atual).
+  * `--force` ou `-f`: Sobrescreve arquivo `.seshat` existente.
 
 ## 📚 Tipos de Commit (Conventional Commits)
 
