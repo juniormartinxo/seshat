@@ -32,6 +32,12 @@ dependencies = [
     "openai==1.65.1",
     "google-genai",
     "keyring>=24.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
 ]
 
 [project.urls]
@@ -55,4 +61,3 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-
