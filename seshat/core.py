@@ -2,13 +2,19 @@ import sys
 import subprocess
 import click
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from .providers import get_provider
 from .utils import (
     start_thinking_animation,
     stop_thinking_animation,
     is_valid_conventional_commit,
     normalize_commit_subject_case,
+)
+from .tooling import ToolingRunner, ToolResult
+from .code_review import (
+    parse_code_review_response,
+    format_review_for_display,
+    CodeReviewResult,
 )
 from . import ui
 
@@ -113,8 +119,92 @@ def get_git_diff(skip_confirmation=False, paths: Optional[List[str]] = None):
     return diff
 
 
-def commit_with_ai(provider, model, verbose, skip_confirmation=False, paths: Optional[List[str]] = None):
-    """Fluxo principal de commit"""
+def get_staged_files(paths: Optional[List[str]] = None) -> List[str]:
+    """Get list of staged files."""
+    cmd = ["git", "diff", "--cached", "--name-only"]
+    if paths:
+        cmd.extend(["--"] + paths)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return [f for f in result.stdout.strip().split("\n") if f]
+
+
+def run_pre_commit_checks(
+    check_type: str = "full",
+    paths: Optional[List[str]] = None,
+    verbose: bool = False,
+) -> Tuple[bool, List[ToolResult]]:
+    """
+    Run pre-commit tooling checks.
+    
+    Args:
+        check_type: Type of check: "full", "lint", "test", "typecheck"
+        paths: Optional list of files to check
+        verbose: Show detailed output
+        
+    Returns:
+        Tuple of (success, results)
+    """
+    runner = ToolingRunner()
+    project_type = runner.detect_project_type()
+    
+    if not project_type:
+        ui.warning("Tipo de projeto não detectado. Pulando verificações.")
+        return True, []
+    
+    ui.step(f"Executando verificações ({check_type})", icon="🔍", fg="cyan")
+    
+    # Get staged files if no paths provided
+    files = paths or get_staged_files()
+    results = runner.run_checks(check_type, files)
+    
+    if not results:
+        ui.info("Nenhuma ferramenta de verificação encontrada.")
+        return True, []
+    
+    # Display results
+    output = runner.format_results(results, verbose)
+    click.echo(output)
+    
+    has_blocking_failures = runner.has_blocking_failures(results)
+    
+    if has_blocking_failures:
+        ui.error("Verificações falharam. Commit bloqueado.")
+    else:
+        ui.success("Verificações concluídas.")
+    
+    return not has_blocking_failures, results
+
+
+def commit_with_ai(
+    provider,
+    model,
+    verbose,
+    skip_confirmation=False,
+    paths: Optional[List[str]] = None,
+    check: Optional[str] = None,
+    code_review: bool = False,
+) -> Tuple[str, Optional[CodeReviewResult]]:
+    """
+    Fluxo principal de commit.
+    
+    Args:
+        provider: AI provider name
+        model: AI model name
+        verbose: Show detailed output
+        skip_confirmation: Skip user confirmations
+        paths: Optional list of file paths
+        check: Pre-commit check type ("full", "lint", "test", "typecheck")
+        code_review: Enable AI code review
+        
+    Returns:
+        Tuple of (commit_message, code_review_result)
+    """
+    # Run pre-commit checks if requested
+    if check:
+        success, _ = run_pre_commit_checks(check, paths, verbose)
+        if not success:
+            raise ValueError("Verificações pre-commit falharam.")
+    
     diff = get_git_diff(skip_confirmation, paths=paths)
 
     if verbose:
@@ -135,14 +225,25 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False, paths: Opt
     provider_name = (
         selectedProvider.name if hasattr(selectedProvider, "name") else provider
     )
-    ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
+    
+    msg_suffix = " + review" if code_review else ""
+    ui.step(f"IA: gerando mensagem de commit ({provider_name}{msg_suffix})", icon="🤖", fg="magenta")
 
     # Inicia a animação de "pensando"
     animation = start_thinking_animation()
 
+    review_result = None
     try:
-        commit_msg = selectedProvider.generate_commit_message(diff, model=model)
+        raw_response = selectedProvider.generate_commit_message(
+            diff, model=model, code_review=code_review
+        )
         animation.update("Validando formato...")
+
+        # Parse code review if enabled
+        if code_review:
+            commit_msg, review_result = parse_code_review_response(raw_response)
+        else:
+            commit_msg = raw_response
 
         if verbose:
             click.echo("🤖 AI-generated message:")
@@ -168,11 +269,15 @@ def commit_with_ai(provider, model, verbose, skip_confirmation=False, paths: Opt
                 f"Mensagem recebida: {commit_msg}\n\n{exemplos}"
             )
 
+        # Display code review results if enabled
+        if code_review and review_result:
+            click.echo("\n" + format_review_for_display(review_result, verbose))
+
         animation.update("Finalizando...")
-        return commit_msg
+        return commit_msg, review_result
     finally:
         # Para a animação
         stop_thinking_animation(animation)
 
 
-__all__ = ["commit_with_ai"]
+__all__ = ["commit_with_ai", "run_pre_commit_checks"]
