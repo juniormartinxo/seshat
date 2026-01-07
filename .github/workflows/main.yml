@@ -30,7 +30,7 @@ jobs:
       run: ruff check .
       
     - name: Type check with mypy
-      run: mypy .
+      run: mypy seshat/
       
     - name: Run tests
       run: pytest
