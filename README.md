@@ -187,6 +187,12 @@ seshat flow 3 --yes
 seshat flow 10 --path ./src
 ```
 
+Notas importantes sobre o fluxo:
+
+* Cada arquivo é processado de forma isolada (o commit contém apenas aquele arquivo).
+* Em execuções concorrentes, o Seshat usa um lock por arquivo. Se outro agente já estiver processando o arquivo, ele será **pulado** para evitar bloqueios e gastos desnecessários com IA.
+* O resumo final mostra contagem de **Sucesso**, **Falhas** e **Pulados**.
+
 ### Exemplos Avançados
 
 * Commit com confirmação automática e limite de diff personalizado:
@@ -309,6 +315,10 @@ Se o comando `flow` não for reconhecido, verifique se a instalação está atua
 ```bash
 pip install --upgrade git+https://github.com/juniormartinxo/seshat.git
 ```
+
+**Flow concorrente e arquivos pulados:**
+
+Quando múltiplos agentes/execuções rodam ao mesmo tempo, arquivos em processamento por outro agente serão pulados automaticamente. Isso evita commits cruzados e reduz custos com IA.
 
 ## 🤝 Contribuindo
 
