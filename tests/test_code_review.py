@@ -1,6 +1,5 @@
 """Tests for the code_review module."""
 
-import pytest
 
 from seshat.code_review import (
     parse_code_review_response,
