@@ -82,6 +82,7 @@ def flow(count, provider, model, yes, verbose, date, path):
 
         success_count = 0
         fail_count = 0
+        skipped_count = 0
         
         def confirm_commit(file, msg):
             ui.info(f"Mensagem gerada para {file}:")
@@ -99,7 +100,10 @@ def flow(count, provider, model, yes, verbose, date, path):
                 confirm_callback=confirm_commit
             )
             
-            if result.success:
+            if result.skipped:
+                ui.warning(f"Pulando: {result.message}")
+                skipped_count += 1
+            elif result.success:
                 ui.success(f"Sucesso: {result.message}")
                 success_count += 1
             else:
@@ -107,7 +111,9 @@ def flow(count, provider, model, yes, verbose, date, path):
                 fail_count += 1
 
         ui.hr()
-        ui.info(f"Sucesso: {success_count} | Falhas: {fail_count}")
+        ui.info(
+            f"Sucesso: {success_count} | Falhas: {fail_count} | Pulados: {skipped_count}"
+        )
 
     except Exception as e:
         ui.error(str(e))
