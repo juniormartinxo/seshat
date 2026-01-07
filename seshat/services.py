@@ -82,7 +82,8 @@ class BatchCommitService:
                     provider=self.provider,
                     model=self.model,
                     verbose=verbose,
-                    skip_confirmation=skip_confirm
+                    skip_confirmation=skip_confirm,
+                    paths=[file]
                 )
             except Exception as e:
                 # Se falhar na geração, reset o arquivo
@@ -102,11 +103,12 @@ class BatchCommitService:
                     return ProcessResult(file, False, "Cancelado pelo usuário")
             
             # 4. Commit
-            cmd = ["git", "commit", "-m", commit_msg]
+            cmd = ["git", "commit", "--only", "-m", commit_msg]
             if date:
                 cmd.extend(["--date", date])
             if not verbose:
                 cmd.extend(["--quiet"])
+            cmd.extend(["--", file])
 
             commit_result = subprocess.run(cmd, capture_output=True, text=True)
             if commit_result.returncode != 0:
@@ -148,7 +150,7 @@ class BatchCommitService:
         for line in result.stdout.splitlines():
             if line.startswith("??"):
                 return True
-            if len(line) >= 2 and line[1] != " ":
+            if len(line) >= 2 and (line[0] != " " or line[1] != " "):
                 return True
         return False
 
