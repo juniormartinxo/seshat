@@ -38,6 +38,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - Atualizado `README.md` com documentação de ferramentas Python
 - Atualizado `.seshat.example` com exemplos para Python
 
+### Corrigido
+
+- **CI/Mypy**: Adicionado `types-PyYAML` e `types-requests` às dependências de desenvolvimento
+- **BaseLanguageStrategy**: Adicionado método abstrato `discover_tools` para correta tipagem
+- **Dependências dev**: Sincronizado `requirements-dev.txt` com `pyproject.toml`
+
 ### Compatibilidade
 
 - Mantida compatibilidade retroativa: imports de `seshat.tooling_ts` continuam funcionando
