@@ -14,7 +14,18 @@ from . import ui
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
 @click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
 @click.option("--path", "-p", help="Caminho para buscar arquivos modificados", default=".")
-def flow(count, provider, model, yes, verbose, date, path):
+@click.option(
+    "--check", "-c",
+    type=click.Choice(["full", "lint", "test", "typecheck"]),
+    default=None,
+    help="Run pre-commit checks: full (all), lint, test, or typecheck",
+)
+@click.option(
+    "--review", "-r",
+    is_flag=True,
+    help="Include AI code review in commit message generation",
+)
+def flow(count, provider, model, yes, verbose, date, path, check, review):
     """Processa e comita múltiplos arquivos individualmente.
     
     COUNT é o número máximo de arquivos a processar. Se for 0, processará todos os arquivos modificados.
@@ -97,7 +108,9 @@ def flow(count, provider, model, yes, verbose, date, path):
                 date=date,
                 verbose=verbose,
                 skip_confirm=yes,
-                confirm_callback=confirm_commit
+                confirm_callback=confirm_commit,
+                check=check,
+                code_review=review,
             )
             
             if result.skipped:
