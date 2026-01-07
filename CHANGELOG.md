@@ -9,6 +9,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Adicionado
 
+- **Comando `seshat init`** para inicialização automática de projetos
+  - Detecta tipo de projeto (Python, TypeScript/JS)
+  - Descobre ferramentas de tooling disponíveis
+  - Gera arquivo `.seshat` configurado automaticamente
+  - Suporte a `--force` para sobrescrever configuração existente
+  - Suporte a `--path` para especificar diretório do projeto
 - **Suporte a projetos Python** para verificações pré-commit
   - Detecção automática via `pyproject.toml`, `setup.py`, ou `requirements.txt`
   - Suporte a **Ruff** como linter (preferido sobre Flake8)
@@ -20,6 +26,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - Fácil adição de suporte a novas linguagens (Rust, Go, etc.)
 - **Documentação de arquitetura** em `docs/tooling-architecture.md`
 - **Novos testes** para detecção e filtragem de projetos Python (7 novos testes)
+- **Novos testes** para comando `init` (5 novos testes)
 
 ### Alterado
 
@@ -34,7 +41,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ### Compatibilidade
 
 - Mantida compatibilidade retroativa: imports de `seshat.tooling_ts` continuam funcionando
-- Todos os testes existentes continuam passando (59 testes)
+- Todos os testes existentes continuam passando (64 testes)
 
 ## [1.0.0] - 2025-XX-XX
 
