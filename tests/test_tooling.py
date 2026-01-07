@@ -170,3 +170,39 @@ class TestToolingConfig:
         tools = config.get_tools_for_check("lint")
         assert len(tools) == 1
         assert tools[0].name == "eslint"
+class TestFileFiltering:
+    """Tests for file filtering logic in ToolingRunner."""
+    
+    def test_filter_lint_files(self):
+        """Should filter only lint-relevant files by default."""
+        runner = ToolingRunner()
+        files = ["src/app.ts", "src/style.css", "README.md", "src/utils.js"]
+        filtered = runner.filter_files_for_check(files, "lint")
+        
+        assert "src/app.ts" in filtered
+        assert "src/utils.js" in filtered
+        assert "src/style.css" not in filtered
+        assert "README.md" not in filtered
+
+    def test_filter_test_files(self):
+        """Should filter only test files by default."""
+        runner = ToolingRunner()
+        files = ["src/app.ts", "src/app.test.ts", "src/utils.spec.js", "src/utils.js"]
+        filtered = runner.filter_files_for_check(files, "test")
+        
+        assert "src/app.test.ts" in filtered
+        assert "src/utils.spec.js" in filtered
+        assert "src/app.ts" not in filtered
+        assert "src/utils.js" not in filtered
+
+    def test_filter_custom_extensions(self):
+        """Should use custom extensions when provided."""
+        runner = ToolingRunner()
+        files = ["src/app.ts", "src/app.py", "src/config.yaml"]
+        
+        # Override lint to include .yaml
+        filtered = runner.filter_files_for_check(files, "lint", custom_extensions=[".ts", ".yaml"])
+        
+        assert "src/app.ts" in filtered
+        assert "src/config.yaml" in filtered
+        assert "src/app.py" not in filtered
