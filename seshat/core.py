@@ -199,11 +199,49 @@ def commit_with_ai(
     Returns:
         Tuple of (commit_message, code_review_result)
     """
-    # Run pre-commit checks if requested
+    # Run pre-commit checks if requested via CLI flag
     if check:
         success, _ = run_pre_commit_checks(check, paths, verbose)
         if not success:
             raise ValueError("Verificações pre-commit falharam.")
+    else:
+        # Check if .seshat has checks enabled and run them automatically
+        from .tooling import SeshatConfig
+        seshat_config = SeshatConfig.load()
+        
+        if seshat_config.checks:
+            # Get list of enabled checks from .seshat
+            enabled_checks = [
+                check_name for check_name, check_conf in seshat_config.checks.items()
+                if check_conf.get("enabled", True)
+            ]
+            
+            if enabled_checks:
+                ui.step("Executando verificações configuradas no .seshat", icon="🔍", fg="cyan")
+                
+                runner = ToolingRunner()
+                files = paths or get_staged_files()
+                all_results = []
+                
+                for check_name in enabled_checks:
+                    check_conf = seshat_config.checks[check_name]
+                    is_blocking = check_conf.get("blocking", True)
+                    
+                    results = runner.run_checks(check_name, files)
+                    for r in results:
+                        r.blocking = is_blocking
+                    all_results.extend(results)
+                
+                if all_results:
+                    output = runner.format_results(all_results, verbose)
+                    click.echo(output)
+                    
+                    has_blocking_failures = runner.has_blocking_failures(all_results)
+                    if has_blocking_failures:
+                        ui.error("Verificações falharam. Commit bloqueado.")
+                        raise ValueError("Verificações pre-commit falharam.")
+                    else:
+                        ui.success("Verificações concluídas.")
     
     diff = get_git_diff(skip_confirmation, paths=paths)
 
