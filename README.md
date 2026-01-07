@@ -255,15 +255,30 @@ seshat commit --check test
 
 # Executar apenas typecheck
 seshat commit --check typecheck
+
+# Desabilitar verificações (mesmo que configuradas em .seshat)
+seshat commit --no-check
 ```
 
-**Ferramentas suportadas (TypeScript/JavaScript):**
+**Ferramentas suportadas:**
 
-| Tipo | Ferramentas |
-|------|-------------|
-| Lint | ESLint, Biome |
-| Test | Jest, Vitest |
-| Typecheck | TypeScript (tsc) |
+| Linguagem | Tipo | Ferramentas |
+|-----------|------|-------------|
+| **Python** | Lint | Ruff, Flake8 |
+| **Python** | Test | Pytest |
+| **Python** | Typecheck | Mypy |
+| **TypeScript/JS** | Lint | ESLint, Biome |
+| **TypeScript/JS** | Test | Jest, Vitest |
+| **TypeScript/JS** | Typecheck | TypeScript (tsc) |
+
+**Detecção automática de projeto:**
+
+| Tipo de Projeto | Arquivos de Detecção |
+|-----------------|---------------------|
+| Python | `pyproject.toml`, `setup.py`, `requirements.txt` |
+| TypeScript/JS | `package.json` |
+
+> **Nota:** Quando ambos os tipos de arquivo existem (ex: um backend Python com frontend React), o TypeScript tem prioridade. Use `project_type: python` no `.seshat` para forçar a detecção.
 
 ### Code Review via IA (Novo!)
 
@@ -287,14 +302,23 @@ O code review analisa:
 
 Crie um arquivo `.seshat` na raiz do projeto para configurações do time:
 
+Para começar rápido, copie o exemplo:
+
+```bash
+cp .seshat.example .seshat
+```
+
+Exemplo completo também disponível em `.seshat.example`:
+
 ```yaml
 # .seshat
-project_type: typescript  # auto-detectado se omitido
+project_type: python  # ou typescript, auto-detectado se omitido
 
 checks:
   lint:
     enabled: true
     blocking: true  # bloqueia commit se falhar
+    # command: "ruff check"  # comando customizado
   test:
     enabled: true
     blocking: false  # apenas avisa
@@ -305,7 +329,22 @@ checks:
 code_review:
   enabled: true
   blocking: false
+
+# Comandos customizados por ferramenta
+commands:
+  # Python
+  ruff:
+    command: "ruff check --fix"
+    extensions: [".py"]
+  mypy:
+    command: "mypy --strict"
+  
+  # TypeScript
+  eslint:
+    command: "pnpm eslint"
+    extensions: [".ts", ".tsx"]
 ```
+
 
 ### Opções Disponíveis
 
