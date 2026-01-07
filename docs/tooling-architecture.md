@@ -300,3 +300,160 @@ Testes cobrem:
 - Filtragem de arquivos por tipo de check
 - Override de comandos via .seshat
 - Detecção de falhas bloqueantes
+
+---
+
+## Comando `seshat init`
+
+O comando `init` utiliza a mesma infraestrutura de detecção do sistema de tooling para gerar automaticamente um arquivo `.seshat` configurado.
+
+### Fluxo de Execução
+
+```
+seshat init [--path PATH] [--force]
+    │
+    ├─→ Verifica se .seshat já existe
+    │   └─→ Se existe e não --force: erro
+    │
+    ├─→ ToolingRunner(path)
+    │   └─→ Detecta tipo de projeto
+    │
+    ├─→ Se não detectado:
+    │   └─→ Pergunta ao usuário (interativo)
+    │
+    ├─→ runner.discover_tools()
+    │   └─→ Lista ferramentas disponíveis
+    │
+    └─→ Gera arquivo .seshat
+        ├─→ project_type
+        ├─→ checks (lint, test, typecheck)
+        ├─→ code_review
+        └─→ commands (exemplos comentados)
+```
+
+### Implementação
+
+O comando está em `seshat/cli.py`:
+
+```python
+@cli.command()
+@click.option("--force", "-f", is_flag=True)
+@click.option("--path", "-p", default=".")
+def init(force, path):
+    """Initialize a .seshat configuration file."""
+    from .tooling import ToolingRunner
+    
+    runner = ToolingRunner(path)
+    project_type = runner.detect_project_type()
+    config = runner.discover_tools()
+    
+    # Gera conteúdo baseado no projeto detectado
+    # ...
+```
+
+### Saída Gerada
+
+Para um projeto **Python** com ruff, mypy e pytest:
+
+```yaml
+# Seshat Configuration
+# Generated automatically - customize as needed
+
+project_type: python
+
+# Pre-commit checks
+checks:
+  lint:
+    enabled: true
+    blocking: true
+    # detected: ruff (ruff check .)
+  test:
+    enabled: true
+    blocking: false
+    # detected: pytest (pytest)
+  typecheck:
+    enabled: true
+    blocking: true
+    # detected: mypy (mypy .)
+
+# AI Code Review
+code_review:
+  enabled: false
+  blocking: false
+
+# Custom commands (uncomment and modify as needed)
+# commands:
+#   ruff:
+#     command: "ruff check --fix"
+#     extensions: [".py"]
+#   mypy:
+#     command: "mypy --strict"
+#   pytest:
+#     command: "pytest -v --cov"
+```
+
+Para um projeto **TypeScript** com eslint e tsc:
+
+```yaml
+# Seshat Configuration
+# Generated automatically - customize as needed
+
+project_type: typescript
+
+# Pre-commit checks
+checks:
+  lint:
+    enabled: true
+    blocking: true
+    # detected: eslint (npx eslint)
+  test:
+    enabled: false
+    blocking: false
+  typecheck:
+    enabled: true
+    blocking: true
+    # detected: tsc (npx tsc --noEmit)
+
+# AI Code Review
+code_review:
+  enabled: false
+  blocking: false
+
+# Custom commands (uncomment and modify as needed)
+# commands:
+#   eslint:
+#     command: "pnpm eslint"
+#     extensions: [".ts", ".tsx"]
+#   tsc:
+#     command: "npm run typecheck"
+```
+
+### Opções do Comando
+
+| Opção | Descrição |
+|-------|-----------|
+| `--path`, `-p` | Caminho para o diretório do projeto (padrão: `.`) |
+| `--force`, `-f` | Sobrescreve arquivo `.seshat` existente |
+
+### Testes
+
+Os testes do comando `init` estão em `tests/test_cli.py`:
+
+```python
+class TestInitCommand:
+    def test_init_creates_seshat_file_for_python(self, tmp_path):
+        """Should create .seshat file for Python project."""
+        
+    def test_init_creates_seshat_file_for_typescript(self, tmp_path):
+        """Should create .seshat file for TypeScript project."""
+        
+    def test_init_fails_if_seshat_exists(self, tmp_path):
+        """Should fail if .seshat already exists without --force."""
+        
+    def test_init_force_overwrites_existing(self, tmp_path):
+        """Should overwrite existing .seshat with --force."""
+        
+    def test_init_detects_available_tools(self, tmp_path):
+        """Should show detected tools in output."""
+```
+
