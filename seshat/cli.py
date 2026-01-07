@@ -6,6 +6,7 @@ from .core import commit_with_ai
 from .utils import display_error, get_last_commit_summary
 from .config import load_config, normalize_config, validate_config as validate_conf, save_config
 from .commands import cli
+from .tooling import SeshatConfig
 from . import ui
 # Import for side effects: register flow command.
 from . import flow  # noqa: F401
@@ -76,6 +77,22 @@ def commit(provider, model, yes, verbose, date, max_diff, check, review):
             date = config["DEFAULT_DATE"]
 
         ui.title(f"Seshat Commit · {provider_name} · {language}")
+        
+        # Show .seshat config notification if loaded
+        seshat_config = SeshatConfig.load()
+        if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
+            ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
+            details = []
+            if seshat_config.project_type:
+                details.append(f"projeto: {seshat_config.project_type}")
+            if seshat_config.checks:
+                checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
+                if checks_list:
+                    details.append(f"checks: {', '.join(checks_list)}")
+            if seshat_config.code_review.get("enabled"):
+                details.append("code_review: ativo")
+            if details:
+                ui.step(" | ".join(details), icon=" ")
 
         # Passar parâmetros
         commit_message, review_result = commit_with_ai(
