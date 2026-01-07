@@ -27,6 +27,8 @@ from . import flow  # noqa: F401
     help="Run pre-commit checks: full (all), lint, test, or typecheck",
 )
 @click.option(
+    "--review", "-r",
+    is_flag=True,
     help="Include AI code review in commit message generation",
 )
 @click.option(
