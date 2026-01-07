@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from seshat.tooling import (
+from seshat.tooling_ts import (
     ToolingRunner,
     ToolingConfig,
     ToolCommand,
@@ -26,6 +26,7 @@ class TestSeshatConfig:
         assert config.project_type is None
         assert config.checks == {}
         assert config.code_review == {}
+        assert config.commands == {}
     
     def test_load_with_valid_file(self, tmp_path):
         """Should parse .seshat file correctly."""
@@ -38,12 +39,15 @@ checks:
     blocking: false
 code_review:
   enabled: true
+commands:
+  lint: "npx eslint"
 """)
         config = SeshatConfig.load(str(tmp_path))
         assert config.project_type == "typescript"
         assert config.checks["lint"]["enabled"] is True
         assert config.checks["lint"]["blocking"] is False
         assert config.code_review["enabled"] is True
+        assert config.commands["lint"] == "npx eslint"
 
 
 class TestToolingRunner:
@@ -113,6 +117,29 @@ class TestToolingRunner:
         
         assert "test" in config.tools
         assert config.tools["test"].name == "jest"
+
+    def test_commands_override_lint_tooling(self, tmp_path):
+        """Should apply .seshat commands and extensions for lint."""
+        pkg_json = tmp_path / "package.json"
+        pkg_json.write_text(json.dumps({
+            "name": "test",
+            "devDependencies": {"eslint": "^8.0.0"},
+        }))
+        seshat_file = tmp_path / ".seshat"
+        seshat_file.write_text("""
+commands:
+  eslint:
+    command: "pnpm eslint"
+    extensions: [".ts", ".tsx"]
+""")
+
+        runner = ToolingRunner(str(tmp_path))
+        config = runner.discover_tools()
+
+        tool = config.tools["lint"]
+        assert tool.command == ["pnpm", "eslint"]
+        assert tool.extensions == [".ts", ".tsx"]
+        assert tool.pass_files is True
 
 
 class TestToolResult:
