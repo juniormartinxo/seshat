@@ -42,26 +42,37 @@ class BatchCommitService:
                     date: Optional[str] = None, 
                     verbose: bool = False, 
                     skip_confirm: bool = False,
-                    confirm_callback: Optional[Callable[[str, str], bool]] = None) -> ProcessResult:
+                    confirm_callback: Optional[Callable[[str, str], bool]] = None,
+                    check: Optional[str] = None,
+                    code_review: bool = False) -> ProcessResult:
         """
         Processa um único arquivo: git add -> gera commit -> confirma -> git commit
+        
+        Args:
+            file: Path to file
+            date: Optional commit date
+            verbose: Show detailed output
+            skip_confirm: Skip confirmation prompts
+            confirm_callback: Callback for confirmation
+            check: Pre-commit check type ("full", "lint", "test", "typecheck")
+            code_review: Enable AI code review
         """
         lock_path = None
         try:
             if not self._file_has_changes(file):
                 return ProcessResult(
-                    file, False, "Arquivo não está mais disponível. Pulando.", skipped=True
+                    file, False, "Arquivo não está mais disponível.", skipped=True
                 )
 
             lock_path = self._acquire_lock(file)
             if not lock_path:
                 return ProcessResult(
-                    file, False, "Arquivo em processamento por outro agente. Pulando.", skipped=True
+                    file, False, "Arquivo em processamento por outro agente.", skipped=True
                 )
 
             if not self._file_has_changes(file):
                 return ProcessResult(
-                    file, False, "Arquivo não está mais disponível. Pulando.", skipped=True
+                    file, False, "Arquivo não está mais disponível.", skipped=True
                 )
 
             # 1. Add
@@ -74,12 +85,12 @@ class BatchCommitService:
                     return ProcessResult(
                         file,
                         False,
-                        "Arquivo não encontrado ou já processado. Pulando.",
+                        "Arquivo não encontrado ou já processado.",
                         skipped=True,
                     )
                 if self._is_git_lock_error(output):
                     return ProcessResult(
-                        file, False, "Git ocupado. Pulando.", skipped=True
+                        file, False, "Git ocupado.", skipped=True
                     )
                 return ProcessResult(
                     file, False, f"Erro Git: {output.strip() or 'git add falhou'}"
@@ -88,17 +99,19 @@ class BatchCommitService:
             if not self._has_staged_changes_for_file(file):
                 self._reset_file(file)
                 return ProcessResult(
-                    file, False, "Arquivo sem mudanças stageadas. Pulando.", skipped=True
+                    file, False, "Arquivo sem mudanças stageadas.", skipped=True
                 )
             
             # 2. Generate
             try:
-                commit_msg = commit_with_ai(
+                commit_msg, _ = commit_with_ai(
                     provider=self.provider,
                     model=self.model,
                     verbose=verbose,
                     skip_confirmation=skip_confirm,
-                    paths=[file]
+                    paths=[file],
+                    check=check,
+                    code_review=code_review,
                 )
             except Exception as e:
                 # Se falhar na geração, reset o arquivo
@@ -106,7 +119,7 @@ class BatchCommitService:
                 if "Nenhum arquivo em stage" in message:
                     self._reset_file(file)
                     return ProcessResult(
-                        file, False, "Arquivo não está mais em stage. Pulando.", skipped=True
+                        file, False, "Arquivo não está mais em stage.", skipped=True
                     )
                 self._reset_file(file)
                 return ProcessResult(file, False, f"Erro na geração: {message}")
@@ -131,7 +144,7 @@ class BatchCommitService:
                 if self._is_nothing_to_commit(output) or self._is_git_lock_error(output):
                     self._reset_file(file)
                     return ProcessResult(
-                        file, False, "Nada para commitar. Pulando.", skipped=True
+                        file, False, "Nada para commitar.", skipped=True
                     )
                 self._reset_file(file)
                 return ProcessResult(
