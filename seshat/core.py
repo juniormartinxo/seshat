@@ -10,7 +10,7 @@ from .utils import (
     is_valid_conventional_commit,
     normalize_commit_subject_case,
 )
-from .tooling import ToolingRunner, ToolResult
+from .tooling_ts import ToolingRunner, ToolResult
 from .code_review import (
     parse_code_review_response,
     format_review_for_display,
@@ -183,6 +183,7 @@ def commit_with_ai(
     paths: Optional[List[str]] = None,
     check: Optional[str] = None,
     code_review: bool = False,
+    no_check: bool = False,
 ) -> Tuple[str, Optional[CodeReviewResult]]:
     """
     Fluxo principal de commit.
@@ -195,18 +196,19 @@ def commit_with_ai(
         paths: Optional list of file paths
         check: Pre-commit check type ("full", "lint", "test", "typecheck")
         code_review: Enable AI code review
+        no_check: Disable all pre-commit checks (overrides check and config)
         
     Returns:
         Tuple of (commit_message, code_review_result)
     """
     # Run pre-commit checks if requested via CLI flag
-    if check:
+    if check and not no_check:
         success, _ = run_pre_commit_checks(check, paths, verbose)
         if not success:
             raise ValueError("Verificações pre-commit falharam.")
-    else:
+    elif not no_check:
         # Check if .seshat has checks enabled and run them automatically
-        from .tooling import SeshatConfig
+        from .tooling_ts import SeshatConfig
         seshat_config = SeshatConfig.load()
         
         if seshat_config.checks:
