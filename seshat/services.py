@@ -1,5 +1,7 @@
+import hashlib
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from typing import List, Optional, Callable
 
@@ -20,6 +22,7 @@ class BatchCommitService:
         self.provider = os.getenv("AI_PROVIDER", provider)
         self.model = os.getenv("AI_MODEL", model)
         self.language = os.getenv("COMMIT_LANGUAGE", language)
+        self._lock_ttl_seconds = 30 * 60
 
     def get_modified_files(self, path: str = ".") -> List[str]:
         """Obtém arquivos modificados e não rastreados"""
@@ -43,7 +46,19 @@ class BatchCommitService:
         """
         Processa um único arquivo: git add -> gera commit -> confirma -> git commit
         """
+        lock_path = None
         try:
+            if not self._file_has_changes(file):
+                return ProcessResult(
+                    file, False, "Arquivo não está mais disponível. Pulando.", skipped=True
+                )
+
+            lock_path = self._acquire_lock(file)
+            if not lock_path:
+                return ProcessResult(
+                    file, False, "Arquivo em processamento por outro agente. Pulando.", skipped=True
+                )
+
             if not self._file_has_changes(file):
                 return ProcessResult(
                     file, False, "Arquivo não está mais disponível. Pulando.", skipped=True
@@ -132,6 +147,9 @@ class BatchCommitService:
         except Exception as e:
             self._reset_file(file)
             return ProcessResult(file, False, f"Erro inesperado: {str(e)}")
+        finally:
+            if lock_path:
+                self._release_lock(lock_path)
 
     def _reset_file(self, file: str):
         try:
@@ -178,6 +196,88 @@ class BatchCommitService:
     def _is_nothing_to_commit(self, output: str) -> bool:
         lower = output.lower()
         return "nothing to commit" in lower or "no changes added to commit" in lower
+
+    def _acquire_lock(self, file: str) -> Optional[str]:
+        lock_path = self._lock_path_for_file(file)
+        if not lock_path:
+            return None
+        os.makedirs(os.path.dirname(lock_path), exist_ok=True)
+        for _ in range(2):
+            try:
+                fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                if self._is_lock_stale(lock_path):
+                    try:
+                        os.remove(lock_path)
+                    except FileNotFoundError:
+                        pass
+                    continue
+                return None
+            else:
+                with os.fdopen(fd, "w") as handle:
+                    handle.write(f"{os.getpid()}\n{int(time.time())}\n{file}\n")
+                return lock_path
+        return None
+
+    def _release_lock(self, lock_path: str):
+        try:
+            os.remove(lock_path)
+        except FileNotFoundError:
+            pass
+
+    def _lock_path_for_file(self, file: str) -> Optional[str]:
+        git_dir = self._get_git_dir(file)
+        if not git_dir:
+            return None
+        lock_dir = os.path.join(git_dir, "seshat-flow-locks")
+        digest = hashlib.sha1(file.encode("utf-8")).hexdigest()
+        return os.path.join(lock_dir, f"{digest}.lock")
+
+    def _get_git_dir(self, file: str) -> Optional[str]:
+        base_dir = os.path.dirname(file) or "."
+        result = subprocess.run(
+            ["git", "-C", base_dir, "rev-parse", "--git-dir"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return None
+        git_dir = result.stdout.strip()
+        if not os.path.isabs(git_dir):
+            git_dir = os.path.normpath(os.path.join(base_dir, git_dir))
+        return git_dir
+
+    def _is_lock_stale(self, lock_path: str) -> bool:
+        try:
+            stat_info = os.stat(lock_path)
+        except FileNotFoundError:
+            return True
+
+        if time.time() - stat_info.st_mtime > self._lock_ttl_seconds:
+            return True
+
+        try:
+            with open(lock_path, "r") as handle:
+                pid_line = handle.readline().strip()
+            pid = int(pid_line)
+        except Exception:
+            return True
+
+        return not self._is_pid_running(pid)
+
+    def _is_pid_running(self, pid: int) -> bool:
+        if pid <= 0:
+            return False
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+        else:
+            return True
 
     def _run_git(self, args: List[str], path: str) -> str:
         cmd = ["git", "-C", path] + args
