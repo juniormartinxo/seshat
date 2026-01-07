@@ -4,7 +4,14 @@ services:
     volumes:
       - .:/app
     command: >
-      sh -c "pip install -e . &&
+      sh -c "pip install -e '.[dev]' &&
              echo 'Running ruff...' && ruff check . &&
              echo 'Running mypy...' && mypy . &&
-             echo 'Running pytest...' && pytest"
+             echo 'Running pytest...' && pytest -q"
+  tests:
+    build: .
+    volumes:
+      - .:/app
+    command: >
+      sh -c "pip install -e '.[dev]' &&
+             echo 'Running pytest...' && pytest -q"
