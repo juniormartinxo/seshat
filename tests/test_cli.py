@@ -107,6 +107,10 @@ class TestInitCommand:
         content = (tmp_path / ".seshat").read_text()
         assert "project_type: python" in content
         assert "checks:" in content
+        assert "commit:" in content
+        assert "language:" in content
+        assert "max_diff_size:" in content
+        assert "warn_diff_size:" in content
     
     def test_init_creates_seshat_file_for_typescript(self, tmp_path):
         """Should create .seshat file for TypeScript project."""
@@ -122,6 +126,10 @@ class TestInitCommand:
         
         content = (tmp_path / ".seshat").read_text()
         assert "project_type: typescript" in content
+        assert "\n  extensions:" in content
+        assert '".ts"' in content
+        assert '".tsx"' in content
+        assert '".js"' in content
     
     def test_init_fails_if_seshat_exists(self, tmp_path):
         """Should fail if .seshat already exists without --force."""
@@ -148,6 +156,20 @@ class TestInitCommand:
         content = (tmp_path / ".seshat").read_text()
         assert "project_type: python" in content
         assert "old config" not in content
+
+    def test_init_does_not_overwrite_prompt_file(self, tmp_path):
+        """Should not overwrite existing seshat-review.md."""
+        runner = CliRunner()
+
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        (tmp_path / ".seshat").write_text("old config")
+        prompt_file = tmp_path / "seshat-review.md"
+        prompt_file.write_text("custom prompt")
+
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"])
+
+        assert result.exit_code == 0
+        assert prompt_file.read_text() == "custom prompt"
     
     def test_init_detects_available_tools(self, tmp_path, monkeypatch):
         """Should show detected tools in output."""
@@ -160,4 +182,3 @@ class TestInitCommand:
         assert result.exit_code == 0
         # Should mention detected tools if available
         assert "Ferramentas detectadas" in result.output or "checks:" in result.output
-
