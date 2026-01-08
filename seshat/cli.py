@@ -2,6 +2,7 @@ import os
 import click
 import sys
 import subprocess
+from pathlib import Path
 from .core import commit_with_ai
 from .utils import display_error, get_last_commit_summary
 from .config import load_config, normalize_config, validate_config as validate_conf, save_config
@@ -44,6 +45,19 @@ from . import flow  # noqa: F401
 def commit(provider, model, yes, verbose, date, max_diff, check, review, no_review, no_check):
     """Generate and execute AI-powered commits"""
     try:
+        # Verificar se .seshat existe (obrigatório)
+        if not Path(".seshat").exists():
+            ui.error("Arquivo .seshat não encontrado.")
+            ui.info("O Seshat requer um arquivo de configuração .seshat no projeto.")
+            
+            if click.confirm("\nDeseja criar um agora? (roda 'seshat init')"):
+                # Invoca o comando init
+                ctx = click.get_current_context()
+                ctx.invoke(init)
+                ui.info("Agora você pode rodar 'seshat commit' novamente!", icon="✨")
+            
+            sys.exit(1)
+        
         # Carrega configuração unificada
         config = load_config()
         
@@ -322,8 +336,9 @@ def init(force, path):
         "",
         "# AI Code Review",
         "code_review:",
-        "  enabled: false",
-        "  blocking: false",
+        "  enabled: true",
+        "  blocking: true",
+        "  prompt: seshat-review.md  # Edite este arquivo!",
         "",
         "# Custom commands (uncomment and modify as needed)",
         "# commands:",
@@ -361,7 +376,19 @@ def init(force, path):
             f.write(content)
         
         ui.success(f"Arquivo .seshat criado em {seshat_file}")
-        ui.info("Edite o arquivo para customizar as configurações.", icon="📝")
+        
+        # Generate seshat-review.md with example prompt
+        from .code_review import get_example_prompt_for_language
+        
+        prompt_file = project_path / "seshat-review.md"
+        prompt_content = get_example_prompt_for_language(project_type)
+        
+        with open(prompt_file, "w", encoding="utf-8") as f:
+            f.write(prompt_content)
+        
+        ui.success("Arquivo seshat-review.md criado (EXEMPLO - edite conforme seu projeto!)")
+        ui.warning("O arquivo seshat-review.md é apenas um exemplo.")
+        ui.info("Edite-o para atender às necessidades do seu projeto.", icon="📝")
         
         # Show summary
         ui.hr()
