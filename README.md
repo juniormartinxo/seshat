@@ -339,16 +339,29 @@ seshat commit --check lint --review
 
 O code review analisa:
 * Code smells (duplicação, métodos longos, naming)
-* Potenciais bugs ou erros de lógica
-* Problemas de segurança
+* Potenciais bugs ou erros de lógica (**Bloqueia o commit**)
+* Problemas de segurança (**Bloqueia o commit**)
 * Questões de performance
+* Manutenibilidade
+
+**Filtragem Automática:** Para economizar tokens e tempo, o review é realizado apenas em arquivos de código relevantes (ex: `.ts`, `.py`, `.go`). Você pode customizar essas extensões no seu arquivo `.seshat`.
+
+**Novo Fluxo de Bloqueio:**
+1. Primeiro a IA analisa o código.
+2. Se encontrar `[BUG]` ou `[SECURITY]`, o commit é **bloqueado imediatamente**.
+3. Se encontrar apenas avisos (SMELL, PERF, STYLE), o usuário é questionado se deseja prosseguir.
+4. Somente após a aprovação do review, a mensagem de commit é gerada.
 
 ### Configuração por Projeto (.seshat)
 
-Crie um arquivo `.seshat` na raiz do projeto para configurações do time:
+O arquivo `.seshat` é **obrigatório** para a execução do commit. Caso não exista, o comando `seshat commit` oferecerá a criação automática via `seshat init`.
 
-Para começar rápido, copie o exemplo:
+Para começar rápido, você pode rodar:
+```bash
+seshat init
+```
 
+Ou copiar o exemplo:
 ```bash
 cp .seshat.example .seshat
 ```
@@ -373,7 +386,9 @@ checks:
 
 code_review:
   enabled: true
-  blocking: false
+  blocking: true   # bloqueia se encontrar BUG ou SECURITY
+  prompt: seshat-review.md # arquivo customizado de prompt (opcional)
+  extensions: [".ts", ".tsx", ".js"]  # extensões para revisar (opcional)
 
 # Comandos customizados por ferramenta
 commands:
