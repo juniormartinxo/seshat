@@ -43,7 +43,38 @@ class CodeReviewResult:
         )
 
 
-# Additional system prompt for code review (appended to existing commit prompt)
+# Dedicated prompt for standalone code review (separate from commit generation)
+CODE_REVIEW_PROMPT = """
+You are a Principal Software Engineer and System Architect.
+Your specialty is high-scale React architectures and Next.js (App Router) optimization.
+You have zero tolerance for technical debt, "clever" hacks that break at scale, or violations of modern design patterns.
+
+Objective: Perform a critical audit of the provided code diff.
+Your goal is to identify bottlenecks, security risks, and maintenance "time bombs".
+
+Audit Checklist:
+- Component Architecture: Misplacement of 'use client'. Detect logic that should be handled by Server Components to reduce bundle size.
+- State Management & Hooks: Identify stale closures, missing dependencies in useEffect/useCallback, and redundant state that causes re-render loops.
+- TypeScript Integrity: Flag any usage, weak interfaces, and missing exhaustive checks in discriminated unions.
+- Performance: Locate O(n^2) operations inside the render cycle and lack of memoization on expensive computational branches.
+- Next.js Paradigms: Check for proper use of Server Actions, Suspense boundaries, and Caching strategies (tags/revalidation).
+
+Tone: Direct, technical, and uncompromising. If the code is problematic, explain why from a memory and performance perspective.
+
+CRITICAL: Format your response EXACTLY as below (required for parsing):
+
+If issues found, list each as:
+- [TYPE] Description | Suggestion
+
+Where TYPE must be one of: SMELL, BUG, STYLE, PERF, SECURITY
+
+If no significant issues found, respond with ONLY:
+OK
+
+Do NOT include any commit message. Only provide the code review.
+"""
+
+# Legacy: Additional system prompt for combined code review (appended to existing commit prompt)
 CODE_REVIEW_PROMPT_ADDON = """
 
 Additionally, analyze the code for potential issues and include a brief review section 
@@ -52,17 +83,10 @@ at the end of your response in the following format:
 ---CODE_REVIEW---
 [If there are code quality issues, list them here. If the code looks good, write "OK"]
 
-Issues to look for:
-- Code smells (duplicated code, long methods, unclear naming)
-- Potential bugs or logic errors
-- Security concerns
-- Performance issues
-- Missing error handling
-
-Format each issue as:
+CRITICAL: Format each issue EXACTLY as below (required for parsing):
 - [TYPE] Description | Suggestion
 
-Where TYPE is one of: SMELL, BUG, STYLE, PERF, SECURITY
+Where TYPE must be one of: SMELL, BUG, STYLE, PERF, SECURITY
 
 If no significant issues found, just write:
 OK - Code looks clean.
@@ -186,3 +210,85 @@ def format_review_for_display(result: CodeReviewResult, verbose: bool = False) -
 def get_code_review_prompt_addon() -> str:
     """Get the prompt addon for code review."""
     return CODE_REVIEW_PROMPT_ADDON
+
+
+def get_code_review_prompt() -> str:
+    """Get the dedicated prompt for standalone code review."""
+    return CODE_REVIEW_PROMPT
+
+
+def parse_standalone_review(response: str) -> CodeReviewResult:
+    """
+    Parse AI response from standalone code review (no commit message).
+    
+    Args:
+        response: AI response containing only code review.
+        
+    Returns:
+        CodeReviewResult
+    """
+    response = response.strip()
+    
+    # Check for OK response (no issues)
+    if response.upper().startswith("OK") or response.upper() == "OK":
+        return CodeReviewResult(has_issues=False, summary="Code looks clean.")
+    
+    # Parse issues
+    issues = []
+    type_mapping = {
+        "SMELL": "code_smell",
+        "BUG": "bug",
+        "STYLE": "style",
+        "PERF": "performance",
+        "SECURITY": "security",
+    }
+    
+    for line in response.split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        
+        # Try to parse issue format: - [TYPE] Description | Suggestion
+        if line.startswith("-"):
+            line = line[1:].strip()
+        
+        issue_type = "code_smell"
+        severity = "warning"
+        description = line
+        suggestion = ""
+        
+        # Extract type
+        for marker_type, mapped_type in type_mapping.items():
+            if f"[{marker_type}]" in line.upper():
+                issue_type = mapped_type
+                # Remove the type marker
+                description = line[line.upper().find("]") + 1:].strip() if "]" in line else line
+                break
+        
+        # Set severity based on type
+        if issue_type in ("bug", "security"):
+            severity = "error"
+        elif issue_type == "code_smell":
+            severity = "warning"
+        else:
+            severity = "info"
+        
+        # Extract suggestion if present
+        if "|" in description:
+            parts = description.split("|", 1)
+            description = parts[0].strip()
+            suggestion = parts[1].strip()
+        
+        if description and len(description) > 3:
+            issues.append(CodeIssue(
+                type=issue_type,
+                description=description,
+                suggestion=suggestion,
+                severity=severity,
+            ))
+    
+    return CodeReviewResult(
+        has_issues=len(issues) > 0,
+        issues=issues,
+        summary=f"Found {len(issues)} issue(s)" if issues else "Code looks clean.",
+    )
