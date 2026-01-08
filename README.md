@@ -372,6 +372,13 @@ Exemplo completo também disponível em `.seshat.example`:
 # .seshat
 project_type: python  # ou typescript, auto-detectado se omitido
 
+commit:
+  language: PT-BR
+  max_diff_size: 3000
+  warn_diff_size: 2500
+  # provider: openai
+  # model: gpt-4-turbo-preview
+
 checks:
   lint:
     enabled: true
