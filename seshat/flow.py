@@ -3,7 +3,7 @@ import click
 import sys
 from .services import BatchCommitService
 from .commands import cli
-from .config import load_config, normalize_config, validate_config
+from .config import load_config, normalize_config, validate_config, apply_project_overrides
 from .tooling_ts import SeshatConfig
 from . import ui
 
@@ -38,7 +38,9 @@ def flow(count, provider, model, yes, verbose, date, path, check, review, no_che
     """
     try:
         # Carrega configuração
+        seshat_config = SeshatConfig.load(path)
         config = load_config()
+        config = apply_project_overrides(config, seshat_config.commit)
         if provider:
             config["AI_PROVIDER"] = provider
         if model:
@@ -90,7 +92,6 @@ def flow(count, provider, model, yes, verbose, date, path, check, review, no_che
         ui.title(f"Seshat Flow · {service.provider} · {service.language}")
         
         # Show .seshat config notification if loaded
-        seshat_config = SeshatConfig.load(path)
         if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
             ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
             details = []
