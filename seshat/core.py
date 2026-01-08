@@ -15,6 +15,7 @@ from .code_review import (
     parse_standalone_review,
     format_review_for_display,
     CodeReviewResult,
+    get_review_prompt,
 )
 from . import ui
 
@@ -283,9 +284,18 @@ def commit_with_ai(
     if code_review:
         ui.step(f"IA: executando code review ({provider_name})", icon="🔍", fg="cyan")
         
+        # Load custom prompt if configured
+        custom_prompt_path = seshat_config.code_review.get("prompt")
+        custom_prompt = get_review_prompt(
+            project_type=seshat_config.project_type,
+            custom_path=custom_prompt_path,
+        )
+        
         animation = start_thinking_animation()
         try:
-            raw_review = selectedProvider.generate_code_review(diff, model=model)
+            raw_review = selectedProvider.generate_code_review(
+                diff, model=model, custom_prompt=custom_prompt
+            )
             animation.update("Analisando resultado...")
             review_result = parse_standalone_review(raw_review)
         finally:
