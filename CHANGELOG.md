@@ -9,24 +9,23 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Adicionado
 
-- **Comando `seshat init`** para inicialização automática de projetos
-  - Detecta tipo de projeto (Python, TypeScript/JS)
-  - Descobre ferramentas de tooling disponíveis
-  - Gera arquivo `.seshat` configurado automaticamente
-  - Suporte a `--force` para sobrescrever configuração existente
-  - Suporte a `--path` para especificar diretório do projeto
-- **Suporte a projetos Python** para verificações pré-commit
-  - Detecção automática via `pyproject.toml`, `setup.py`, ou `requirements.txt`
-  - Suporte a **Ruff** como linter (preferido sobre Flake8)
-  - Suporte a **Flake8** como linter alternativo
-  - Suporte a **Mypy** para verificação de tipos
-  - Suporte a **Pytest** para execução de testes
-- **Arquitetura extensível** com Strategy Pattern
-  - `BaseLanguageStrategy` como classe base abstrata
-  - Fácil adição de suporte a novas linguagens (Rust, Go, etc.)
-- **Documentação de arquitetura** em `docs/tooling-architecture.md`
-- **Novos testes** para detecção e filtragem de projetos Python (7 novos testes)
-- **Novos testes** para comando `init` (5 novos testes)
+- **Novo fluxo de Code Review (Bloqueante)**
+  - Agora o code review é um passo separado da geração do commit
+  - Bloqueia automaticamente se encontrar problemas críticos (`BUG` ou `SECURITY`)
+  - Solicita confirmação do usuário para problemas de severidade inferior (`SMELL`, `PERF`, etc.)
+  - Prompt especializado como Principal Software Engineer para auditorias críticas
+- **Prompts de Code Review Customizáveis**
+  - O usuário pode definir seu próprio prompt no arquivo `.seshat` via opção `prompt`
+  - `seshat init` agora gera um arquivo de prompt de exemplo (`seshat-review.md`)
+  - Prompts padrão especializados por linguagem (TypeScript/React, Python, Genérico)
+- **Configuração Obrigatória**
+  - O arquivo `.seshat` agora é obrigatório para commits, garantindo consistência no time
+  - Prompt interativo inteligente oferece criação via `seshat init` caso o arquivo falte
+- **Filtragem de Extensões no Code Review**
+  - Agora é possível limitar quais arquivos a IA deve revisar via opção `extensions` no `.seshat`
+  - Evita gasto desnecessário de tokens analisando arquivos não determinísticos (logs, imagens, docs)
+  - Extensões padrão configuradas por tipo de projeto (Python, TypeScript, etc.)
+- **Novos testes** para o fluxo bloqueante de code review, prompts customizáveis e filtragem de extensões
 
 ### Alterado
 
