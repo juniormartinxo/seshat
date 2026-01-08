@@ -5,6 +5,14 @@
 # Supported: typescript, python
 # project_type: typescript
 
+# Commit defaults (project-level overrides)
+commit:
+  language: PT-BR
+  max_diff_size: 3000
+  warn_diff_size: 2500
+  # provider: openai
+  # model: gpt-4-turbo-preview
+
 # Pre-commit checks configuration
 checks:
   lint:
