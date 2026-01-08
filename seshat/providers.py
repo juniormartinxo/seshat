@@ -5,6 +5,7 @@ from functools import wraps
 from anthropic import Anthropic
 from openai import OpenAI
 from google import genai
+from typing import Optional
 
 from .utils import (
     clean_think_tags,
@@ -115,7 +116,7 @@ class BaseProvider:
             prompt += get_code_review_prompt_addon()
         return prompt
     
-    def _get_review_prompt(self, custom_prompt: str = None) -> str:
+    def _get_review_prompt(self, custom_prompt: Optional[str] = None) -> str:
         """Get code review prompt (custom or default)."""
         if custom_prompt:
             return custom_prompt
