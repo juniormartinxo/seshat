@@ -25,6 +25,9 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - Agora é possível limitar quais arquivos a IA deve revisar via opção `extensions` no `.seshat`
   - Evita gasto desnecessário de tokens analisando arquivos não determinísticos (logs, imagens, docs)
   - Extensões padrão configuradas por tipo de projeto (Python, TypeScript, etc.)
+- **Defaults de Commit por Projeto**
+  - `.seshat` agora permite definir `commit.language`, `commit.max_diff_size` e `commit.warn_diff_size`
+  - `commit.provider` e `commit.model` opcionais para padronizar provedor/modelo no time
 - **Novos testes** para o fluxo bloqueante de code review, prompts customizáveis e filtragem de extensões
 
 ### Alterado
