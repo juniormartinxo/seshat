@@ -115,8 +115,10 @@ class BaseProvider:
             prompt += get_code_review_prompt_addon()
         return prompt
     
-    def _get_review_prompt(self) -> str:
-        """Get dedicated code review prompt."""
+    def _get_review_prompt(self, custom_prompt: str = None) -> str:
+        """Get code review prompt (custom or default)."""
+        if custom_prompt:
+            return custom_prompt
         return get_code_review_prompt()
 
 
@@ -156,7 +158,8 @@ class DeepSeekProvider(BaseProvider):
         self.validate_env()
         
         client = _openai_client(self.api_key, base_url=self.base_url)
-        system_prompt = self._get_review_prompt()
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
         
         response = client.chat.completions.create(
             model=self.model,
@@ -204,7 +207,8 @@ class ClaudeProvider(BaseProvider):
         self.validate_env()
         
         client = _anthropic_client(self.api_key)
-        system_prompt = self._get_review_prompt()
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
         
         response = client.messages.create(
             model=self.model,
@@ -251,7 +255,8 @@ class OpenAIProvider(BaseProvider):
         self.validate_env()
         
         client = _openai_client(self.api_key)
-        system_prompt = self._get_review_prompt()
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
         
         response = client.chat.completions.create(
             model=self.model,
@@ -296,7 +301,8 @@ class GeminiProvider(BaseProvider):
         self.validate_env()
         
         client = _gemini_client(self.api_key)
-        system_prompt = self._get_review_prompt()
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
         
         prompt = f"{system_prompt}\n\nDiff:\n{diff}"
         
@@ -354,7 +360,8 @@ class OllamaProvider(BaseProvider):
     def generate_code_review(self, diff, **kwargs):
         self.check_ollama_running()
         
-        system_prompt = self._get_review_prompt()
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
         prompt = f"{system_prompt}\n\nDiff:\n{diff}\n\nCode Review:"
         
         payload = {
