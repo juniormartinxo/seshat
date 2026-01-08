@@ -147,3 +147,48 @@ def save_config(updates):
         json.dump(current_config, f, indent=4)
         
     return current_config
+
+
+def apply_project_overrides(config, commit_overrides):
+    """Apply per-project commit overrides from .seshat."""
+    if not isinstance(commit_overrides, dict):
+        return config
+
+    def _set_if_value(key, value, transform=None):
+        if value is None:
+            return
+        if isinstance(value, str) and not value.strip():
+            return
+        if transform:
+            value = transform(value)
+        config[key] = value
+
+    def _coerce_int(value, key):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} deve ser um número inteiro")
+
+    _set_if_value(
+        "COMMIT_LANGUAGE",
+        commit_overrides.get("language"),
+        lambda v: str(v).upper(),
+    )
+    _set_if_value(
+        "MAX_DIFF_SIZE",
+        commit_overrides.get("max_diff_size"),
+        lambda v: _coerce_int(v, "max_diff_size"),
+    )
+    _set_if_value(
+        "WARN_DIFF_SIZE",
+        commit_overrides.get("warn_diff_size"),
+        lambda v: _coerce_int(v, "warn_diff_size"),
+    )
+    _set_if_value(
+        "AI_PROVIDER",
+        commit_overrides.get("provider"),
+        lambda v: str(v).lower(),
+    )
+    _set_if_value("AI_MODEL", commit_overrides.get("model"), str)
+
+    return config
