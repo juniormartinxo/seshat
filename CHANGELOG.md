@@ -39,6 +39,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Corrigido
 
+- **Typing**: Corrigido erro do mypy em `providers.py` sobre argumento opcional padrão
+- **CLI**: Atualizado comando `init` para incluir configuração de `extensions` comentada no `.seshat`
 - **CI/Mypy**: Adicionado `types-PyYAML` e `types-requests` às dependências de desenvolvimento
 - **BaseLanguageStrategy**: Adicionado método abstrato `discover_tools` para correta tipagem
 - **Dependências dev**: Sincronizado `requirements-dev.txt` com `pyproject.toml`
