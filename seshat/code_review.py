@@ -7,7 +7,8 @@ integrated with the existing AI providers.
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+import re
 
 
 @dataclass
@@ -189,6 +190,81 @@ EXAMPLE_PROMPTS = {
     "python": EXAMPLE_PROMPT_HEADER + PYTHON_PROMPT,
     "generic": EXAMPLE_PROMPT_HEADER + GENERIC_PROMPT,
 }
+
+# Default extensions for code review by language
+DEFAULT_REVIEW_EXTENSIONS = {
+    "typescript": [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"],
+    "python": [".py", ".pyi"],
+    "generic": [
+        ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs",
+        ".py", ".pyi",
+        ".go", ".rs", ".java", ".kt", ".swift",
+        ".c", ".cpp", ".h", ".hpp",
+        ".rb", ".php",
+    ],
+}
+
+
+def get_default_extensions(project_type: Optional[str] = None) -> List[str]:
+    """Get default extensions for code review based on project type."""
+    if project_type and project_type in DEFAULT_REVIEW_EXTENSIONS:
+        return DEFAULT_REVIEW_EXTENSIONS[project_type]
+    return DEFAULT_REVIEW_EXTENSIONS["generic"]
+
+
+def filter_diff_by_extensions(
+    diff: str,
+    extensions: Optional[List[str]] = None,
+    project_type: Optional[str] = None,
+) -> str:
+    """
+    Filter a git diff to only include files with specified extensions.
+    
+    Args:
+        diff: Full git diff string
+        extensions: List of extensions to include (e.g., [".ts", ".tsx"])
+        project_type: Project type for default extensions if none specified
+        
+    Returns:
+        Filtered diff containing only files with matching extensions
+    """
+    if not diff:
+        return diff
+    
+    # Get extensions to use
+    if extensions:
+        # Normalize extensions (ensure they start with .)
+        exts = [e if e.startswith(".") else f".{e}" for e in extensions]
+    else:
+        exts = get_default_extensions(project_type)
+    
+    # Convert to lowercase for case-insensitive matching
+    exts = [e.lower() for e in exts]
+    
+    # Split diff into file sections
+    # Each section starts with "diff --git a/..."
+    file_pattern = re.compile(r'^diff --git a/(.+?) b/(.+?)$', re.MULTILINE)
+    
+    # Find all file boundaries
+    matches = list(file_pattern.finditer(diff))
+    
+    if not matches:
+        return diff  # No valid diff sections found
+    
+    filtered_sections = []
+    
+    for i, match in enumerate(matches):
+        file_path = match.group(2)  # Use the "b/..." path (new file)
+        file_ext = Path(file_path).suffix.lower()
+        
+        # Check if extension matches
+        if file_ext in exts:
+            # Get the section content
+            start = match.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(diff)
+            filtered_sections.append(diff[start:end])
+    
+    return "".join(filtered_sections)
 
 
 def get_example_prompt_for_language(project_type: Optional[str] = None) -> str:
