@@ -29,14 +29,19 @@ from . import flow  # noqa: F401
 @click.option(
     "--review", "-r",
     is_flag=True,
-    help="Include AI code review in commit message generation",
+    help="Enable AI code review (also enabled via .seshat code_review.enabled)",
+)
+@click.option(
+    "--no-review",
+    is_flag=True,
+    help="Disable AI code review (overrides .seshat)",
 )
 @click.option(
     "--no-check",
     is_flag=True,
     help="Disable all pre-commit checks",
 )
-def commit(provider, model, yes, verbose, date, max_diff, check, review, no_check):
+def commit(provider, model, yes, verbose, date, max_diff, check, review, no_review, no_check):
     """Generate and execute AI-powered commits"""
     try:
         # Carrega configuração unificada
@@ -107,6 +112,7 @@ def commit(provider, model, yes, verbose, date, max_diff, check, review, no_chec
             skip_confirmation=yes,
             check=check,
             code_review=review,
+            no_review=no_review,
             no_check=no_check,
         )
 
