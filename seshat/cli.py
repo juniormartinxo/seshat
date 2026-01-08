@@ -5,7 +5,13 @@ import subprocess
 from pathlib import Path
 from .core import commit_with_ai
 from .utils import display_error, get_last_commit_summary
-from .config import load_config, normalize_config, validate_config as validate_conf, save_config
+from .config import (
+    load_config,
+    normalize_config,
+    validate_config as validate_conf,
+    save_config,
+    apply_project_overrides,
+)
 from .commands import cli
 from .tooling_ts import SeshatConfig
 from . import ui
@@ -59,7 +65,9 @@ def commit(provider, model, yes, verbose, date, max_diff, check, review, no_revi
             sys.exit(1)
         
         # Carrega configuração unificada
+        seshat_config = SeshatConfig.load()
         config = load_config()
+        config = apply_project_overrides(config, seshat_config.commit)
         
         # Sobrescreve com flags da CLI se fornecidas
         if provider:
@@ -103,7 +111,6 @@ def commit(provider, model, yes, verbose, date, max_diff, check, review, no_revi
         ui.title(f"Seshat Commit · {provider_name} · {language}")
         
         # Show .seshat config notification if loaded
-        seshat_config = SeshatConfig.load()
         if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
             ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
             details = []
@@ -304,6 +311,14 @@ def init(force, path):
         ui.step(f"Ferramentas detectadas: {', '.join(discovered_tools)}", icon="🔧")
     else:
         ui.warning("Nenhuma ferramenta de tooling detectada.")
+
+    # Defaults for commit-related config
+    config_defaults = load_config()
+    commit_language = config_defaults.get("COMMIT_LANGUAGE", "PT-BR")
+    max_diff_size = config_defaults.get("MAX_DIFF_SIZE", 3000)
+    warn_diff_size = config_defaults.get("WARN_DIFF_SIZE", 2500)
+    provider_hint = config_defaults.get("AI_PROVIDER") or "openai"
+    model_hint = config_defaults.get("AI_MODEL") or "gpt-4-turbo-preview"
     
     # Build the .seshat content
     lines = [
@@ -311,6 +326,14 @@ def init(force, path):
         "# Generated automatically - customize as needed",
         "",
         f"project_type: {project_type}",
+        "",
+        "# Commit defaults (equivalente a COMMIT_LANGUAGE, MAX_DIFF_SIZE, WARN_DIFF_SIZE)",
+        "commit:",
+        f"  language: {commit_language}",
+        f"  max_diff_size: {max_diff_size}",
+        f"  warn_diff_size: {warn_diff_size}",
+        f"  # provider: {provider_hint}",
+        f"  # model: {model_hint}",
         "",
         "# Pre-commit checks",
         "checks:",
@@ -345,8 +368,8 @@ def init(force, path):
     from .code_review import get_default_extensions
     default_extensions = get_default_extensions(project_type)
     exts_str = str(default_extensions).replace("'", '"')
-    
-    lines.append(f"  # extensions: {exts_str}  # extensões padrão detectadas")
+
+    lines.append(f"  extensions: {exts_str}  # extensões padrão detectadas")
     
     lines.extend([
         "",
@@ -387,18 +410,20 @@ def init(force, path):
         
         ui.success(f"Arquivo .seshat criado em {seshat_file}")
         
-        # Generate seshat-review.md with example prompt
+        # Generate seshat-review.md with example prompt (if not already present)
         from .code_review import get_example_prompt_for_language
-        
+
         prompt_file = project_path / "seshat-review.md"
-        prompt_content = get_example_prompt_for_language(project_type)
-        
-        with open(prompt_file, "w", encoding="utf-8") as f:
-            f.write(prompt_content)
-        
-        ui.success("Arquivo seshat-review.md criado (EXEMPLO - edite conforme seu projeto!)")
-        ui.warning("O arquivo seshat-review.md é apenas um exemplo.")
-        ui.info("Edite-o para atender às necessidades do seu projeto.", icon="📝")
+        if prompt_file.exists():
+            ui.warning("Arquivo seshat-review.md já existe. Mantendo o conteúdo atual.")
+        else:
+            prompt_content = get_example_prompt_for_language(project_type)
+            with open(prompt_file, "w", encoding="utf-8") as f:
+                f.write(prompt_content)
+
+            ui.success("Arquivo seshat-review.md criado (EXEMPLO - edite conforme seu projeto!)")
+            ui.warning("O arquivo seshat-review.md é apenas um exemplo.")
+            ui.info("Edite-o para atender às necessidades do seu projeto.", icon="📝")
         
         # Show summary
         ui.hr()
@@ -412,4 +437,3 @@ def init(force, path):
 
 if __name__ == "__main__":
     cli()
-
