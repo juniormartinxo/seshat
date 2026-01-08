@@ -16,6 +16,7 @@ from .code_review import (
     format_review_for_display,
     CodeReviewResult,
     get_review_prompt,
+    filter_diff_by_extensions,
 )
 from . import ui
 
@@ -291,15 +292,31 @@ def commit_with_ai(
             custom_path=custom_prompt_path,
         )
         
-        animation = start_thinking_animation()
-        try:
-            raw_review = selectedProvider.generate_code_review(
-                diff, model=model, custom_prompt=custom_prompt
-            )
-            animation.update("Analisando resultado...")
-            review_result = parse_standalone_review(raw_review)
-        finally:
-            stop_thinking_animation(animation)
+        # Filter diff by extensions (only review code files)
+        review_extensions = seshat_config.code_review.get("extensions")
+        filtered_diff = filter_diff_by_extensions(
+            diff,
+            extensions=review_extensions,
+            project_type=seshat_config.project_type,
+        )
+        
+        if not filtered_diff.strip():
+            ui.info("Nenhum arquivo de código para revisar (extensões não correspondentes).", icon="⏭️")
+            review_result = CodeReviewResult(has_issues=False, summary="Nenhum arquivo de código para revisar.")
+        else:
+            if verbose:
+                exts = review_extensions or f"padrão para {seshat_config.project_type or 'generic'}"
+                ui.info(f"Revisando apenas arquivos com extensões: {exts}", icon="📄")
+            
+            animation = start_thinking_animation()
+            try:
+                raw_review = selectedProvider.generate_code_review(
+                    filtered_diff, model=model, custom_prompt=custom_prompt
+                )
+                animation.update("Analisando resultado...")
+                review_result = parse_standalone_review(raw_review)
+            finally:
+                stop_thinking_animation(animation)
         
         # Display review results
         click.echo("\n" + format_review_for_display(review_result, verbose))
