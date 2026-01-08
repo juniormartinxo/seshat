@@ -13,6 +13,7 @@ from .utils import (
 from .tooling_ts import ToolingRunner, ToolResult
 from .code_review import (
     parse_code_review_response,
+    parse_standalone_review,
     format_review_for_display,
     CodeReviewResult,
 )
@@ -266,24 +267,53 @@ def commit_with_ai(
         selectedProvider.name if hasattr(selectedProvider, "name") else provider
     )
     
-    msg_suffix = " + review" if code_review else ""
-    ui.step(f"IA: gerando mensagem de commit ({provider_name}{msg_suffix})", icon="🤖", fg="magenta")
+    review_result = None
+    
+    # Step 1: Run code review first (if enabled)
+    if code_review:
+        ui.step(f"IA: executando code review ({provider_name})", icon="🔍", fg="cyan")
+        
+        animation = start_thinking_animation()
+        try:
+            raw_review = selectedProvider.generate_code_review(diff, model=model)
+            animation.update("Analisando resultado...")
+            review_result = parse_standalone_review(raw_review)
+        finally:
+            stop_thinking_animation(animation)
+        
+        # Display review results
+        click.echo("\n" + format_review_for_display(review_result, verbose))
+        
+        # Block commit if there are critical issues (BUG or SECURITY)
+        if review_result.has_blocking_issues(threshold="error"):
+            ui.error("Code review encontrou problemas críticos. Commit bloqueado.")
+            raise ValueError(
+                "Code review bloqueou o commit devido a issues de severidade 'error' "
+                "(BUG ou SECURITY). Corrija os problemas antes de commitar."
+            )
+        
+        # Warn but allow if there are warnings
+        if review_result.has_issues:
+            if not skip_confirmation:
+                if not click.confirm("\n⚠️  Code review encontrou issues. Deseja continuar com o commit?"):
+                    raise ValueError("Commit cancelado pelo usuário após code review.")
+            else:
+                ui.warning("Code review encontrou issues, mas continuando (--yes flag).")
+    
+    # Step 2: Generate commit message
+    ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
 
     # Inicia a animação de "pensando"
     animation = start_thinking_animation()
 
-    review_result = None
     try:
+        # Generate commit message (without review addon since we already did review)
         raw_response = selectedProvider.generate_commit_message(
-            diff, model=model, code_review=code_review
+            diff, model=model, code_review=False
         )
         animation.update("Validando formato...")
 
-        # Parse code review if enabled
-        if code_review:
-            commit_msg, review_result = parse_code_review_response(raw_response)
-        else:
-            commit_msg = raw_response
+        commit_msg = raw_response
 
         if verbose:
             click.echo("🤖 AI-generated message:")
@@ -308,10 +338,6 @@ def commit_with_ai(
                 "A mensagem não segue o padrão Conventional Commits.\n"
                 f"Mensagem recebida: {commit_msg}\n\n{exemplos}"
             )
-
-        # Display code review results if enabled
-        if code_review and review_result:
-            click.echo("\n" + format_review_for_display(review_result, verbose))
 
         animation.update("Finalizando...")
         return commit_msg, review_result
