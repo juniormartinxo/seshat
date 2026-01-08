@@ -339,6 +339,16 @@ def init(force, path):
         "  enabled: true",
         "  blocking: true",
         "  prompt: seshat-review.md  # Edite este arquivo!",
+    ])
+
+    # Add default extensions based on project type
+    from .code_review import get_default_extensions
+    default_extensions = get_default_extensions(project_type)
+    exts_str = str(default_extensions).replace("'", '"')
+    
+    lines.append(f"  # extensions: {exts_str}  # extensões padrão detectadas")
+    
+    lines.extend([
         "",
         "# Custom commands (uncomment and modify as needed)",
         "# commands:",
