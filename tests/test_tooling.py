@@ -22,12 +22,19 @@ class TestSeshatConfig:
         assert config.checks == {}
         assert config.code_review == {}
         assert config.commands == {}
+        assert config.commit == {}
     
     def test_load_with_valid_file(self, tmp_path):
         """Should parse .seshat file correctly."""
         seshat_file = tmp_path / ".seshat"
         seshat_file.write_text("""
 project_type: typescript
+commit:
+  language: ENG
+  max_diff_size: 4000
+  warn_diff_size: 3500
+  provider: openai
+  model: gpt-4
 checks:
   lint:
     enabled: true
@@ -43,6 +50,11 @@ commands:
         assert config.checks["lint"]["blocking"] is False
         assert config.code_review["enabled"] is True
         assert config.commands["lint"] == "npx eslint"
+        assert config.commit["language"] == "ENG"
+        assert config.commit["max_diff_size"] == 4000
+        assert config.commit["warn_diff_size"] == 3500
+        assert config.commit["provider"] == "openai"
+        assert config.commit["model"] == "gpt-4"
 
 
 class TestToolingRunner:
@@ -308,4 +320,3 @@ class TestFileFiltering:
         assert "src/app.ts" in filtered
         assert "src/config.yaml" in filtered
         assert "src/app.py" not in filtered
-
