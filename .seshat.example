@@ -28,7 +28,9 @@ checks:
 # AI code review configuration
 code_review:
   enabled: true
-  blocking: false  # only warns if issues found
+  blocking: true   # blocks commit if critical issues (BUG/SECURITY) found
+  prompt: seshat-review.md  # path to custom prompt file (optional)
+  # extensions: [".ts", ".tsx", ".js"]  # file extensions to review (optional, defaults based on project_type)
 
 # Custom commands - override tool defaults
 # Use tool name or check type as key
