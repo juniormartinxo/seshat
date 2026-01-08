@@ -12,7 +12,6 @@ from .utils import (
 )
 from .tooling_ts import ToolingRunner, ToolResult
 from .code_review import (
-    parse_code_review_response,
     parse_standalone_review,
     format_review_for_display,
     CodeReviewResult,
@@ -184,6 +183,7 @@ def commit_with_ai(
     paths: Optional[List[str]] = None,
     check: Optional[str] = None,
     code_review: bool = False,
+    no_review: bool = False,
     no_check: bool = False,
 ) -> Tuple[str, Optional[CodeReviewResult]]:
     """
@@ -197,11 +197,24 @@ def commit_with_ai(
         paths: Optional list of file paths
         check: Pre-commit check type ("full", "lint", "test", "typecheck")
         code_review: Enable AI code review
+        no_review: Disable AI code review (overrides .seshat)
         no_check: Disable all pre-commit checks (overrides check and config)
         
     Returns:
         Tuple of (commit_message, code_review_result)
     """
+    # Load .seshat config once (used for both checks and code_review)
+    from .tooling_ts import SeshatConfig
+    seshat_config = SeshatConfig.load()
+    
+    # Check if code_review is enabled via .seshat (if not explicitly set via CLI)
+    # --no-review flag takes precedence over everything
+    if no_review:
+        code_review = False
+    elif not code_review and seshat_config.code_review.get("enabled", False):
+        code_review = True
+        ui.info("Code review ativado via .seshat", icon="📄")
+    
     # Run pre-commit checks if requested via CLI flag
     if check and not no_check:
         success, _ = run_pre_commit_checks(check, paths, verbose)
@@ -209,9 +222,6 @@ def commit_with_ai(
             raise ValueError("Verificações pre-commit falharam.")
     elif not no_check:
         # Check if .seshat has checks enabled and run them automatically
-        from .tooling_ts import SeshatConfig
-        seshat_config = SeshatConfig.load()
-        
         if seshat_config.checks:
             # Get list of enabled checks from .seshat
             enabled_checks = [
