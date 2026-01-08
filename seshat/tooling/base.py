@@ -55,6 +55,7 @@ class SeshatConfig:
     checks: dict = field(default_factory=dict)
     code_review: dict = field(default_factory=dict)
     commands: dict = field(default_factory=dict)
+    commit: dict = field(default_factory=dict)
     
     @classmethod
     def load(cls, path: str = ".") -> "SeshatConfig":
@@ -66,11 +67,40 @@ class SeshatConfig:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 data = yaml.safe_load(f) or {}
+            commit_section = data.get("commit")
+            commit_section = commit_section if isinstance(commit_section, dict) else {}
+
+            def pick_value(*keys):
+                for key in keys:
+                    if key in commit_section:
+                        return commit_section[key]
+                for key in keys:
+                    if key in data:
+                        return data[key]
+                return None
+
+            commit = {}
+            language = pick_value("language", "commit_language", "COMMIT_LANGUAGE")
+            if language is not None:
+                commit["language"] = language
+            max_diff_size = pick_value("max_diff_size", "MAX_DIFF_SIZE")
+            if max_diff_size is not None:
+                commit["max_diff_size"] = max_diff_size
+            warn_diff_size = pick_value("warn_diff_size", "WARN_DIFF_SIZE")
+            if warn_diff_size is not None:
+                commit["warn_diff_size"] = warn_diff_size
+            provider = pick_value("provider", "ai_provider", "AI_PROVIDER")
+            if provider is not None:
+                commit["provider"] = provider
+            model = pick_value("model", "ai_model", "AI_MODEL")
+            if model is not None:
+                commit["model"] = model
             return cls(
                 project_type=data.get("project_type"),
                 checks=data.get("checks", {}),
                 code_review=data.get("code_review", {}),
                 commands=data.get("commands", {}),
+                commit=commit,
             )
         except Exception:
             return cls()
