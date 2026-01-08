@@ -11,7 +11,7 @@ from .utils import (
     format_commit_message,
     clean_explanatory_text,
 )
-from .code_review import get_code_review_prompt_addon
+from .code_review import get_code_review_prompt_addon, get_code_review_prompt
 
 DEFAULT_TIMEOUT = 60
 
@@ -72,6 +72,10 @@ def _gemini_client(api_key):
 class BaseProvider:
     def generate_commit_message(self, diff, **kwargs):
         raise NotImplementedError
+    
+    def generate_code_review(self, diff, **kwargs):
+        """Generate standalone code review for the diff."""
+        raise NotImplementedError
 
     def get_language(self):
         return os.getenv("COMMIT_LANGUAGE", "PT-BR")
@@ -93,12 +97,27 @@ class BaseProvider:
         
         return format_commit_message(content)
     
+    def _clean_review_response(self, content):
+        """Clean code review response (minimal cleaning, preserve structure)."""
+        if not content:
+            return ""
+        
+        content = clean_think_tags(content)
+        # Remove markdown code blocks if present
+        content = content.replace("```", "").strip()
+        
+        return content
+    
     def _get_system_prompt(self, language: str, code_review: bool = False) -> str:
         """Build system prompt with optional code review addon."""
         prompt = f"{SYSTEM_PROMPT}\nLanguage: {language}"
         if code_review:
             prompt += get_code_review_prompt_addon()
         return prompt
+    
+    def _get_review_prompt(self) -> str:
+        """Get dedicated code review prompt."""
+        return get_code_review_prompt()
 
 
 class DeepSeekProvider(BaseProvider):
@@ -131,6 +150,24 @@ class DeepSeekProvider(BaseProvider):
         )
         
         return self._clean_response(response.choices[0].message.content)
+    
+    @retry_on_error()
+    def generate_code_review(self, diff, **kwargs):
+        self.validate_env()
+        
+        client = _openai_client(self.api_key, base_url=self.base_url)
+        system_prompt = self._get_review_prompt()
+        
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Diff:\n{diff}"},
+            ],
+            stream=False
+        )
+        
+        return self._clean_review_response(response.choices[0].message.content)
 
 
 class ClaudeProvider(BaseProvider):
@@ -161,6 +198,24 @@ class ClaudeProvider(BaseProvider):
         )
         
         return self._clean_response(response.content[0].text)
+    
+    @retry_on_error()
+    def generate_code_review(self, diff, **kwargs):
+        self.validate_env()
+        
+        client = _anthropic_client(self.api_key)
+        system_prompt = self._get_review_prompt()
+        
+        response = client.messages.create(
+            model=self.model,
+            max_tokens=2000,
+            system=system_prompt,
+            messages=[
+                {"role": "user", "content": f"Diff:\n{diff}"}
+            ]
+        )
+        
+        return self._clean_review_response(response.content[0].text)
 
 
 class OpenAIProvider(BaseProvider):
@@ -190,6 +245,23 @@ class OpenAIProvider(BaseProvider):
         )
         
         return self._clean_response(response.choices[0].message.content)
+    
+    @retry_on_error()
+    def generate_code_review(self, diff, **kwargs):
+        self.validate_env()
+        
+        client = _openai_client(self.api_key)
+        system_prompt = self._get_review_prompt()
+        
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Diff:\n{diff}"},
+            ]
+        )
+        
+        return self._clean_review_response(response.choices[0].message.content)
 
 
 class GeminiProvider(BaseProvider):
@@ -218,6 +290,22 @@ class GeminiProvider(BaseProvider):
         )
         
         return self._clean_response(response.text)
+    
+    @retry_on_error()
+    def generate_code_review(self, diff, **kwargs):
+        self.validate_env()
+        
+        client = _gemini_client(self.api_key)
+        system_prompt = self._get_review_prompt()
+        
+        prompt = f"{system_prompt}\n\nDiff:\n{diff}"
+        
+        response = client.models.generate_content(
+            model=self.model,
+            contents=prompt
+        )
+        
+        return self._clean_review_response(response.text)
 
 
 class OllamaProvider(BaseProvider):
@@ -261,6 +349,32 @@ class OllamaProvider(BaseProvider):
             raise ValueError(f"Resposta inválida do Ollama: {response.text[:200]}") from e
 
         return self._clean_response(data.get("response", ""))
+    
+    @retry_on_error()
+    def generate_code_review(self, diff, **kwargs):
+        self.check_ollama_running()
+        
+        system_prompt = self._get_review_prompt()
+        prompt = f"{system_prompt}\n\nDiff:\n{diff}\n\nCode Review:"
+        
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.2
+            }
+        }
+        
+        response = requests.post(self.base_url, json=payload, timeout=DEFAULT_TIMEOUT)
+        response.raise_for_status()
+
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise ValueError(f"Resposta inválida do Ollama: {response.text[:200]}") from e
+
+        return self._clean_review_response(data.get("response", ""))
 
 
 def get_provider(provider_name):
