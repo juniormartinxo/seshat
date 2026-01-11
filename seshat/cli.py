@@ -349,7 +349,7 @@ def init(force, path):
         lines.append(f"    enabled: {str(enabled).lower()}")
         lines.append(f"    blocking: {str(blocking).lower()}")
         if check_type == "lint":
-             lines.append(f"    auto_fix: false  # Change to true to fix automatically")
+             lines.append("    auto_fix: false  # Change to true to fix automatically")
         
         # Add tool-specific info as comments
         if check_type in config.tools:
