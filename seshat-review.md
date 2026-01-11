@@ -53,3 +53,4 @@ Report issues using the following single-line format for easy parsing:
 - If the code is perfect: simply reply `SATISFIED`.
 - Do not provide conversational filler ("Here is your review..."). Just the list.
 - Prioritize blocking issues.
+- **IMPORTANT:** This project is intentionally in Brazilian Portuguese (PT-BR). Do NOT flag user-facing messages in Portuguese as issues.
