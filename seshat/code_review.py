@@ -534,3 +534,76 @@ def parse_standalone_review(response: str) -> CodeReviewResult:
         issues=issues,
         summary=f"Found {len(issues)} issue(s)" if issues else "Code looks clean.",
     )
+
+
+def save_review_to_log(
+    result: CodeReviewResult,
+    log_dir: str,
+    provider: str,
+    file_path_map: Optional[dict[str, str]] = None
+) -> List[str]:
+    """
+    Save review issues to log files.
+    
+    Args:
+        result: The code review result containing issues
+        log_dir: Directory to save logs to
+        provider: AI provider name
+        file_path_map: Optional map of original filenames if needed context
+        
+    Returns:
+        List of created log file paths
+    """
+    if not result.has_issues:
+        return []
+        
+    import datetime
+    
+    created_logs = []
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
+    
+    current_time = datetime.datetime.now()
+    date_str = current_time.strftime("%Y-%m-%d")
+    time_str = current_time.strftime("%H:%M") # Use colon for log content as requested
+    timestamp_suffix = current_time.strftime("%Y-%m-%d_%H-%M") # Keep dash for filename safety
+    
+    # Group issues by file
+    issues_by_file = {}
+    for issue in result.issues:
+        # Extract filename from description if possible, or use "unknown"
+        # Description format usually: "file.py:10 ..."
+        parts = issue.description.split(":", 1)
+        filename = parts[0].strip() if len(parts) > 1 else "unknown"
+        
+        # Clean up filename (remove path separators for safety in dict key)
+        # But for logging we want the relative path structure in the filename
+        if filename not in issues_by_file:
+            issues_by_file[filename] = []
+        issues_by_file[filename].append(issue)
+        
+    for filename, issues in issues_by_file.items():
+        if filename == "unknown":
+            continue
+            
+        # Format filename: relative-path-do-arquivo + '_' + date('Y-m-d_H-i').log
+        # Replace slashes with dashes
+        safe_filename = filename.replace("/", "-").replace("\\", "-")
+        log_filename = f"{safe_filename}_{timestamp_suffix}.log"
+        full_log_path = log_path / log_filename
+        
+        with open(full_log_path, "w", encoding="utf-8") as f:
+            f.write(f"Nome do arquivo: {filename}\n")
+            f.write(f"Data: {date_str} {time_str}\n") # Using requested format
+            f.write(f"IA revisora: {provider}\n")
+            f.write("Descrição do apontamento:\n")
+            
+            for issue in issues:
+                f.write(f"- [{issue.type.upper()}] {issue.description}\n")
+                if issue.suggestion:
+                    f.write(f"  Sugestão: {issue.suggestion}\n")
+                f.write("\n")
+                
+        created_logs.append(str(full_log_path))
+        
+    return created_logs
