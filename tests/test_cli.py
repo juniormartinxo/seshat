@@ -13,7 +13,11 @@ def test_commit_exits_on_invalid_config(monkeypatch):
     monkeypatch.setattr(cli_module, "validate_conf", lambda cfg: (False, "bad config"))
     monkeypatch.setattr(cli_module, "display_error", lambda msg: errors.append(msg))
 
-    result = runner.invoke(cli, ["commit"])
+    with runner.isolated_filesystem():
+        with open(".seshat", "w") as f:
+            f.write("project_type: python")
+        result = runner.invoke(cli, ["commit"])
+    
     assert result.exit_code == 1
     assert errors == ["bad config"]
 
@@ -50,7 +54,11 @@ def test_commit_yes_skips_confirmation_and_runs_git(monkeypatch):
     )
     monkeypatch.setattr(cli_module.click, "confirm", lambda *a, **k: False)
 
-    result = runner.invoke(cli, ["commit", "--yes", "--date", "2020-01-01"])
+    with runner.isolated_filesystem():
+        with open(".seshat", "w") as f:
+            f.write("project_type: python")
+        result = runner.invoke(cli, ["commit", "--yes", "--date", "2020-01-01"])
+
     assert result.exit_code == 0
     assert "--date" in called["args"]
     assert "2020-01-01" in called["args"]
