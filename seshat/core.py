@@ -321,6 +321,27 @@ def commit_with_ai(
         # Display review results
         click.echo("\n" + format_review_for_display(review_result, verbose))
         
+        # Log Review Results if issues found
+        if review_result.has_issues:
+            log_dir = seshat_config.code_review.get("log_dir")
+            if log_dir:
+                try:
+                    from .code_review import save_review_to_log
+                    created_logs = save_review_to_log(review_result, log_dir, provider_name)
+                    if created_logs:
+                        if verbose:
+                            ui.info(f"Logs de review salvos: {len(created_logs)} arquivos", icon="yw")
+                        else:
+                             ui.info(f"Logs salvos em {log_dir}", icon="yw")
+                except Exception as e:
+                    ui.error(f"Erro ao salvar logs de review: {e}")
+            else:
+                 # Request user to configure if directory not set but blocking issues or just warnings found
+                 ui.warning(
+                     "Logs de review não puderam ser salvos: 'log_dir' não configurado no .seshat.\n"
+                     "Execute 'seshat init' novamente ou adicione 'log_dir' na seção code_review do .seshat."
+                 )
+
         # Block commit if there are critical issues (BUG or SECURITY)
         if review_result.has_blocking_issues(threshold="error"):
             ui.error("Code review encontrou problemas críticos. Commit bloqueado.")
