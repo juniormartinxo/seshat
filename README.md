@@ -375,6 +375,11 @@ O code review analisa:
 * Questões de performance
 * Manutenibilidade
 
+**Registro de Logs (Novo!):**
+Você pode configurar o Seshat para salvar todos os apontamentos da IA em arquivos de log para auditoria futura. Os logs são criados apenas para arquivos que possuem problemas detectados.
+- Configure o diretório via `seshat init` ou adicione `log_dir: path/to/logs` no `.seshat`.
+- Os arquivos são nomeados automaticamente com base no path do arquivo e timestamp.
+
 **Filtragem Automática:** Para economizar tokens e tempo, o review é realizado apenas em arquivos de código relevantes (ex: `.ts`, `.py`, `.go`). Você pode customizar essas extensões no seu arquivo `.seshat`.
 
 **Novo Fluxo de Bloqueio:**
