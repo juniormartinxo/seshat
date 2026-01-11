@@ -384,7 +384,9 @@ def init(force, path):
         lines.extend([
             "#   ruff:",
             "#     command: \"ruff check --fix\"",
+            "#     command: \"ruff check --fix\"",
             "#     extensions: [\".py\"]",
+            "#     auto_fix: true",
             "#   mypy:",
             "#     command: \"mypy --strict\"",
             "#   pytest:",
@@ -394,7 +396,9 @@ def init(force, path):
         lines.extend([
             "#   eslint:",
             "#     command: \"pnpm eslint\"",
+            "#     command: \"pnpm eslint\"",
             "#     extensions: [\".ts\", \".tsx\"]",
+            "#     auto_fix: true",
             "#   tsc:",
             "#     command: \"npm run typecheck\"",
             "#   jest:",
