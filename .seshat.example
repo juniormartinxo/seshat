@@ -38,6 +38,7 @@ code_review:
   enabled: true
   blocking: true   # blocks commit if critical issues (BUG/SECURITY) found
   prompt: seshat-review.md  # path to custom prompt file (optional)
+  log_dir: .seshat/logs      # directory to save review logs (optional)
   # extensions: [".ts", ".tsx", ".js"]  # file extensions to review (optional, defaults based on project_type)
 
 # Custom commands - override tool defaults
