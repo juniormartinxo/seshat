@@ -182,3 +182,19 @@ class TestInitCommand:
         assert result.exit_code == 0
         # Should mention detected tools if available
         assert "Ferramentas detectadas" in result.output or "checks:" in result.output
+
+    def test_init_includes_auto_fix_option(self, tmp_path):
+        """Should include auto_fix: false in generated .seshat for lint."""
+        runner = CliRunner()
+        
+        # Create a Python project indicator
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        
+        assert result.exit_code == 0
+        content = (tmp_path / ".seshat").read_text()
+        
+        # Should have auto_fix: false for lint
+        assert "lint:" in content
+        assert "auto_fix: false" in content
