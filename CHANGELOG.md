@@ -7,6 +7,8 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-01-11
+
 ### Adicionado
 
 - **Novo fluxo de Code Review (Bloqueante)**
@@ -14,6 +16,10 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - Bloqueia automaticamente se encontrar problemas críticos (`BUG` ou `SECURITY`)
   - Solicita confirmação do usuário para problemas de severidade inferior (`SMELL`, `PERF`, etc.)
   - Prompt especializado como Principal Software Engineer para auditorias críticas
+- **Auto-Fix de Lint via CLI e Configuração**
+  - Novo comando `seshat fix` para aplicar correções automáticas de lint
+  - Opção `auto_fix: true` no `.seshat` aplica correções automaticamente durante commits
+  - Comando `init` atualizado para expor a opção (padrão desligado)
 - **Prompts de Code Review Customizáveis**
   - O usuário pode definir seu próprio prompt no arquivo `.seshat` via opção `prompt`
   - `seshat init` agora gera um arquivo de prompt de exemplo (`seshat-review.md`)
