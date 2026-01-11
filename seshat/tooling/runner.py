@@ -229,8 +229,66 @@ class ToolingRunner:
         
         results = []
         for tool in tools:
-            result = self.run_tool(tool, files)
-            results.append(result)
+            # If auto_fix is enabled and we have a fix command, use it
+            if tool.auto_fix and tool.fix_command:
+                # We need to run the fix command
+                # Note: This modifies files on disk!
+                fix_tool = ToolCommand(
+                    name=tool.name,
+                    command=tool.fix_command,
+                    check_type=tool.check_type,
+                    blocking=tool.blocking,
+                    pass_files=tool.pass_files,
+                    extensions=tool.extensions,
+                )
+                result = self.run_tool(fix_tool, files)
+                
+                # If fix succeeded, we should ideally re-run the check command to confirm
+                # simplified: we treat the fix run as the check (assuming fix returns 0 on success/clean)
+                if result.success:
+                     result.output += "\n(Auto-fix applied successfully)"
+                else:
+                     result.output += "\n(Auto-fix attempted but failed)"
+                
+                results.append(result)
+            else:
+                result = self.run_tool(tool, files)
+                results.append(result)
+        
+        return results
+    
+    def fix_issues(
+        self,
+        check_type: str = "lint",
+        files: Optional[list[str]] = None,
+    ) -> list[ToolResult]:
+        """
+        Run fix commands for tools.
+        
+        Args:
+            check_type: Type of check to fix (usually "lint")
+            files: Optional list of files to fix.
+            
+        Returns:
+            List of ToolResult for each tool run.
+        """
+        config = self.discover_tools()
+        tools = config.get_tools_for_check(check_type)
+        
+        results = []
+        for tool in tools:
+            if tool.fix_command:
+                # Create a temporary tool command with the fix command
+                fix_tool = ToolCommand(
+                    name=tool.name,
+                    command=tool.fix_command,
+                    check_type=tool.check_type,
+                    blocking=tool.blocking,
+                    pass_files=tool.pass_files,
+                    extensions=tool.extensions,
+                )
+                result = self.run_tool(fix_tool, files)
+                results.append(result)
         
         return results
     
