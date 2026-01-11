@@ -71,6 +71,7 @@ class PythonStrategy(BaseLanguageStrategy):
                 command=["ruff", "check", "."],
                 check_type="lint",
                 pass_files=True,  # When files provided, uses them instead of '.'
+                fix_command=["ruff", "check", "--fix", "."],
             ),
             "flake8": ToolCommand(
                 name="flake8",
