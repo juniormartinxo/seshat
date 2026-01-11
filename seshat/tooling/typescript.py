@@ -70,18 +70,21 @@ class TypeScriptStrategy(BaseLanguageStrategy):
                 command=["npx", "eslint"],
                 check_type="lint",
                 pass_files=True,
+                fix_command=["npx", "eslint", "--fix"],
             ),
             "biome": ToolCommand(
                 name="biome",
                 command=["npx", "@biomejs/biome", "check"],
                 check_type="lint",
                 pass_files=True,
+                fix_command=["npx", "@biomejs/biome", "check", "--write"],
             ),
             "prettier": ToolCommand(
                 name="prettier",
                 command=["npx", "prettier", "--check"],
                 check_type="lint",
                 pass_files=True,
+                fix_command=["npx", "prettier", "--write"],
             ),
             "tsc": ToolCommand(
                 name="tsc",
