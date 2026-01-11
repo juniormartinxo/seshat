@@ -185,11 +185,27 @@ class TestInitCommand:
         
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\n\n")
         
         assert result.exit_code == 0
         # Should mention detected tools if available
         assert "Ferramentas detectadas" in result.output or "checks:" in result.output
+
+    
+    def test_init_configures_log_dir(self, tmp_path):
+        """Should configure log_dir if provided."""
+        runner = CliRunner()
+        
+        (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
+        
+        # Input: 1 (python) -> "logs/my-reviews" (log dir)
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\nlogs/my-reviews\n")
+        
+        assert result.exit_code == 0
+        content = (tmp_path / ".seshat").read_text()
+        assert "log_dir: logs/my-reviews" in content
 
     def test_init_includes_auto_fix_option(self, tmp_path):
         """Should include auto_fix: false in generated .seshat for lint."""
@@ -198,7 +214,7 @@ class TestInitCommand:
         # Create a Python project indicator
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\n\n")
         
         assert result.exit_code == 0
         content = (tmp_path / ".seshat").read_text()
