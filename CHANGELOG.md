@@ -7,6 +7,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-11
+
+### Adicionado
+
+- **Registro de Logs de Code Review**
+  - Nova funcionalidade para salvar apontamentos da IA em arquivos de log individuais.
+  - Configuração de diretório de logs via `log_dir` na seção `code_review` do arquivo `.seshat`.
+  - Nomenclatura automática de arquivos seguindo o padrão: `relative-path-do-arquivo + '_' + timestamp.log`.
+  - O comando `seshat init` foi atualizado para solicitar o diretório de logs durante a configuração inicial.
+  - Registro inteligente: apenas commits/arquivos que possuam apontamentos da IA são registrados.
+  - Formato de log estruturado incluindo: Nome do arquivo, Data, IA revisora e Descrição detalhada do apontamento.
+
 ## [1.1.0] - 2026-01-11
 
 ### Adicionado
