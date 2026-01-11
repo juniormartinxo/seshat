@@ -21,6 +21,9 @@ class ToolCommand:
     blocking: bool = True
     pass_files: bool = False  # Whether to pass file paths as arguments
     extensions: Optional[list[str]] = None  # Optional custom extensions
+    fix_command: Optional[list[str]] = None  # Command to fix issues
+    auto_fix: bool = False  # Whether to run fix automatically
+
 
 
 @dataclass
@@ -308,6 +311,8 @@ class BaseLanguageStrategy(ABC):
                 blocking=default.blocking,
                 pass_files=default.pass_files,
                 extensions=default.extensions,
+                fix_command=default.fix_command,
+                auto_fix=default.auto_fix,
             )
         else:
             tool = ToolCommand(
@@ -321,6 +326,8 @@ class BaseLanguageStrategy(ABC):
         if check_config:
             if "blocking" in check_config:
                 tool.blocking = check_config["blocking"]
+            if "auto_fix" in check_config:
+                tool.auto_fix = check_config["auto_fix"]
         
         self._apply_command_overrides(tool, check_config, seshat_config)
         
@@ -374,3 +381,13 @@ class BaseLanguageStrategy(ABC):
             tool.pass_files = bool(command_config["pass_files"])
         elif "pass_files" in check_config:
             tool.pass_files = bool(check_config["pass_files"])
+        
+        if "fix_command" in command_config:
+            cmd = command_config["fix_command"]
+            tool.fix_command = cmd.split() if isinstance(cmd, str) else cmd
+        elif "fix_command" in check_config:
+            cmd = check_config["fix_command"]
+            tool.fix_command = cmd.split() if isinstance(cmd, str) else cmd
+            
+        if "auto_fix" in command_config:
+            tool.auto_fix = bool(command_config["auto_fix"])
