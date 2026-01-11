@@ -1,11 +1,13 @@
 """Tests for the code_review module."""
 
+from pathlib import Path
 
 from seshat.code_review import (
     parse_code_review_response,
     format_review_for_display,
     CodeReviewResult,
     CodeIssue,
+    save_review_to_log,
     get_code_review_prompt_addon,
 )
 
@@ -138,3 +140,75 @@ class TestGetCodeReviewPromptAddon:
         assert isinstance(addon, str)
         assert len(addon) > 100
         assert "CODE_REVIEW" in addon
+
+
+class TestSaveReviewToLog:
+    """Tests for save_review_to_log function."""
+
+    def test_save_review_to_log_extracts_paths_with_spaces_and_windows(self, tmp_path):
+        result = CodeReviewResult(
+            has_issues=True,
+            summary="Found 2 issue(s)",
+            issues=[
+                CodeIssue(
+                    type="code_smell",
+                    description="src/My Folder/file name.py:12 Something",
+                    severity="warning",
+                ),
+                CodeIssue(
+                    type="bug",
+                    description="Issue in `C:\\My Files\\file name.py:7` null deref",
+                    severity="error",
+                ),
+            ],
+        )
+
+        created_logs = save_review_to_log(result, str(tmp_path), "tester")
+
+        assert len(created_logs) == 2
+
+        files_in_logs = set()
+        for log_path in created_logs:
+            content = Path(log_path).read_text(encoding="utf-8")
+            first_line = content.splitlines()[0]
+            assert first_line.startswith("Nome do arquivo: ")
+            files_in_logs.add(first_line.replace("Nome do arquivo: ", "", 1))
+
+        assert files_in_logs == {
+            "src/My Folder/file name.py",
+            "C:\\My Files\\file name.py",
+        }
+
+    def test_save_review_to_log_creates_unknown_log(self, tmp_path):
+        result = CodeReviewResult(
+            has_issues=True,
+            summary="Found 2 issue(s)",
+            issues=[
+                CodeIssue(
+                    type="code_smell",
+                    description="src/app.py:1 Something",
+                    severity="warning",
+                ),
+                CodeIssue(
+                    type="bug",
+                    description="Missing file reference",
+                    severity="error",
+                ),
+            ],
+        )
+
+        created_logs = save_review_to_log(result, str(tmp_path), "tester")
+
+        assert len(created_logs) == 2
+
+        unknown_path = None
+        for log_path in created_logs:
+            content = Path(log_path).read_text(encoding="utf-8")
+            if "Nome do arquivo: unknown" in content:
+                unknown_path = Path(log_path)
+                assert "Missing file reference" in content
+                break
+
+        assert unknown_path is not None
+        assert unknown_path.name.startswith("unknown_")
+        assert unknown_path.suffix == ".log"
