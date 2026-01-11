@@ -7,6 +7,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-01-11
+
+### Adicionado
+
+- Log separado `unknown_<timestamp>.log` para issues sem referência de arquivo.
+- Testes para `save_review_to_log` cobrindo paths com espaços/Windows e log `unknown`.
+
+### Alterado
+
+- Extração de caminho mais robusta via regex (suporte a espaços/Windows/backticks).
+- Removido parâmetro não utilizado `file_path_map` de `save_review_to_log`.
+- Sanitização de `:` em nomes de arquivo de log para compatibilidade com Windows.
+
 ## [1.2.0] - 2026-01-11
 
 ### Adicionado
