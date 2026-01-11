@@ -536,11 +536,40 @@ def parse_standalone_review(response: str) -> CodeReviewResult:
     )
 
 
+TYPE_PREFIX_RE = re.compile(r"^\s*-?\s*\[[A-Z]+\]\s*")
+QUOTED_FILE_REF_RE = re.compile(
+    r"(?P<quote>`|\"|')(?P<path>[^\n]+?):\d+(?::\d+)?(?P=quote)"
+)
+START_FILE_REF_RE = re.compile(
+    r"^(?P<path>(?:[A-Za-z]:[\\/])?[^:\n]*\S):\d+(?::\d+)?\b"
+)
+TOKEN_FILE_REF_RE = re.compile(
+    r"(?P<path>(?:[A-Za-z]:[\\/])?[^\s:\n]+):\d+(?::\d+)?\b"
+)
+
+
+def _extract_issue_filename(description: str) -> str:
+    text = TYPE_PREFIX_RE.sub("", description.strip())
+
+    match = QUOTED_FILE_REF_RE.search(text)
+    if match:
+        return match.group("path").strip("`'\"()[]{}<>")
+
+    match = START_FILE_REF_RE.match(text)
+    if match:
+        return match.group("path").strip("`'\"()[]{}<>")
+
+    match = TOKEN_FILE_REF_RE.search(text)
+    if match:
+        return match.group("path").strip("`'\"()[]{}<>")
+
+    return "unknown"
+
+
 def save_review_to_log(
     result: CodeReviewResult,
     log_dir: str,
     provider: str,
-    file_path_map: Optional[dict[str, str]] = None
 ) -> List[str]:
     """
     Save review issues to log files.
@@ -549,8 +578,7 @@ def save_review_to_log(
         result: The code review result containing issues
         log_dir: Directory to save logs to
         provider: AI provider name
-        file_path_map: Optional map of original filenames if needed context
-        
+
     Returns:
         List of created log file paths
     """
@@ -573,22 +601,20 @@ def save_review_to_log(
     for issue in result.issues:
         # Extract filename from description if possible, or use "unknown"
         # Description format usually: "file.py:10 ..."
-        parts = issue.description.split(":", 1)
-        filename = parts[0].strip() if len(parts) > 1 else "unknown"
+        filename = _extract_issue_filename(issue.description)
         
-        # Clean up filename (remove path separators for safety in dict key)
-        # But for logging we want the relative path structure in the filename
+        # Keep the raw filename as the key so the log header shows the real path.
         if filename not in issues_by_file:
             issues_by_file[filename] = []
         issues_by_file[filename].append(issue)
         
+    unknown_issues = issues_by_file.pop("unknown", None)
+
     for filename, issues in issues_by_file.items():
-        if filename == "unknown":
-            continue
-            
+
         # Format filename: relative-path-do-arquivo + '_' + date('Y-m-d_H-i').log
-        # Replace slashes with dashes
-        safe_filename = filename.replace("/", "-").replace("\\", "-")
+        # Replace path separators and drive markers with dashes
+        safe_filename = filename.replace("/", "-").replace("\\", "-").replace(":", "-")
         log_filename = f"{safe_filename}_{timestamp_suffix}.log"
         full_log_path = log_path / log_filename
         
@@ -604,6 +630,24 @@ def save_review_to_log(
                     f.write(f"  Sugestão: {issue.suggestion}\n")
                 f.write("\n")
                 
+        created_logs.append(str(full_log_path))
+
+    if unknown_issues:
+        log_filename = f"unknown_{timestamp_suffix}.log"
+        full_log_path = log_path / log_filename
+
+        with open(full_log_path, "w", encoding="utf-8") as f:
+            f.write("Nome do arquivo: unknown\n")
+            f.write(f"Data: {date_str} {time_str}\n") # Using requested format
+            f.write(f"IA revisora: {provider}\n")
+            f.write("Descrição do apontamento:\n")
+
+            for issue in unknown_issues:
+                f.write(f"- [{issue.type.upper()}] {issue.description}\n")
+                if issue.suggestion:
+                    f.write(f"  Sugestão: {issue.suggestion}\n")
+                f.write("\n")
+
         created_logs.append(str(full_log_path))
         
     return created_logs
