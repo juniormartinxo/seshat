@@ -333,7 +333,7 @@ def commit_with_ai(
                             ui.info(f"Logs de review salvos: {len(created_logs)} arquivos", icon="yw")
                         else:
                              ui.info(f"Logs salvos em {log_dir}", icon="yw")
-                except Exception as e:
+                except OSError as e:
                     ui.error(f"Erro ao salvar logs de review: {e}")
             else:
                  # Request user to configure if directory not set but blocking issues or just warnings found
