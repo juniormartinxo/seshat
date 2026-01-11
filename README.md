@@ -305,6 +305,37 @@ seshat commit --check typecheck
 seshat commit --no-check
 ```
 
+### Correção Automática (Novo!)
+
+O Seshat pode corrigir automaticamente problemas de linting (como `eslint --fix` ou `ruff --fix`) através do novo comando ou configuração.
+
+**1. Comando Manual:**
+
+```bash
+# Corrigir arquivos em stage (padrão)
+seshat fix
+
+# Corrigir todo o projeto
+seshat fix --all
+
+# Corrigir arquivos específicos
+seshat fix src/app.ts src/utils.py
+```
+
+**2. Correção Automática em Commits:**
+
+Você pode configurar o `.seshat` para aplicar correções automaticamente sempre que rodar um commit ou check:
+
+```yaml
+checks:
+  lint:
+    enabled: true
+    blocking: true
+    auto_fix: true  # <--- Habilita correção automática
+```
+
+> **Nota:** Quando ativado, o Seshat modificará os arquivos no disco antes/durante a verificação. Se houver mudanças, você precisará adicioná-las ao stage (`git add`) se desejar incluí-las no commit atual, seguindo fluxo padrão do Git.
+
 **Ferramentas suportadas:**
 
 | Linguagem | Tipo | Ferramentas |
