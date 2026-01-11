@@ -348,6 +348,8 @@ def init(force, path):
         lines.append(f"  {check_type}:")
         lines.append(f"    enabled: {str(enabled).lower()}")
         lines.append(f"    blocking: {str(blocking).lower()}")
+        if check_type == "lint":
+             lines.append(f"    auto_fix: false  # Change to true to fix automatically")
         
         # Add tool-specific info as comments
         if check_type in config.tools:
@@ -434,6 +436,83 @@ def init(force, path):
         ui.error(f"Erro ao criar arquivo: {e}")
         sys.exit(1)
 
+
+@cli.command()
+@click.option(
+    "--check", "-c",
+    type=click.Choice(["lint"]),
+    default="lint",
+    help="Type of check to fix (default: lint)",
+)
+@click.option(
+    "--all", "-a", "run_all",
+    is_flag=True,
+    help="Run fixes on all files (ignores staged files)",
+)
+@click.argument("files", nargs=-1)
+def fix(check, run_all, files):
+    """
+    Run automatic fixes for tooling issues.
+    
+    By default (no args), runs on STAGED files only.
+    Use --all to run on the entire project.
+    Pass specific files to run only on them.
+    """
+    try:
+        from .tooling.runner import ToolingRunner
+        from .core import get_staged_files
+        
+        ui.title("Seshat Fix")
+        
+        runner = ToolingRunner()
+        project_type = runner.detect_project_type()
+        
+        if not project_type:
+            ui.warning("Tipo de projeto não detectado. Executando em modo genérico.")
+        else:
+            ui.info(f"Projeto detectado: {project_type}")
+            
+        # Determine files to check
+        files_list = None
+        target_desc = "projeto inteiro"
+        
+        if files:
+            # Specific files provided
+            files_list = list(files)
+            target_desc = f"{len(files_list)} arquivos especificados"
+        elif run_all:
+            # Run on everything
+            files_list = None
+            target_desc = "projeto inteiro"
+        else:
+            # Default: Run on staged files
+            files_list = get_staged_files()
+            if not files_list:
+                ui.warning("Nenhum arquivo em stage para corrigir.")
+                ui.info("Use 'git add' para adicionar arquivos ou --all para rodar no projeto todo.")
+                return
+            target_desc = f"{len(files_list)} arquivos em stage"
+            
+        ui.step(f"Executando correções ({check}) em: {target_desc}...", icon="🔧")
+            
+        results = runner.fix_issues(check_type=check, files=files_list)
+        
+        if not results:
+            ui.info("Nenhuma ferramenta de fix encontrada ou configurada.")
+            return
+
+        ui.hr()
+        print(runner.format_results(results, verbose=True))
+        
+        if runner.has_blocking_failures(results):
+             ui.error("Algumas ferramentas falharam ao aplicar correções.")
+             sys.exit(1)
+        else:
+             ui.success("Correções aplicadas com sucesso!")
+             
+    except Exception as e:
+        display_error(str(e))
+        sys.exit(1)
 
 if __name__ == "__main__":
     cli()
