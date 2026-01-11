@@ -357,6 +357,9 @@ def init(force, path):
             cmd_str = " ".join(tool.command)
             lines.append(f"    # detected: {tool.name} ({cmd_str})")
     
+    # Adding log directory prompt
+    log_dir = click.prompt("Diretório para salvar logs de code review (deixe em branco para ignorar)", default="", show_default=False)
+    
     lines.extend([
         "",
         "# AI Code Review",
@@ -365,6 +368,9 @@ def init(force, path):
         "  blocking: true",
         "  prompt: seshat-review.md  # Edite este arquivo!",
     ])
+    
+    if log_dir:
+        lines.append(f"  log_dir: {log_dir}")
 
     # Add default extensions based on project type
     from .code_review import get_default_extensions
