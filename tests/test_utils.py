@@ -6,6 +6,7 @@ from seshat import utils
 def test_clean_think_tags_removes_block() -> None:
     message = "prefix <think>secret\nmore</think> tail"
     cleaned = utils.clean_think_tags(message)
+    assert cleaned is not None
 
     assert "<think>" not in cleaned
     assert "secret" not in cleaned
