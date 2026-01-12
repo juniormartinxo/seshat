@@ -1,8 +1,7 @@
 """Tests for the tooling module."""
 
 import json
-
-
+from pathlib import Path
 from seshat.tooling_ts import (
     ToolingRunner,
     ToolingConfig,
@@ -15,7 +14,7 @@ from seshat.tooling_ts import (
 class TestSeshatConfig:
     """Tests for SeshatConfig class."""
     
-    def test_load_with_no_file(self, tmp_path):
+    def test_load_with_no_file(self, tmp_path: Path) -> None:
         """Should return defaults when .seshat file doesn't exist."""
         config = SeshatConfig.load(str(tmp_path))
         assert config.project_type is None
@@ -24,7 +23,7 @@ class TestSeshatConfig:
         assert config.commands == {}
         assert config.commit == {}
     
-    def test_load_with_valid_file(self, tmp_path):
+    def test_load_with_valid_file(self, tmp_path: Path) -> None:
         """Should parse .seshat file correctly."""
         seshat_file = tmp_path / ".seshat"
         seshat_file.write_text("""
@@ -60,7 +59,7 @@ commands:
 class TestToolingRunner:
     """Tests for ToolingRunner class."""
     
-    def test_detect_typescript_project(self, tmp_path):
+    def test_detect_typescript_project(self, tmp_path: Path) -> None:
         """Should detect TypeScript project from package.json."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text('{"name": "test"}')
@@ -68,12 +67,12 @@ class TestToolingRunner:
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "typescript"
     
-    def test_detect_no_project(self, tmp_path):
+    def test_detect_no_project(self, tmp_path: Path) -> None:
         """Should return None when no project files found."""
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() is None
     
-    def test_detect_from_seshat_config(self, tmp_path):
+    def test_detect_from_seshat_config(self, tmp_path: Path) -> None:
         """Should use project_type from .seshat if present."""
         seshat_file = tmp_path / ".seshat"
         seshat_file.write_text("project_type: python")
@@ -81,7 +80,7 @@ class TestToolingRunner:
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "python"
     
-    def test_discover_eslint(self, tmp_path):
+    def test_discover_eslint(self, tmp_path: Path) -> None:
         """Should discover ESLint from package.json."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -96,7 +95,7 @@ class TestToolingRunner:
         assert "lint" in config.tools
         assert config.tools["lint"].name == "eslint"
     
-    def test_discover_typescript(self, tmp_path):
+    def test_discover_typescript(self, tmp_path: Path) -> None:
         """Should discover TypeScript from package.json."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -110,7 +109,7 @@ class TestToolingRunner:
         assert "typecheck" in config.tools
         assert config.tools["typecheck"].name == "tsc"
     
-    def test_discover_jest(self, tmp_path):
+    def test_discover_jest(self, tmp_path: Path) -> None:
         """Should discover Jest from package.json."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -125,7 +124,7 @@ class TestToolingRunner:
         assert "test" in config.tools
         assert config.tools["test"].name == "jest"
 
-    def test_commands_override_lint_tooling(self, tmp_path):
+    def test_commands_override_lint_tooling(self, tmp_path: Path) -> None:
         """Should apply .seshat commands and extensions for lint."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -148,7 +147,7 @@ commands:
         assert tool.extensions == [".ts", ".tsx"]
         assert tool.pass_files is True
 
-    def test_detect_python_from_pyproject_toml(self, tmp_path):
+    def test_detect_python_from_pyproject_toml(self, tmp_path: Path) -> None:
         """Should detect Python project from pyproject.toml."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[project]\nname = "test"')
@@ -156,7 +155,7 @@ commands:
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "python"
 
-    def test_detect_python_from_setup_py(self, tmp_path):
+    def test_detect_python_from_setup_py(self, tmp_path: Path) -> None:
         """Should detect Python project from setup.py."""
         setup_py = tmp_path / "setup.py"
         setup_py.write_text('from setuptools import setup\nsetup(name="test")')
@@ -164,7 +163,7 @@ commands:
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "python"
 
-    def test_detect_python_from_requirements_txt(self, tmp_path):
+    def test_detect_python_from_requirements_txt(self, tmp_path: Path) -> None:
         """Should detect Python project from requirements.txt."""
         requirements = tmp_path / "requirements.txt"
         requirements.write_text('requests\nclick\n')
@@ -172,7 +171,7 @@ commands:
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "python"
 
-    def test_typescript_takes_priority_over_python(self, tmp_path):
+    def test_typescript_takes_priority_over_python(self, tmp_path: Path) -> None:
         """TypeScript should take priority when both project types exist."""
         # Create both TypeScript and Python project files
         pkg_json = tmp_path / "package.json"
@@ -184,7 +183,7 @@ commands:
         # TypeScript is first in the strategy list, so it should win
         assert runner.detect_project_type() == "typescript"
 
-    def test_python_filter_lint_files(self, tmp_path):
+    def test_python_filter_lint_files(self, tmp_path: Path) -> None:
         """Should filter Python files for lint check."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[project]\nname = "test"')
@@ -198,7 +197,7 @@ commands:
         assert "README.md" not in filtered
         assert "config.json" not in filtered
 
-    def test_python_filter_test_files(self, tmp_path):
+    def test_python_filter_test_files(self, tmp_path: Path) -> None:
         """Should filter Python test files correctly."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[project]\nname = "test"')
@@ -220,7 +219,7 @@ commands:
 class TestToolResult:
     """Tests for ToolResult dataclass."""
     
-    def test_has_blocking_failures(self):
+    def test_has_blocking_failures(self) -> None:
         """Should correctly identify blocking failures."""
         runner = ToolingRunner()
         
@@ -231,7 +230,7 @@ class TestToolResult:
         
         assert runner.has_blocking_failures(results) is True
     
-    def test_no_blocking_failures_with_non_blocking(self):
+    def test_no_blocking_failures_with_non_blocking(self) -> None:
         """Non-blocking failures should not count as blocking."""
         runner = ToolingRunner()
         
@@ -246,7 +245,7 @@ class TestToolResult:
 class TestToolingConfig:
     """Tests for ToolingConfig dataclass."""
     
-    def test_get_tools_for_full_check(self):
+    def test_get_tools_for_full_check(self) -> None:
         """Should return all tools for 'full' check type."""
         config = ToolingConfig(
             project_type="typescript",
@@ -259,7 +258,7 @@ class TestToolingConfig:
         tools = config.get_tools_for_check("full")
         assert len(tools) == 2
     
-    def test_get_tools_for_specific_check(self):
+    def test_get_tools_for_specific_check(self) -> None:
         """Should return only matching tools for specific check type."""
         config = ToolingConfig(
             project_type="typescript",
@@ -275,7 +274,7 @@ class TestToolingConfig:
 class TestFileFiltering:
     """Tests for file filtering logic in ToolingRunner."""
     
-    def test_filter_lint_files(self, tmp_path):
+    def test_filter_lint_files(self, tmp_path: Path) -> None:
         """Should filter only lint-relevant files by default."""
         # Create a TypeScript project
         pkg_json = tmp_path / "package.json"
@@ -290,7 +289,7 @@ class TestFileFiltering:
         assert "src/style.css" not in filtered
         assert "README.md" not in filtered
 
-    def test_filter_test_files(self, tmp_path):
+    def test_filter_test_files(self, tmp_path: Path) -> None:
         """Should filter only test files by default."""
         # Create a TypeScript project
         pkg_json = tmp_path / "package.json"
@@ -305,7 +304,7 @@ class TestFileFiltering:
         assert "src/app.ts" not in filtered
         assert "src/utils.js" not in filtered
 
-    def test_filter_custom_extensions(self, tmp_path):
+    def test_filter_custom_extensions(self, tmp_path: Path) -> None:
         """Should use custom extensions when provided."""
         # Create a TypeScript project
         pkg_json = tmp_path / "package.json"
