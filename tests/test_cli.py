@@ -1,10 +1,12 @@
+from pathlib import Path
+import pytest
 from click.testing import CliRunner
 
 from seshat.commands import cli
 import seshat.cli as cli_module
 
 
-def test_commit_exits_on_invalid_config(monkeypatch):
+def test_commit_exits_on_invalid_config(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     errors = []
 
@@ -22,7 +24,9 @@ def test_commit_exits_on_invalid_config(monkeypatch):
     assert errors == ["bad config"]
 
 
-def test_commit_yes_skips_confirmation_and_runs_git(monkeypatch):
+def test_commit_yes_skips_confirmation_and_runs_git(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     runner = CliRunner()
     called = {}
 
@@ -66,7 +70,7 @@ def test_commit_yes_skips_confirmation_and_runs_git(monkeypatch):
     assert "Commit criado" in called["success"]
 
 
-def test_config_invalid_provider(monkeypatch):
+def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     errors = []
     monkeypatch.setattr(cli_module, "display_error", lambda msg: errors.append(msg))
@@ -76,7 +80,7 @@ def test_config_invalid_provider(monkeypatch):
     assert errors
 
 
-def test_config_shows_current_config(monkeypatch):
+def test_config_shows_current_config(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     monkeypatch.setattr(
         cli_module,
@@ -100,7 +104,7 @@ def test_config_shows_current_config(monkeypatch):
 class TestInitCommand:
     """Tests for the init command."""
     
-    def test_init_creates_seshat_file_for_python(self, tmp_path):
+    def test_init_creates_seshat_file_for_python(self, tmp_path: Path) -> None:
         """Should create .seshat file for Python project."""
         runner = CliRunner()
         
@@ -120,7 +124,7 @@ class TestInitCommand:
         assert "max_diff_size:" in content
         assert "warn_diff_size:" in content
     
-    def test_init_creates_seshat_file_for_typescript(self, tmp_path):
+    def test_init_creates_seshat_file_for_typescript(self, tmp_path: Path) -> None:
         """Should create .seshat file for TypeScript project."""
         runner = CliRunner()
         
@@ -139,7 +143,7 @@ class TestInitCommand:
         assert '".tsx"' in content
         assert '".js"' in content
     
-    def test_init_fails_if_seshat_exists(self, tmp_path):
+    def test_init_fails_if_seshat_exists(self, tmp_path: Path) -> None:
         """Should fail if .seshat already exists without --force."""
         runner = CliRunner()
         
@@ -151,7 +155,7 @@ class TestInitCommand:
         assert result.exit_code == 1
         assert "já existe" in result.output or ".seshat" in result.output
     
-    def test_init_force_overwrites_existing(self, tmp_path):
+    def test_init_force_overwrites_existing(self, tmp_path: Path) -> None:
         """Should overwrite existing .seshat with --force."""
         runner = CliRunner()
         
@@ -165,7 +169,7 @@ class TestInitCommand:
         assert "project_type: python" in content
         assert "old config" not in content
 
-    def test_init_does_not_overwrite_prompt_file(self, tmp_path):
+    def test_init_does_not_overwrite_prompt_file(self, tmp_path: Path) -> None:
         """Should not overwrite existing seshat-review.md."""
         runner = CliRunner()
 
@@ -179,7 +183,11 @@ class TestInitCommand:
         assert result.exit_code == 0
         assert prompt_file.read_text() == "custom prompt"
     
-    def test_init_detects_available_tools(self, tmp_path, monkeypatch):
+    def test_init_detects_available_tools(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Should show detected tools in output."""
         runner = CliRunner()
         
@@ -194,7 +202,7 @@ class TestInitCommand:
         assert "Ferramentas detectadas" in result.output or "checks:" in result.output
 
     
-    def test_init_configures_log_dir(self, tmp_path):
+    def test_init_configures_log_dir(self, tmp_path: Path) -> None:
         """Should configure log_dir if provided."""
         runner = CliRunner()
         
@@ -207,7 +215,7 @@ class TestInitCommand:
         content = (tmp_path / ".seshat").read_text()
         assert "log_dir: logs/my-reviews" in content
 
-    def test_init_includes_auto_fix_option(self, tmp_path):
+    def test_init_includes_auto_fix_option(self, tmp_path: Path) -> None:
         """Should include auto_fix: false in generated .seshat for lint."""
         runner = CliRunner()
         
