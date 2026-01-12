@@ -50,7 +50,7 @@ class ThinkingAnimation:
         messages: Optional[Sequence[str]] = None,
         interval_seconds: float = 2.0,
     ) -> None:
-        self._override_message = None
+        self._override_message: Optional[str] = None
         self._start_time = time.time()
         self._interval_seconds = interval_seconds
         self._messages = messages or [
@@ -326,14 +326,14 @@ def format_commit_message(message: Optional[str]) -> Optional[str]:
     return "\n".join(cleaned_lines)
 
 
-def normalize_commit_subject_case(message: Optional[str]) -> Optional[str]:
+def normalize_commit_subject_case(message: Optional[str]) -> str:
     """
     Garante que a descrição do header comece com letra minúscula.
 
     Ex: "feat(core): Adiciona algo" -> "feat(core): adiciona algo"
     """
     if not message:
-        return message
+        return ""
 
     types = [
         "feat",
