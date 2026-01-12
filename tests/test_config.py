@@ -1,7 +1,7 @@
 from seshat.config import apply_project_overrides
 
 
-def test_apply_project_overrides():
+def test_apply_project_overrides() -> None:
     config = {
         "COMMIT_LANGUAGE": "PT-BR",
         "MAX_DIFF_SIZE": 3000,
