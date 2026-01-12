@@ -17,7 +17,12 @@ class ProcessResult:
     skipped: bool = False
 
 class BatchCommitService:
-    def __init__(self, provider: str, model: Optional[str] = None, language: str = "PT-BR"):
+    def __init__(
+        self,
+        provider: str,
+        model: Optional[str] = None,
+        language: str = "PT-BR",
+    ) -> None:
         self.provider = provider
         self.provider = os.getenv("AI_PROVIDER", provider)
         self.model = os.getenv("AI_MODEL", model)
@@ -37,15 +42,17 @@ class BatchCommitService:
             
         return sorted(list(set(f for f in files if f.strip())))
 
-    def process_file(self, 
-                    file: str, 
-                    date: Optional[str] = None, 
-                    verbose: bool = False, 
-                    skip_confirm: bool = False,
-                    confirm_callback: Optional[Callable[[str, str], bool]] = None,
-                    check: Optional[str] = None,
-                    code_review: bool = False,
-                    no_check: bool = False) -> ProcessResult:
+    def process_file(
+        self,
+        file: str,
+        date: Optional[str] = None,
+        verbose: bool = False,
+        skip_confirm: bool = False,
+        confirm_callback: Optional[Callable[[str, str], bool]] = None,
+        check: Optional[str] = None,
+        code_review: bool = False,
+        no_check: bool = False,
+    ) -> ProcessResult:
         """
         Processa um único arquivo: git add -> gera commit -> confirma -> git commit
         
@@ -166,7 +173,7 @@ class BatchCommitService:
             if lock_path:
                 self._release_lock(lock_path)
 
-    def _reset_file(self, file: str):
+    def _reset_file(self, file: str) -> None:
         try:
             subprocess.run(["git", "reset", "HEAD", file], capture_output=True, check=False)
         except Exception:
@@ -234,7 +241,7 @@ class BatchCommitService:
                 return lock_path
         return None
 
-    def _release_lock(self, lock_path: str):
+    def _release_lock(self, lock_path: str) -> None:
         try:
             os.remove(lock_path)
         except FileNotFoundError:
