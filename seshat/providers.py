@@ -70,7 +70,7 @@ def _anthropic_client(api_key: Optional[str]) -> Any:
 
 def _gemini_client(api_key: Optional[str]) -> Any:
     try:
-        return genai.Client(api_key=api_key, timeout=DEFAULT_TIMEOUT)
+        return genai.Client(api_key=api_key)
     except TypeError:
         return genai.Client(api_key=api_key)
 
@@ -95,22 +95,37 @@ class BaseProvider:
         if not content:
             return ""
         
-        content = clean_think_tags(content)
-        content = clean_explanatory_text(content)
+        # Garante que content é str
+        content_str = str(content)
+        
+        cleaned: Optional[str] = clean_think_tags(content_str)
+        if cleaned is None:
+             return ""
+            
+        cleaned = clean_explanatory_text(cleaned)
+        if cleaned is None:
+            return ""
         
         # Remove markdown code blocks se houver
-        content = content.replace("```git commit", "").replace("```commit", "").replace("```", "").strip()
+        cleaned = cleaned.replace("```git commit", "").replace("```commit", "").replace("```", "").strip()
         
-        return format_commit_message(content)
+        formatted = format_commit_message(cleaned)
+        return formatted if formatted is not None else ""
     
     def _clean_review_response(self, content: Optional[str]) -> str:
         """Clean code review response (minimal cleaning, preserve structure)."""
         if not content:
             return ""
         
-        content = clean_think_tags(content)
+        # Garante que content é str
+        content_str = str(content)
+        
+        cleaned: Optional[str] = clean_think_tags(content_str)
+        if cleaned is None:
+            return ""
+            
         # Remove markdown code blocks if present
-        content = content.replace("```", "").strip()
+        content = cleaned.replace("```", "").strip()
         
         return content
     
