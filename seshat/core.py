@@ -21,7 +21,7 @@ from .code_review import (
 from . import ui
 
 
-def check_staged_files(paths: Optional[List[str]] = None):
+def check_staged_files(paths: Optional[List[str]] = None) -> bool:
     """Verifica se existem arquivos em stage"""
     try:
         cmd = ["git", "diff", "--cached", "--name-only"]
@@ -40,7 +40,7 @@ def check_staged_files(paths: Optional[List[str]] = None):
         raise ValueError(f"Erro ao verificar arquivos em stage: {e}")
 
 
-def validate_diff_size(diff, skip_confirmation=False):
+def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
     """Valida o tamanho do diff para garantir commits concisos"""
     # Obter limites configurados ou usar os valores padrão
     WARN_SIZE = int(
@@ -107,7 +107,10 @@ def validate_diff_size(diff, skip_confirmation=False):
     return True
 
 
-def get_git_diff(skip_confirmation=False, paths: Optional[List[str]] = None):
+def get_git_diff(
+    skip_confirmation: bool = False,
+    paths: Optional[List[str]] = None,
+) -> str:
     """Obtém o diff das alterações stageadas"""
     check_staged_files(paths)
 
@@ -178,10 +181,10 @@ def run_pre_commit_checks(
 
 
 def commit_with_ai(
-    provider,
-    model,
-    verbose,
-    skip_confirmation=False,
+    provider: str,
+    model: Optional[str],
+    verbose: bool,
+    skip_confirmation: bool = False,
     paths: Optional[List[str]] = None,
     check: Optional[str] = None,
     code_review: bool = False,
