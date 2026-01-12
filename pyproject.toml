@@ -62,6 +62,11 @@ target-version = "py39"
 python_version = "3.9"
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["pytest.*", "_pytest.*"]
+ignore_errors = true
+follow_imports = "skip"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
