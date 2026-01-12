@@ -73,7 +73,7 @@ class SeshatConfig:
             commit_section = data.get("commit")
             commit_section = commit_section if isinstance(commit_section, dict) else {}
 
-            def pick_value(*keys):
+            def pick_value(*keys: str) -> Optional[object]:
                 for key in keys:
                     if key in commit_section:
                         return commit_section[key]
