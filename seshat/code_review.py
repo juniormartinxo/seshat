@@ -597,7 +597,7 @@ def save_review_to_log(
     timestamp_suffix = current_time.strftime("%Y-%m-%d_%H-%M") # Keep dash for filename safety
     
     # Group issues by file
-    issues_by_file = {}
+    issues_by_file: dict[str, list[CodeIssue]] = {}
     for issue in result.issues:
         # Extract filename from description if possible, or use "unknown"
         # Description format usually: "file.py:10 ..."
