@@ -3,6 +3,7 @@ import json
 import keyring
 import click
 from pathlib import Path
+from typing import Any, Callable, Optional
 from dotenv import load_dotenv, find_dotenv
 
 CONFIG_PATH = Path.home() / ".seshat"
@@ -18,7 +19,7 @@ DEFAULT_MODELS = {
 VALID_PROVIDERS = set(DEFAULT_MODELS.keys())
 
 
-def load_config():
+def load_config() -> dict[str, Any]:
     """
     Carrega configurações de várias fontes com a seguinte precedência:
     1. Variáveis de ambiente
@@ -57,7 +58,7 @@ def load_config():
     return normalize_config(final_config)
 
 
-def normalize_config(config):
+def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     """Aplica defaults e normalizações sem persistir no disco."""
     normalized = dict(config or {})
     provider = normalized.get("AI_PROVIDER")
@@ -73,7 +74,7 @@ def normalize_config(config):
     return normalized
 
 
-def get_secure_key(key_name):
+def get_secure_key(key_name: str) -> Optional[str]:
     """Recupera chave do keyring do sistema"""
     try:
         return keyring.get_password(APP_NAME, key_name)
@@ -81,7 +82,7 @@ def get_secure_key(key_name):
         return None
 
 
-def set_secure_key(key_name, value):
+def set_secure_key(key_name: str, value: str) -> bool:
     """Salva chave no keyring do sistema"""
     try:
         keyring.set_password(APP_NAME, key_name, value)
@@ -90,7 +91,7 @@ def set_secure_key(key_name, value):
         return False
 
 
-def validate_config(config):
+def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
     """
     Valida se a configuração mínima necessária está presente.
     Retorna (True, None) ou (False, mensagem_erro).
@@ -113,7 +114,7 @@ def validate_config(config):
     return True, None
 
 
-def save_config(updates):
+def save_config(updates: dict[str, Any]) -> dict[str, Any]:
     """
     Salva atualizações na configuração global (~/.seshat).
     Para API Keys, tenta usar keyring se possível.
@@ -149,12 +150,19 @@ def save_config(updates):
     return current_config
 
 
-def apply_project_overrides(config, commit_overrides):
+def apply_project_overrides(
+    config: dict[str, Any],
+    commit_overrides: dict[str, Any],
+) -> dict[str, Any]:
     """Apply per-project commit overrides from .seshat."""
     if not isinstance(commit_overrides, dict):
         return config
 
-    def _set_if_value(key, value, transform=None):
+    def _set_if_value(
+        key: str,
+        value: Any,
+        transform: Optional[Callable[[Any], Any]] = None,
+    ) -> None:
         if value is None:
             return
         if isinstance(value, str) and not value.strip():
@@ -163,7 +171,7 @@ def apply_project_overrides(config, commit_overrides):
             value = transform(value)
         config[key] = value
 
-    def _coerce_int(value, key):
+    def _coerce_int(value: Any, key: str) -> int:
         try:
             return int(value)
         except (TypeError, ValueError):
