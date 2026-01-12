@@ -3,6 +3,7 @@ import click
 import sys
 import subprocess
 from pathlib import Path
+from typing import Optional, Tuple
 from .core import commit_with_ai
 from .utils import display_error, get_last_commit_summary
 from .config import (
@@ -48,7 +49,18 @@ from . import flow  # noqa: F401
     is_flag=True,
     help="Disable all pre-commit checks",
 )
-def commit(provider, model, yes, verbose, date, max_diff, check, review, no_review, no_check):
+def commit(
+    provider: Optional[str],
+    model: Optional[str],
+    yes: bool,
+    verbose: bool,
+    date: Optional[str],
+    max_diff: Optional[int],
+    check: Optional[str],
+    review: bool,
+    no_review: bool,
+    no_check: bool,
+) -> None:
     """Generate and execute AI-powered commits"""
     try:
         # Verificar se .seshat existe (obrigatório)
@@ -170,7 +182,15 @@ def commit(provider, model, yes, verbose, date, max_diff, check, review, no_revi
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
 @click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
 @click.option("--language", help="Configure a linguagem das mensagens de commit (PT-BR, ENG, ESP, FRA, DEU, ITA)")
-def config(api_key, provider, model, default_date, max_diff, warn_diff, language):
+def config(
+    api_key: Optional[str],
+    provider: Optional[str],
+    model: Optional[str],
+    default_date: Optional[str],
+    max_diff: Optional[int],
+    warn_diff: Optional[int],
+    language: Optional[str],
+) -> None:
     """Configure API Key e provedor padrão"""
     try:
         updates = {}
@@ -224,7 +244,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
         else:
             current_config = load_config()
             
-            def mask_api_key(key, language):
+            def mask_api_key(key: Optional[str], language: str) -> str:
                 if not key:
                     return "not set" if language == "ENG" else "não configurada"
                 if len(key) <= 8:
@@ -264,7 +284,7 @@ def config(api_key, provider, model, default_date, max_diff, warn_diff, language
 @cli.command()
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing .seshat file")
 @click.option("--path", "-p", default=".", help="Path to the project root")
-def init(force, path):
+def init(force: bool, path: str) -> None:
     """Initialize a .seshat configuration file for the current project.
     
     Automatically detects project type and available tooling.
@@ -460,7 +480,7 @@ def init(force, path):
     help="Run fixes on all files (ignores staged files)",
 )
 @click.argument("files", nargs=-1)
-def fix(check, run_all, files):
+def fix(check: str, run_all: bool, files: Tuple[str, ...]) -> None:
     """
     Run automatic fixes for tooling issues.
     
