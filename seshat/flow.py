@@ -1,6 +1,7 @@
 import os
 import click
 import sys
+from typing import Optional
 from .services import BatchCommitService
 from .commands import cli
 from .config import load_config, normalize_config, validate_config, apply_project_overrides
@@ -31,7 +32,18 @@ from . import ui
     is_flag=True,
     help="Disable all pre-commit checks",
 )
-def flow(count, provider, model, yes, verbose, date, path, check, review, no_check):
+def flow(
+    count: int,
+    provider: Optional[str],
+    model: Optional[str],
+    yes: bool,
+    verbose: bool,
+    date: Optional[str],
+    path: str,
+    check: Optional[str],
+    review: bool,
+    no_check: bool,
+) -> None:
     """Processa e comita múltiplos arquivos individualmente.
     
     COUNT é o número máximo de arquivos a processar. Se for 0, processará todos os arquivos modificados.
@@ -119,7 +131,7 @@ def flow(count, provider, model, yes, verbose, date, path, check, review, no_che
         fail_count = 0
         skipped_count = 0
         
-        def confirm_commit(file, msg):
+        def confirm_commit(file: str, msg: str) -> bool:
             ui.info(f"Mensagem gerada para {file}:")
             click.echo(f"\n{msg}\n")
             return click.confirm("Confirmar commit?")
