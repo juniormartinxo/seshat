@@ -28,7 +28,7 @@ def test_commit_yes_skips_confirmation_and_runs_git(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = CliRunner()
-    called = {}
+    called: dict[str, object] = {}
 
     monkeypatch.setattr(
         cli_module,
@@ -64,10 +64,14 @@ def test_commit_yes_skips_confirmation_and_runs_git(
         result = runner.invoke(cli, ["commit", "--yes", "--date", "2020-01-01"])
 
     assert result.exit_code == 0
-    assert "--date" in called["args"]
-    assert "2020-01-01" in called["args"]
-    assert "-m" in called["args"]
-    assert "Commit criado" in called["success"]
+    args = called.get("args", [])
+    assert isinstance(args, list)
+    assert "--date" in args
+    assert "2020-01-01" in args
+    assert "-m" in args
+    
+    success_msg = str(called.get("success", ""))
+    assert "Commit criado" in success_msg
 
 
 def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -111,7 +115,8 @@ class TestInitCommand:
         # Create a Python project indicator
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        # Add input="\n" to accept default log_dir
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="\n")
         
         assert result.exit_code == 0
         assert (tmp_path / ".seshat").exists()
@@ -131,7 +136,8 @@ class TestInitCommand:
         # Create a TypeScript project indicator
         (tmp_path / "package.json").write_text('{"name": "test"}')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)])
+        # Add input="\n" to accept default log_dir
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="\n")
         
         assert result.exit_code == 0
         assert (tmp_path / ".seshat").exists()
@@ -162,7 +168,8 @@ class TestInitCommand:
         (tmp_path / ".seshat").write_text("old config")
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"])
+        # Add input="\n" to accept default log_dir
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"], input="\n")
         
         assert result.exit_code == 0
         content = (tmp_path / ".seshat").read_text()
@@ -178,7 +185,8 @@ class TestInitCommand:
         prompt_file = tmp_path / "seshat-review.md"
         prompt_file.write_text("custom prompt")
 
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"])
+        # Add input="\n" to accept default log_dir
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path), "--force"], input="\n")
 
         assert result.exit_code == 0
         assert prompt_file.read_text() == "custom prompt"
@@ -195,7 +203,10 @@ class TestInitCommand:
         
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\n\n")
+        # If detection works, it asks only for log_dir. Provide \n
+        # If detection fails, it asks project type (1) then log_dir. 
+        # Assuming detection works as pyproject matches:
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="\n")
         
         assert result.exit_code == 0
         # Should mention detected tools if available
@@ -208,8 +219,8 @@ class TestInitCommand:
         
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        # Input: 1 (python) -> "logs/my-reviews" (log dir)
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\nlogs/my-reviews\n")
+        # Input: "logs/my-reviews" (log dir) - Detection works so no selection needed
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="logs/my-reviews\n")
         
         assert result.exit_code == 0
         content = (tmp_path / ".seshat").read_text()
@@ -222,7 +233,8 @@ class TestInitCommand:
         # Create a Python project indicator
         (tmp_path / "pyproject.toml").write_text('[project]\nname = "test"')
         
-        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="1\n\n")
+        # Add input="\n"
+        result = runner.invoke(cli, ["init", "--path", str(tmp_path)], input="\n")
         
         assert result.exit_code == 0
         content = (tmp_path / ".seshat").read_text()
