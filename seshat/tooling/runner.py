@@ -36,7 +36,7 @@ class ToolingRunner:
     Automatically detects project type and selects appropriate strategy.
     """
     
-    def __init__(self, path: str = "."):
+    def __init__(self, path: str = ".") -> None:
         self.path = Path(path)
         self.seshat_config = SeshatConfig.load(path)
         self._strategy: Optional[BaseLanguageStrategy] = None
