@@ -1,12 +1,12 @@
-
 import json
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 from seshat.tooling.runner import ToolingRunner
 
 class TestToolingFix:
     """Tests for auto-fix functionality in ToolingRunner."""
 
-    def test_discover_fix_command_python(self, tmp_path):
+    def test_discover_fix_command_python(self, tmp_path: Path) -> None:
         """Should discover fix command for ruff in Python project."""
         pyproject = tmp_path / "pyproject.toml"
         pyproject.write_text('[project]\nname = "test"')
@@ -22,7 +22,7 @@ class TestToolingFix:
             assert config.tools["lint"].name == "ruff"
             assert config.tools["lint"].fix_command == ["ruff", "check", "--fix", "."]
 
-    def test_discover_fix_command_typescript(self, tmp_path):
+    def test_discover_fix_command_typescript(self, tmp_path: Path) -> None:
         """Should discover fix command for eslint in TypeScript project."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -37,7 +37,7 @@ class TestToolingFix:
         assert config.tools["lint"].name == "eslint"
         assert config.tools["lint"].fix_command == ["npx", "eslint", "--fix"]
 
-    def test_fix_issues_executes_fix_command(self, tmp_path):
+    def test_fix_issues_executes_fix_command(self, tmp_path: Path) -> None:
         """Should execute fix command when running fix_issues."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -61,7 +61,7 @@ class TestToolingFix:
                 timeout=300
             )
 
-    def test_fix_issues_with_files(self, tmp_path):
+    def test_fix_issues_with_files(self, tmp_path: Path) -> None:
         """Should pass files to fix command when provided."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
@@ -86,7 +86,7 @@ class TestToolingFix:
                 timeout=300
             )
 
-    def test_run_checks_runs_fix_when_auto_fix_enabled(self, tmp_path):
+    def test_run_checks_runs_fix_when_auto_fix_enabled(self, tmp_path: Path) -> None:
         """Should run fix command during validation if auto_fix is True."""
         pkg_json = tmp_path / "package.json"
         pkg_json.write_text(json.dumps({
