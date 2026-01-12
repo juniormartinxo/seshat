@@ -5,7 +5,7 @@ from functools import wraps
 from anthropic import Anthropic
 from openai import OpenAI
 from google import genai
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from .utils import (
     clean_think_tags,
@@ -30,11 +30,14 @@ You are a senior developer specialized in creating git commit messages using Con
 Analyze the provided diff and generate ONLY the commit message. No explanations.
 """
 
-def retry_on_error(max_retries=3, delay=1):
-    def decorator(func):
+def retry_on_error(
+    max_retries: int = 3,
+    delay: float = 1.0,
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_exception = None
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            last_exception: Optional[Exception] = None
             for i in range(max_retries):
                 try:
                     return func(*args, **kwargs)
@@ -43,11 +46,13 @@ def retry_on_error(max_retries=3, delay=1):
                     if i < max_retries - 1:
                         time.sleep(delay * (2 ** i))  # Backoff exponencial
                         continue
-            raise last_exception
+            if last_exception is not None:
+                raise last_exception
+            raise RuntimeError("Retry failed without exception.")
         return wrapper
     return decorator
 
-def _openai_client(api_key, base_url=None):
+def _openai_client(api_key: Optional[str], base_url: Optional[str] = None) -> Any:
     try:
         return OpenAI(api_key=api_key, base_url=base_url, timeout=DEFAULT_TIMEOUT)
     except TypeError:
@@ -56,14 +61,14 @@ def _openai_client(api_key, base_url=None):
         return OpenAI(api_key=api_key)
 
 
-def _anthropic_client(api_key):
+def _anthropic_client(api_key: Optional[str]) -> Any:
     try:
         return Anthropic(api_key=api_key, timeout=DEFAULT_TIMEOUT)
     except TypeError:
         return Anthropic(api_key=api_key)
 
 
-def _gemini_client(api_key):
+def _gemini_client(api_key: Optional[str]) -> Any:
     try:
         return genai.Client(api_key=api_key, timeout=DEFAULT_TIMEOUT)
     except TypeError:
@@ -71,21 +76,21 @@ def _gemini_client(api_key):
 
 
 class BaseProvider:
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         raise NotImplementedError
     
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         """Generate standalone code review for the diff."""
         raise NotImplementedError
 
-    def get_language(self):
+    def get_language(self) -> str:
         return os.getenv("COMMIT_LANGUAGE", "PT-BR")
 
-    def validate_env(self):
+    def validate_env(self) -> None:
         """Valida se as variáveis de ambiente necessárias estão presentes"""
         pass
 
-    def _clean_response(self, content):
+    def _clean_response(self, content: Optional[str]) -> str:
         """Limpa e formata a resposta da IA"""
         if not content:
             return ""
@@ -98,7 +103,7 @@ class BaseProvider:
         
         return format_commit_message(content)
     
-    def _clean_review_response(self, content):
+    def _clean_review_response(self, content: Optional[str]) -> str:
         """Clean code review response (minimal cleaning, preserve structure)."""
         if not content:
             return ""
@@ -124,17 +129,17 @@ class BaseProvider:
 
 
 class DeepSeekProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("API_KEY")
         self.model = os.getenv("AI_MODEL", "deepseek-chat")
         self.base_url = "https://api.deepseek.com/v1"
 
-    def validate_env(self):
+    def validate_env(self) -> None:
         if not self.api_key:
             raise ValueError("API_KEY não configurada para DeepSeek")
 
     @retry_on_error()
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _openai_client(self.api_key, base_url=self.base_url)
@@ -155,7 +160,7 @@ class DeepSeekProvider(BaseProvider):
         return self._clean_response(response.choices[0].message.content)
     
     @retry_on_error()
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _openai_client(self.api_key, base_url=self.base_url)
@@ -175,16 +180,16 @@ class DeepSeekProvider(BaseProvider):
 
 
 class ClaudeProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("API_KEY")
         self.model = os.getenv("AI_MODEL", "claude-3-opus-20240229")
 
-    def validate_env(self):
+    def validate_env(self) -> None:
         if not self.api_key:
             raise ValueError("API_KEY não configurada para Claude")
 
     @retry_on_error()
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _anthropic_client(self.api_key)
@@ -204,7 +209,7 @@ class ClaudeProvider(BaseProvider):
         return self._clean_response(response.content[0].text)
     
     @retry_on_error()
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _anthropic_client(self.api_key)
@@ -224,16 +229,16 @@ class ClaudeProvider(BaseProvider):
 
 
 class OpenAIProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("API_KEY")
         self.model = os.getenv("AI_MODEL", "gpt-4-turbo-preview")
 
-    def validate_env(self):
+    def validate_env(self) -> None:
         if not self.api_key:
             raise ValueError("API_KEY não configurada para OpenAI")
 
     @retry_on_error()
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _openai_client(self.api_key)
@@ -252,7 +257,7 @@ class OpenAIProvider(BaseProvider):
         return self._clean_response(response.choices[0].message.content)
     
     @retry_on_error()
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _openai_client(self.api_key)
@@ -271,16 +276,16 @@ class OpenAIProvider(BaseProvider):
 
 
 class GeminiProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("API_KEY")
         self.model = os.getenv("AI_MODEL", "gemini-2.0-flash")
 
-    def validate_env(self):
+    def validate_env(self) -> None:
         if not self.api_key:
             raise ValueError("API_KEY não configurada para Gemini")
 
     @retry_on_error()
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _gemini_client(self.api_key)
@@ -298,7 +303,7 @@ class GeminiProvider(BaseProvider):
         return self._clean_response(response.text)
     
     @retry_on_error()
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         self.validate_env()
         
         client = _gemini_client(self.api_key)
@@ -316,11 +321,11 @@ class GeminiProvider(BaseProvider):
 
 
 class OllamaProvider(BaseProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = "http://localhost:11434/api/generate"
         self.model = os.getenv("AI_MODEL", "llama3")
 
-    def check_ollama_running(self):
+    def check_ollama_running(self) -> None:
         try:
             response = requests.get("http://localhost:11434/api/version", timeout=DEFAULT_TIMEOUT)
             if not response.ok:
@@ -329,7 +334,7 @@ class OllamaProvider(BaseProvider):
             raise ValueError("Ollama não parece estar rodando em http://localhost:11434") from e
 
     @retry_on_error()
-    def generate_commit_message(self, diff, **kwargs):
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
         self.check_ollama_running()
         
         language = self.get_language()
@@ -358,7 +363,7 @@ class OllamaProvider(BaseProvider):
         return self._clean_response(data.get("response", ""))
     
     @retry_on_error()
-    def generate_code_review(self, diff, **kwargs):
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
         self.check_ollama_running()
         
         custom_prompt = kwargs.get("custom_prompt")
@@ -385,7 +390,7 @@ class OllamaProvider(BaseProvider):
         return self._clean_review_response(data.get("response", ""))
 
 
-def get_provider(provider_name):
+def get_provider(provider_name: str) -> BaseProvider:
     providers = {
         "deepseek": DeepSeekProvider,
         "claude": ClaudeProvider,
