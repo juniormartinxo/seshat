@@ -333,9 +333,9 @@ def commit_with_ai(
                     created_logs = save_review_to_log(review_result, log_dir, provider_name)
                     if created_logs:
                         if verbose:
-                            ui.info(f"Logs de review salvos: {len(created_logs)} arquivos", icon="yw")
+                            ui.info(f"Logs de review salvos: {len(created_logs)} arquivos", icon="💾")
                         else:
-                             ui.info(f"Logs salvos em {log_dir}", icon="yw")
+                             ui.info(f"Logs salvos em {log_dir}", icon="💾")
                 except Exception as e:
                     ui.error(f"Erro ao salvar logs de review ({type(e).__name__}): {e}")
             else:
