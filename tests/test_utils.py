@@ -3,7 +3,7 @@ import pytest
 from seshat import utils
 
 
-def test_clean_think_tags_removes_block():
+def test_clean_think_tags_removes_block() -> None:
     message = "prefix <think>secret\nmore</think> tail"
     cleaned = utils.clean_think_tags(message)
 
@@ -13,34 +13,34 @@ def test_clean_think_tags_removes_block():
     assert "tail" in cleaned
 
 
-def test_clean_think_tags_none():
+def test_clean_think_tags_none() -> None:
     assert utils.clean_think_tags(None) is None
 
 
-def test_clean_explanatory_text_returns_commit_line():
+def test_clean_explanatory_text_returns_commit_line() -> None:
     message = "Explaining things...\n\nfeat: add tests"
     cleaned = utils.clean_explanatory_text(message)
     assert cleaned == "feat: add tests"
 
 
-def test_clean_explanatory_text_no_match_returns_original():
+def test_clean_explanatory_text_no_match_returns_original() -> None:
     message = "No commit message here"
     assert utils.clean_explanatory_text(message) == message
 
 
-def test_format_commit_message_converts_literal_newlines():
+def test_format_commit_message_converts_literal_newlines() -> None:
     message = "feat: add tests\\n\\nbody line\\n"
     formatted = utils.format_commit_message(message)
     assert formatted == "feat: add tests\n\nbody line"
 
 
-def test_normalize_commit_subject_case_lowercases_description():
+def test_normalize_commit_subject_case_lowercases_description() -> None:
     message = "feat(core): Add tests"
     normalized = utils.normalize_commit_subject_case(message)
     assert normalized == "feat(core): add tests"
 
 
-def test_normalize_commit_subject_case_keeps_lowercase():
+def test_normalize_commit_subject_case_keeps_lowercase() -> None:
     message = "fix: add tests"
     assert utils.normalize_commit_subject_case(message) == message
 
@@ -54,5 +54,5 @@ def test_normalize_commit_subject_case_keeps_lowercase():
         ("feat!: long description\n\nBREAKING CHANGE: breaking details", True),
     ],
 )
-def test_is_valid_conventional_commit_cases(message, expected):
+def test_is_valid_conventional_commit_cases(message: str, expected: bool) -> None:
     assert utils.is_valid_conventional_commit(message) is expected
