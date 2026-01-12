@@ -3,7 +3,7 @@ import click
 import sys
 import subprocess
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 from .core import commit_with_ai
 from .utils import display_error, get_last_commit_summary
 from .config import (
@@ -114,7 +114,7 @@ def commit(
         if config.get("DEFAULT_DATE"):
             os.environ["DEFAULT_DATE"] = config["DEFAULT_DATE"]
 
-        provider_name = config.get("AI_PROVIDER")
+        provider_name = config.get("AI_PROVIDER") or "openai"
         language = config.get("COMMIT_LANGUAGE", "PT-BR")
         
         if not date and config.get("DEFAULT_DATE"):
@@ -193,7 +193,7 @@ def config(
 ) -> None:
     """Configure API Key e provedor padrão"""
     try:
-        updates = {}
+        updates: dict[str, Any] = {}
         modified = False
 
         if api_key:
