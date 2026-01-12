@@ -7,6 +7,20 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-01-11
+
+### Corrigido
+
+- **CI/Mypy**: Corrigida configuração do mypy para ignorar módulos internos do `pystest` (`_pytest.terminal`) que usam syntax do Python 3.10+ incompatível com verificação forçada em 3.9.
+- **Tipagem**: Refatoração extensiva para compliance estrito com mypy:
+  - Adicionadas anotações explícitas faltantes em dicionários e variáveis opcionais (`seshat/code_review.py`, `seshat/cli.py`, `tests/test_cli.py`).
+  - Corrigido retorno de funções utilitárias (`normalize_commit_subject_case`, `_clean_response`) para garantir retorno de string vazia em vez de `None`.
+  - Refatorado `_clean_response` em `providers.py` para usar type guards e evitar erros de atributo em `Optional[str]`.
+  - Adicionado import de `Any` faltante em `seshat/cli.py`.
+- **Testes**: Atualizados testes do comando `seshat init` para:
+  - Fornecer input simulado para o novo prompt interativo de diretório de logs.
+  - Corrigir asserções de tipo para argumentos de chamadas simuladas.
+
 ## [1.2.1] - 2026-01-11
 
 ### Adicionado
