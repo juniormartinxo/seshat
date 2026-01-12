@@ -15,7 +15,7 @@ from seshat.code_review import (
 class TestParseCodeReviewResponse:
     """Tests for parse_code_review_response function."""
     
-    def test_parse_without_review_section(self):
+    def test_parse_without_review_section(self) -> None:
         """Should return original message when no review marker present."""
         response = "feat: add new feature"
         
@@ -24,7 +24,7 @@ class TestParseCodeReviewResponse:
         assert commit_msg == "feat: add new feature"
         assert review.has_issues is False
     
-    def test_parse_with_ok_review(self):
+    def test_parse_with_ok_review(self) -> None:
         """Should return no issues when review says OK."""
         response = """feat: add new feature
 
@@ -37,7 +37,7 @@ OK - Code looks clean."""
         assert review.has_issues is False
         assert "clean" in review.summary.lower()
     
-    def test_parse_with_issues(self):
+    def test_parse_with_issues(self) -> None:
         """Should parse issues correctly."""
         response = """fix: resolve bug
 
@@ -64,12 +64,12 @@ OK - Code looks clean."""
 class TestCodeReviewResult:
     """Tests for CodeReviewResult class."""
     
-    def test_max_severity_with_no_issues(self):
+    def test_max_severity_with_no_issues(self) -> None:
         """Should return 'info' when no issues."""
         result = CodeReviewResult(has_issues=False)
         assert result.max_severity == "info"
     
-    def test_max_severity_with_error(self):
+    def test_max_severity_with_error(self) -> None:
         """Should return highest severity."""
         result = CodeReviewResult(
             has_issues=True,
@@ -81,7 +81,7 @@ class TestCodeReviewResult:
         )
         assert result.max_severity == "error"
     
-    def test_has_blocking_issues_with_error_threshold(self):
+    def test_has_blocking_issues_with_error_threshold(self) -> None:
         """Should detect blocking issues at error severity."""
         result = CodeReviewResult(
             has_issues=True,
@@ -100,7 +100,7 @@ class TestCodeReviewResult:
 class TestFormatReviewForDisplay:
     """Tests for format_review_for_display function."""
     
-    def test_format_no_issues(self):
+    def test_format_no_issues(self) -> None:
         """Should show success message when no issues."""
         result = CodeReviewResult(has_issues=False)
         output = format_review_for_display(result)
@@ -108,7 +108,7 @@ class TestFormatReviewForDisplay:
         assert "✅" in output
         assert "No issues" in output
     
-    def test_format_with_issues(self):
+    def test_format_with_issues(self) -> None:
         """Should format issues with icons."""
         result = CodeReviewResult(
             has_issues=True,
@@ -133,7 +133,7 @@ class TestFormatReviewForDisplay:
 class TestGetCodeReviewPromptAddon:
     """Tests for get_code_review_prompt_addon function."""
     
-    def test_returns_non_empty_string(self):
+    def test_returns_non_empty_string(self) -> None:
         """Should return a non-empty prompt addon."""
         addon = get_code_review_prompt_addon()
         
@@ -145,7 +145,10 @@ class TestGetCodeReviewPromptAddon:
 class TestSaveReviewToLog:
     """Tests for save_review_to_log function."""
 
-    def test_save_review_to_log_extracts_paths_with_spaces_and_windows(self, tmp_path):
+    def test_save_review_to_log_extracts_paths_with_spaces_and_windows(
+        self,
+        tmp_path: Path,
+    ) -> None:
         result = CodeReviewResult(
             has_issues=True,
             summary="Found 2 issue(s)",
@@ -179,7 +182,7 @@ class TestSaveReviewToLog:
             "C:\\My Files\\file name.py",
         }
 
-    def test_save_review_to_log_creates_unknown_log(self, tmp_path):
+    def test_save_review_to_log_creates_unknown_log(self, tmp_path: Path) -> None:
         result = CodeReviewResult(
             has_issues=True,
             summary="Found 2 issue(s)",
