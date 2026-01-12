@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 ROOT = Path(__file__).parent
 
-def read_version():
+def read_version() -> str:
     version_path = ROOT / "seshat" / "__init__.py"
     content = version_path.read_text(encoding="utf-8")
     match = re.search(r'__version__\s*=\s*"([^"]+)"', content)
