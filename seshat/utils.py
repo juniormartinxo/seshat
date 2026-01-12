@@ -4,8 +4,13 @@ import sys
 import subprocess
 import time
 import threading
+from typing import Callable, Optional, Sequence
 
-def show_thinking_animation(stop_event, get_message):
+
+def show_thinking_animation(
+    stop_event: threading.Event,
+    get_message: Callable[[], Optional[str]],
+) -> None:
     """
     Mostra uma animação de "pensando" no terminal.
 
@@ -40,7 +45,11 @@ def show_thinking_animation(stop_event, get_message):
 
 
 class ThinkingAnimation:
-    def __init__(self, messages=None, interval_seconds=2.0):
+    def __init__(
+        self,
+        messages: Optional[Sequence[str]] = None,
+        interval_seconds: float = 2.0,
+    ) -> None:
         self._override_message = None
         self._start_time = time.time()
         self._interval_seconds = interval_seconds
@@ -60,11 +69,11 @@ class ThinkingAnimation:
         self.thread.daemon = True
         self.thread.start()
 
-    def update(self, message):
+    def update(self, message: str) -> None:
         with self._lock:
             self._override_message = message
 
-    def get_message(self):
+    def get_message(self) -> str:
         with self._lock:
             if self._override_message:
                 return self._override_message
@@ -76,7 +85,10 @@ class ThinkingAnimation:
             return self._messages[index]
 
 
-def start_thinking_animation(messages=None, interval_seconds=2.0):
+def start_thinking_animation(
+    messages: Optional[Sequence[str]] = None,
+    interval_seconds: float = 2.0,
+) -> ThinkingAnimation:
     """
     Inicia a animação de "pensando" em uma thread separada.
 
@@ -86,7 +98,7 @@ def start_thinking_animation(messages=None, interval_seconds=2.0):
     return ThinkingAnimation(messages=messages, interval_seconds=interval_seconds)
 
 
-def stop_thinking_animation(animation):
+def stop_thinking_animation(animation: ThinkingAnimation) -> None:
     """
     Para a animação de "pensando".
 
@@ -99,12 +111,12 @@ def stop_thinking_animation(animation):
 
 
 
-def display_error(message):
+def display_error(message: str) -> None:
     """Exibe erros formatados"""
     click.secho(f"🚨 Erro: {message}", fg="red")
 
 
-def get_last_commit_summary():
+def get_last_commit_summary() -> Optional[str]:
     """Obtém resumo do último commit (hash curto + subject)."""
     try:
         return (
@@ -118,7 +130,7 @@ def get_last_commit_summary():
         return None
 
 
-def clean_think_tags(message):
+def clean_think_tags(message: Optional[str]) -> Optional[str]:
     """
     Remove as tags <think> e todo o conteúdo entre elas da mensagem.
 
@@ -146,7 +158,7 @@ def clean_think_tags(message):
     return clean_message
 
 
-def is_valid_conventional_commit(message):
+def is_valid_conventional_commit(message: str) -> bool:
     """
     Valida se a mensagem segue a especificação Conventional Commits 1.0.0.
 
@@ -230,7 +242,7 @@ def is_valid_conventional_commit(message):
     return True
 
 
-def clean_explanatory_text(message):
+def clean_explanatory_text(message: Optional[str]) -> Optional[str]:
     """
     Remove texto explicativo que pode vir antes da mensagem de commit.
 
@@ -283,7 +295,7 @@ def clean_explanatory_text(message):
     return message.strip()
 
 
-def format_commit_message(message):
+def format_commit_message(message: Optional[str]) -> Optional[str]:
     """
     Processa a mensagem de commit para tratar quebras de linha adequadamente.
 
@@ -314,7 +326,7 @@ def format_commit_message(message):
     return "\n".join(cleaned_lines)
 
 
-def normalize_commit_subject_case(message):
+def normalize_commit_subject_case(message: Optional[str]) -> Optional[str]:
     """
     Garante que a descrição do header comece com letra minúscula.
 
