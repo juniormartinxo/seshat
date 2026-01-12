@@ -87,7 +87,7 @@ def flow(
             date = config["DEFAULT_DATE"]
 
         service = BatchCommitService(
-            provider=config.get("AI_PROVIDER"),
+            provider=config.get("AI_PROVIDER") or "openai",
             model=config.get("AI_MODEL"),
             language=config.get("COMMIT_LANGUAGE", "PT-BR")
         )
