@@ -30,15 +30,21 @@ class BatchCommitService:
         self._lock_ttl_seconds = 30 * 60
 
     def get_modified_files(self, path: str = ".") -> List[str]:
-        """Obtém arquivos modificados e não rastreados"""
+        """Obtém arquivos modificados, staged (incluindo deletados) e não rastreados"""
+        # Arquivos modificados (unstaged)
         modified = self._run_git(["diff", "--name-only"], path)
+        # Arquivos não rastreados
         untracked = self._run_git(["ls-files", "--others", "--exclude-standard"], path)
+        # Arquivos já em stage (incluindo deletados)
+        staged = self._run_git(["diff", "--cached", "--name-only"], path)
         
         files = []
         if modified:
             files.extend(modified.splitlines())
         if untracked:
             files.extend(untracked.splitlines())
+        if staged:
+            files.extend(staged.splitlines())
             
         return sorted(list(set(f for f in files if f.strip())))
 
@@ -257,6 +263,18 @@ class BatchCommitService:
 
     def _get_git_dir(self, file: str) -> Optional[str]:
         base_dir = os.path.dirname(file) or "."
+        
+        # Se o diretório base não existir (caso de arquivo deletado em pasta deletada),
+        # sobe na árvore até achar um existente
+        while not os.path.exists(base_dir) and base_dir not in (".", "/"):
+            parent = os.path.dirname(base_dir)
+            if parent == base_dir:  # Chegou na raiz
+                break
+            base_dir = parent
+            
+        if not os.path.exists(base_dir):
+             base_dir = "."
+
         result = subprocess.run(
             ["git", "-C", base_dir, "rev-parse", "--git-dir"],
             capture_output=True,
