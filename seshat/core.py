@@ -124,13 +124,62 @@ def get_git_diff(
     return diff
 
 
-def get_staged_files(paths: Optional[List[str]] = None) -> List[str]:
-    """Get list of staged files."""
-    cmd = ["git", "diff", "--cached", "--name-only"]
+def get_deleted_staged_files(paths: Optional[List[str]] = None) -> List[str]:
+    """Get list of staged files that were deleted."""
+    cmd = ["git", "diff", "--cached", "--name-only", "--diff-filter=D"]
     if paths:
         cmd.extend(["--"] + paths)
     result = subprocess.run(cmd, capture_output=True, text=True)
     return [f for f in result.stdout.strip().split("\n") if f]
+
+
+def get_staged_files(paths: Optional[List[str]] = None, exclude_deleted: bool = True) -> List[str]:
+    """Get list of staged files.
+    
+    Args:
+        paths: Optional list of specific paths to filter
+        exclude_deleted: If True, excludes files that were deleted (default: True)
+    
+    Returns:
+        List of staged file paths
+    """
+    cmd = ["git", "diff", "--cached", "--name-only"]
+    if exclude_deleted:
+        # Exclude deleted files (D) - only get Added, Modified, Renamed, Copied, etc.
+        cmd.append("--diff-filter=d")  # lowercase 'd' means exclude deleted
+    if paths:
+        cmd.extend(["--"] + paths)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return [f for f in result.stdout.strip().split("\n") if f]
+
+
+def is_deletion_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes are only file deletions.
+    
+    Returns True if there are deleted files and no other changes (added/modified).
+    """
+    deleted_files = get_deleted_staged_files(paths)
+    other_files = get_staged_files(paths, exclude_deleted=True)
+    return len(deleted_files) > 0 and len(other_files) == 0
+
+
+def generate_deletion_commit_message(deleted_files: List[str]) -> str:
+    """Generate automatic commit message for file deletions.
+    
+    Args:
+        deleted_files: List of deleted file paths
+        
+    Returns:
+        Conventional Commit message for the deletion
+    """
+    if len(deleted_files) == 1:
+        return f"chore: remove {deleted_files[0]}"
+    elif len(deleted_files) <= 3:
+        files_str = ", ".join(deleted_files)
+        return f"chore: remove {files_str}"
+    else:
+        # For many files, just show count
+        return f"chore: remove {len(deleted_files)} arquivos"
 
 
 def run_pre_commit_checks(
@@ -211,6 +260,14 @@ def commit_with_ai(
     # Load .seshat config once (used for both checks and code_review)
     from .tooling_ts import SeshatConfig
     seshat_config = SeshatConfig.load()
+    
+    # Fast path: if commit is only file deletions, skip AI and generate automatic message
+    if is_deletion_only_commit(paths):
+        deleted_files = get_deleted_staged_files(paths)
+        commit_msg = generate_deletion_commit_message(deleted_files)
+        ui.info(f"Commit de deleção detectado ({len(deleted_files)} arquivo(s))", icon="🗑️")
+        ui.info(f"Mensagem automática: {commit_msg}", icon="📝")
+        return commit_msg, None
     
     # Check if code_review is enabled via .seshat (if not explicitly set via CLI)
     # --no-review flag takes precedence over everything
