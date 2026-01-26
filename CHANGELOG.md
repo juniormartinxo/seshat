@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-01-26
+
+### Corrigido
+
+- **Locking em Deleções Aninhadas**: Corrigido bug onde o Seshat falhava ao adquirir lock para arquivos deletados cujos diretórios pai também foram removidos. Agora o sistema navega corretamente até um diretório existente para resolver o caminho do Git.
+- **Detecção de Mudanças**: Ajustada função `get_modified_files` para garantir inclusão de todos os tipos de arquivos staged (renomeados, deletados, copiados), não apenas modificados ou não-rastreados.
+
 ## [1.3.0] - 2026-01-26
 
 ### Adicionado
