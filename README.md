@@ -23,6 +23,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 🛠️ **Pre-Commit Tooling (NOVO!):** Executa lint, test e typecheck automaticamente antes do commit.
 * 🔬 **Code Review via IA (NOVO!):** Analisa code smells e problemas de qualidade integrado à geração de commit.
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
+* 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 
 ## 🚀 Instalação
 
