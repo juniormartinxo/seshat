@@ -7,6 +7,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-01-26
+
+### Adicionado
+
+- **Commits Automáticos para Deleções**: Quando o commit contém apenas arquivos deletados, o Seshat agora gera automaticamente uma mensagem de commit (ex: `chore: remove path/to/file.tsx`) sem chamar a IA, economizando tokens e tempo.
+  - Pulam verificações de lint/typecheck (arquivos não existem mais)
+  - Pulam code review (nada para revisar)
+  - Mensagem formatada automaticamente baseada na quantidade de arquivos deletados
+
+### Corrigido
+
+- **Verificações em Arquivos Deletados**: Arquivos removidos do repositório agora são automaticamente excluídos das verificações pré-commit (eslint, tsc, etc.), evitando erros de "file not found".
+
 ## [1.2.2] - 2026-01-11
 
 ### Corrigido
