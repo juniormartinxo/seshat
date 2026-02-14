@@ -7,6 +7,13 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-02-14
+
+### Adicionado
+
+- **JUDGE (segunda IA configurável)**: fluxo de segunda opinião para code review bloqueante com suporte a provedor/modelo/chave dedicados via `seshat config`.
+- **JUDGE como autor do commit**: ao acionar o JUDGE, a mensagem final de commit passa a ser gerada por ele.
+
 ## [1.3.1] - 2026-01-26
 
 ### Corrigido
