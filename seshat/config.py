@@ -48,8 +48,11 @@ def load_config() -> dict[str, Any]:
     # 4. Consolida configuração com prioridade para variáveis de ambiente
     final_config = {
         "API_KEY": os.getenv("API_KEY") or get_secure_key("API_KEY") or config.get("API_KEY"),
+        "JUDGE_API_KEY": os.getenv("JUDGE_API_KEY") or get_secure_key("JUDGE_API_KEY") or config.get("JUDGE_API_KEY"),
         "AI_PROVIDER": os.getenv("AI_PROVIDER") or config.get("AI_PROVIDER"),
         "AI_MODEL": os.getenv("AI_MODEL") or config.get("AI_MODEL"),
+        "JUDGE_PROVIDER": os.getenv("JUDGE_PROVIDER") or config.get("JUDGE_PROVIDER"),
+        "JUDGE_MODEL": os.getenv("JUDGE_MODEL") or config.get("JUDGE_MODEL"),
         "MAX_DIFF_SIZE": int(os.getenv("MAX_DIFF_SIZE") or config.get("MAX_DIFF_SIZE", 3000)),
         "WARN_DIFF_SIZE": int(os.getenv("WARN_DIFF_SIZE") or config.get("WARN_DIFF_SIZE", 2500)),
         "COMMIT_LANGUAGE": os.getenv("COMMIT_LANGUAGE") or config.get("COMMIT_LANGUAGE", "PT-BR"),
@@ -67,6 +70,10 @@ def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
     if provider in DEFAULT_MODELS and not normalized.get("AI_MODEL"):
         normalized["AI_MODEL"] = DEFAULT_MODELS[provider]
 
+    judge_provider = normalized.get("JUDGE_PROVIDER")
+    if judge_provider in DEFAULT_MODELS and not normalized.get("JUDGE_MODEL"):
+        normalized["JUDGE_MODEL"] = DEFAULT_MODELS[judge_provider]
+
     if provider == "gemini" and not normalized.get("API_KEY"):
         gemini_key = os.getenv("GEMINI_API_KEY")
         if gemini_key:
@@ -75,6 +82,15 @@ def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
         zai_key = os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY")
         if zai_key:
             normalized["API_KEY"] = zai_key
+
+    if judge_provider == "gemini" and not normalized.get("JUDGE_API_KEY"):
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            normalized["JUDGE_API_KEY"] = gemini_key
+    if judge_provider == "zai" and not normalized.get("JUDGE_API_KEY"):
+        zai_key = os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY")
+        if zai_key:
+            normalized["JUDGE_API_KEY"] = zai_key
 
     return normalized
 
@@ -103,6 +119,7 @@ def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
     """
     config = normalize_config(config)
     provider = config.get("AI_PROVIDER")
+    judge_provider = config.get("JUDGE_PROVIDER")
 
     if not provider:
         return False, "Provedor de IA (AI_PROVIDER) não configurado. Use 'seshat config --provider <nome>'."
@@ -115,6 +132,20 @@ def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
 
     if not config.get("AI_MODEL") and provider != "ollama":
         return False, f"AI_MODEL não configurado para o provedor {provider}. Use 'seshat config --model <nome>'."
+
+    if judge_provider:
+        if judge_provider not in VALID_PROVIDERS:
+            return False, f"Provedor inválido para JUDGE: {judge_provider}. Opções: {', '.join(sorted(VALID_PROVIDERS))}."
+        if not config.get("JUDGE_API_KEY") and judge_provider != "ollama":
+            return False, (
+                f"JUDGE_API_KEY não encontrada para o provedor {judge_provider}. "
+                "Configure via env var ou 'seshat config --judge-api-key'."
+            )
+        if not config.get("JUDGE_MODEL") and judge_provider != "ollama":
+            return False, (
+                f"JUDGE_MODEL não configurado para o provedor {judge_provider}. "
+                "Use 'seshat config --judge-model <nome>'."
+            )
 
     return True, None
 
@@ -145,6 +176,16 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
                 # Se salvou no keyring, garante que não está no arquivo
                 if "API_KEY" in current_config:
                     del current_config["API_KEY"]
+
+    if "JUDGE_API_KEY" in updates:
+        judge_api_key = updates.pop("JUDGE_API_KEY")
+        if judge_api_key:
+            if not set_secure_key("JUDGE_API_KEY", judge_api_key):
+                click.secho("Aviso: Keyring indisponível, salvando JUDGE_API_KEY em texto plano.", fg="yellow")
+                current_config["JUDGE_API_KEY"] = judge_api_key
+            else:
+                if "JUDGE_API_KEY" in current_config:
+                    del current_config["JUDGE_API_KEY"]
     
     current_config.update(updates)
     
