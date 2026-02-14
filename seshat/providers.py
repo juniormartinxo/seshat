@@ -335,6 +335,60 @@ class GeminiProvider(BaseProvider):
         return self._clean_review_response(response.text)
 
 
+class ZAIProvider(BaseProvider):
+    def __init__(self) -> None:
+        self.api_key = (
+            os.getenv("API_KEY")
+            or os.getenv("ZAI_API_KEY")
+            or os.getenv("ZHIPU_API_KEY")
+        )
+        self.model = os.getenv("AI_MODEL", "glm-5")
+        self.base_url = os.getenv("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
+
+    def validate_env(self) -> None:
+        if not self.api_key:
+            raise ValueError("API_KEY não configurada para Z.AI")
+
+    @retry_on_error()
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
+        self.validate_env()
+
+        client = _openai_client(self.api_key, base_url=self.base_url)
+        language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
+
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Diff:\n{diff}"},
+            ],
+            stream=False,
+        )
+
+        return self._clean_response(response.choices[0].message.content)
+
+    @retry_on_error()
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
+        self.validate_env()
+
+        client = _openai_client(self.api_key, base_url=self.base_url)
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
+
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Diff:\n{diff}"},
+            ],
+            stream=False,
+        )
+
+        return self._clean_review_response(response.choices[0].message.content)
+
+
 class OllamaProvider(BaseProvider):
     def __init__(self) -> None:
         self.base_url = "http://localhost:11434/api/generate"
@@ -411,6 +465,7 @@ def get_provider(provider_name: str) -> BaseProvider:
         "claude": ClaudeProvider,
         "openai": OpenAIProvider,
         "gemini": GeminiProvider,
+        "zai": ZAIProvider,
         "ollama": OllamaProvider,
     }
     
