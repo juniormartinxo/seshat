@@ -105,6 +105,12 @@ def commit(
             os.environ["AI_PROVIDER"] = config["AI_PROVIDER"]
         if config.get("AI_MODEL"):
             os.environ["AI_MODEL"] = config["AI_MODEL"]
+        if config.get("JUDGE_API_KEY"):
+            os.environ["JUDGE_API_KEY"] = config["JUDGE_API_KEY"]
+        if config.get("JUDGE_PROVIDER"):
+            os.environ["JUDGE_PROVIDER"] = config["JUDGE_PROVIDER"]
+        if config.get("JUDGE_MODEL"):
+            os.environ["JUDGE_MODEL"] = config["JUDGE_MODEL"]
         if config.get("MAX_DIFF_SIZE"):
             os.environ["MAX_DIFF_SIZE"] = str(config["MAX_DIFF_SIZE"])
         if config.get("WARN_DIFF_SIZE"):
@@ -178,6 +184,9 @@ def commit(
 @click.option("--api-key", help="Configure a API Key")
 @click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai)")
 @click.option("--model", help="Configure o modelo padrão para o seu provider")
+@click.option("--judge-api-key", help="Configure a API Key do JUDGE")
+@click.option("--judge-provider", help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai)")
+@click.option("--judge-model", help="Configure o modelo padrão para o JUDGE")
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
 @click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
@@ -186,6 +195,9 @@ def config(
     api_key: Optional[str],
     provider: Optional[str],
     model: Optional[str],
+    judge_api_key: Optional[str],
+    judge_provider: Optional[str],
+    judge_model: Optional[str],
     default_date: Optional[str],
     max_diff: Optional[int],
     warn_diff: Optional[int],
@@ -200,6 +212,10 @@ def config(
             updates["API_KEY"] = api_key
             modified = True
 
+        if judge_api_key:
+            updates["JUDGE_API_KEY"] = judge_api_key
+            modified = True
+
         if provider:
             valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini", "zai"]
             if provider not in valid_providers:
@@ -209,8 +225,21 @@ def config(
             updates["AI_PROVIDER"] = provider
             modified = True
 
+        if judge_provider:
+            valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini", "zai"]
+            if judge_provider not in valid_providers:
+                raise ValueError(
+                    f"Provedor inválido para JUDGE. Opções: {', '.join(valid_providers)}"
+                )
+            updates["JUDGE_PROVIDER"] = judge_provider
+            modified = True
+
         if model:
             updates["AI_MODEL"] = model
+            modified = True
+
+        if judge_model:
+            updates["JUDGE_MODEL"] = judge_model
             modified = True
             
         if default_date:
@@ -253,14 +282,20 @@ def config(
 
             language = current_config.get("COMMIT_LANGUAGE", "PT-BR")
             masked_key = mask_api_key(current_config.get("API_KEY"), language)
+            masked_judge_key = mask_api_key(current_config.get("JUDGE_API_KEY"), language)
             provider_value = current_config.get("AI_PROVIDER") or ("not set" if language == "ENG" else "não configurado")
             model_value = current_config.get("AI_MODEL") or ("not set" if language == "ENG" else "não configurado")
+            judge_provider_value = current_config.get("JUDGE_PROVIDER") or ("not set" if language == "ENG" else "não configurado")
+            judge_model_value = current_config.get("JUDGE_MODEL") or ("not set" if language == "ENG" else "não configurado")
             
             if language == "ENG":
                 click.echo("Current configuration:")
                 click.echo(f"API Key: {masked_key}")
                 click.echo(f"Provider: {provider_value}")
                 click.echo(f"Model: {model_value}")
+                click.echo(f"Judge API Key: {masked_judge_key}")
+                click.echo(f"Judge Provider: {judge_provider_value}")
+                click.echo(f"Judge Model: {judge_model_value}")
                 click.echo(f"Maximum diff limit: {current_config.get('MAX_DIFF_SIZE')}")
                 click.echo(f"Warning diff limit: {current_config.get('WARN_DIFF_SIZE')}")
                 click.echo(f"Commit language: {current_config.get('COMMIT_LANGUAGE')}")
@@ -270,6 +305,9 @@ def config(
                 click.echo(f"API Key: {masked_key}")
                 click.echo(f"Provider: {provider_value}")
                 click.echo(f"Model: {model_value}")
+                click.echo(f"Judge API Key: {masked_judge_key}")
+                click.echo(f"Judge Provider: {judge_provider_value}")
+                click.echo(f"Judge Model: {judge_model_value}")
                 click.echo(f"Limite máximo do diff: {current_config.get('MAX_DIFF_SIZE')}")
                 click.echo(f"Limite de aviso do diff: {current_config.get('WARN_DIFF_SIZE')}")
                 click.echo(f"Linguagem dos commits: {current_config.get('COMMIT_LANGUAGE')}")
