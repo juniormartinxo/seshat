@@ -22,6 +22,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 🧹 **Saída de Terminal Profissional:** UI consistente, progresso em tempo real e saída do Git silenciosa por padrão (use `--verbose` para detalhes).
 * 🛠️ **Pre-Commit Tooling (NOVO!):** Executa lint, test e typecheck automaticamente antes do commit.
 * 🔬 **Code Review via IA (NOVO!):** Analisa code smells e problemas de qualidade integrado à geração de commit.
+* ⚖️ **JUDGE (NOVO!):** Segunda IA configurável que revisa e gera o commit quando acionada.
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 
@@ -101,6 +102,14 @@ Seshat suporta os seguintes provedores de IA:
     seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
     seshat config --api-key SUA_CHAVE_API
     seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash, glm-5
+    ```
+
+    Para configurar o JUDGE (segunda IA):
+
+    ```bash
+    seshat config --judge-provider SEU_PROVIDER
+    seshat config --judge-api-key SUA_CHAVE_API
+    seshat config --judge-model SEU_MODEL
     ```
 
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
@@ -412,6 +421,7 @@ Você pode configurar o Seshat para salvar todos os apontamentos da IA em arquiv
 2. Se encontrar `[BUG]` ou `[SECURITY]`, o commit é **bloqueado imediatamente**.
 3. Se encontrar apenas avisos (SMELL, PERF, STYLE), o usuário é questionado se deseja prosseguir.
 4. Somente após a aprovação do review, a mensagem de commit é gerada.
+5. Se `code_review.blocking` estiver ativo e houver `[BUG]`, o usuário pode acionar o **JUDGE**, que faz a revisão e gera o commit.
 
 ### Configuração por Projeto (.seshat)
 
@@ -495,6 +505,9 @@ commands:
   * `--api-key`: Configura a chave de API.
   * `--provider`: Configura o provedor padrão.
   * `--model`: Configura o modelo padrão.
+  * `--judge-api-key`: Configura a chave do JUDGE.
+  * `--judge-provider`: Configura o provedor do JUDGE.
+  * `--judge-model`: Configura o modelo do JUDGE.
   * `--max-diff`: Configura o limite máximo do diff.
   * `--warn-diff`: Configura o limite de aviso do diff.
   * `--language`: Configura a linguagem das mensagens (PT-BR, ENG, ESP, FRA, DEU, ITA).
