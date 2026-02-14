@@ -14,6 +14,7 @@ DEFAULT_MODELS = {
     "claude": "claude-3-opus-20240229",
     "openai": "gpt-4-turbo-preview",
     "gemini": "gemini-2.0-flash",
+    "zai": "glm-5",
     "ollama": "llama3",
 }
 VALID_PROVIDERS = set(DEFAULT_MODELS.keys())
@@ -70,6 +71,10 @@ def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
         gemini_key = os.getenv("GEMINI_API_KEY")
         if gemini_key:
             normalized["API_KEY"] = gemini_key
+    if provider == "zai" and not normalized.get("API_KEY"):
+        zai_key = os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY")
+        if zai_key:
+            normalized["API_KEY"] = zai_key
 
     return normalized
 
