@@ -74,6 +74,12 @@ def flow(
             os.environ["AI_PROVIDER"] = config["AI_PROVIDER"]
         if config.get("AI_MODEL"):
             os.environ["AI_MODEL"] = config["AI_MODEL"]
+        if config.get("JUDGE_API_KEY"):
+            os.environ["JUDGE_API_KEY"] = config["JUDGE_API_KEY"]
+        if config.get("JUDGE_PROVIDER"):
+            os.environ["JUDGE_PROVIDER"] = config["JUDGE_PROVIDER"]
+        if config.get("JUDGE_MODEL"):
+            os.environ["JUDGE_MODEL"] = config["JUDGE_MODEL"]
         if config.get("MAX_DIFF_SIZE"):
             os.environ["MAX_DIFF_SIZE"] = str(config["MAX_DIFF_SIZE"])
         if config.get("WARN_DIFF_SIZE"):
