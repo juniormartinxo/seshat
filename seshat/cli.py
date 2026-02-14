@@ -22,7 +22,7 @@ from . import flow  # noqa: F401
 
 
 @cli.command()
-@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini)")
+@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)")
 @click.option("--model", help="Modelo específico do provedor")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
@@ -176,7 +176,7 @@ def commit(
 
 @cli.command()
 @click.option("--api-key", help="Configure a API Key")
-@click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini)")
+@click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai)")
 @click.option("--model", help="Configure o modelo padrão para o seu provider")
 @click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
 @click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
@@ -201,7 +201,7 @@ def config(
             modified = True
 
         if provider:
-            valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini"]
+            valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini", "zai"]
             if provider not in valid_providers:
                 raise ValueError(
                     f"Provedor inválido. Opções: {', '.join(valid_providers)}"
