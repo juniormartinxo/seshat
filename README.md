@@ -11,7 +11,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 
 ## ✨ Recursos
 
-* ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic), OpenAI API, Gemini API (Google) e Ollama (local).
+* ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic), OpenAI API, Gemini API (Google), Z.AI (GLM) e Ollama (local).
 * 📏 **Validação de Tamanho do Diff:**  Alertas para diffs grandes, com limites configuráveis.
 * 🔍 **Verificação de Arquivos Staged:** Garante que você não se esqueça de adicionar arquivos ao commit.
 * 📝 **Conventional Commits com Validação:** Gera mensagens seguindo o padrão e bloqueia commits com mensagem vazia ou inválida.
@@ -82,6 +82,7 @@ Seshat suporta os seguintes provedores de IA:
 * **Claude API (Anthropic):** Outro provedor de IA online.
 * **OpenAI API:** Provedor de IA online, muito conhecido como ChatGPT.
 * **Gemini API (Google):** Provedor de IA do Google.
+* **Z.AI (GLM):** Provedor de IA da Z.AI (GLM).
 * **Ollama (Local):**  Execute modelos de IA localmente usando Ollama.
 
 ### Configuração Rápida (Provedores Online)
@@ -92,22 +93,45 @@ Seshat suporta os seguintes provedores de IA:
       * **Claude:** [Link para a documentação do Claude](https://console.anthropic.com/dashboard)
       * **OpenAI:** [Link para a documentação do OpenAI](https://platform.openai.com/)
       * **Gemini:** [Link para a documentação do Gemini](https://ai.google.dev/gemini-api/docs/quickstart)
+      * **Z.AI:** [Link para a documentação do Z.AI](https://docs.z.ai/guides/overview/quick-start)
 
 2. **Configure via CLI:**
 
     ```bash
-    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini
+    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
     seshat config --api-key SUA_CHAVE_API
-    seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash
+    seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash, glm-5
     ```
 
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
 
     ```bash
-    AI_PROVIDER=deepseek|claude|ollama|openai|gemini 
+    AI_PROVIDER=deepseek|claude|ollama|openai|gemini|zai 
     API_KEY=sua_chave_aqui 
     AI_MODEL=seu-modelo
     ```
+
+### Configuração do Z.AI (GLM)
+
+1. **Obtenha sua API Key:** siga o quick-start em https://docs.z.ai/guides/overview/quick-start
+2. **Configure o Seshat:**
+
+    ```bash
+    seshat config --provider zai
+    seshat config --api-key SUA_CHAVE_ZAI
+    seshat config --model glm-5
+    ```
+
+    Ou via `.env`:
+
+    ```bash
+    AI_PROVIDER=zai
+    API_KEY=sua_chave_zai
+    AI_MODEL=glm-5
+    ```
+
+    Também é aceito `ZAI_API_KEY` (ou `ZHIPU_API_KEY`) no lugar de `API_KEY`.
+    Para usar o endpoint do plano Coding, defina `ZAI_BASE_URL=https://api.z.ai/api/coding/paas/v4`.
 
 ### Configuração do Ollama (IA Local)
 
@@ -504,9 +528,9 @@ commands:
 seshat config
 
 # Redefinir a configuração
-seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini
+seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
 seshat config --api-key SUA_NOVA_CHAVE
-seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash
+seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash, glm-5
 ```
 
 **Problemas com o Ollama:**
