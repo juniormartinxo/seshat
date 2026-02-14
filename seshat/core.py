@@ -18,7 +18,105 @@ from .code_review import (
     get_review_prompt,
     filter_diff_by_extensions,
 )
+from .config import VALID_PROVIDERS, DEFAULT_MODELS
 from . import ui
+
+
+def _has_bug_issues(result: CodeReviewResult) -> bool:
+    return any(issue.type == "bug" for issue in result.issues)
+
+
+def _has_security_issues(result: CodeReviewResult) -> bool:
+    return any(issue.type == "security" for issue in result.issues)
+
+
+def _prompt_blocking_bug_action() -> str:
+    ui.section("⚠️  BUG encontrado no code review")
+    click.echo("Escolha o que deseja fazer:")
+    click.echo("  1. Continuar o commit (falso positivo)")
+    click.echo("  2. Parar e não commitar para investigar")
+    click.echo("  3. Enviar para outra IA (JUDGE)")
+    choice = click.prompt("Opção", type=click.Choice(["1", "2", "3"]), default="2")
+    if choice == "1":
+        return "continue"
+    if choice == "3":
+        return "judge"
+    return "stop"
+
+
+def _select_judge_provider(current_provider: str, configured_provider: Optional[str]) -> str:
+    if configured_provider:
+        return configured_provider
+    providers = [p for p in sorted(VALID_PROVIDERS) if p != current_provider]
+    if not providers:
+        raise ValueError("Nenhum outro provedor disponível para o JUDGE.")
+    choice = click.prompt(
+        "Provedor para o JUDGE",
+        type=click.Choice(providers),
+        default=providers[0],
+    )
+    return choice
+
+
+def _with_temp_env(overrides: dict[str, Optional[str]]):
+    class _EnvCtx:
+        def __enter__(self):
+            self._old = {}
+            for key, value in overrides.items():
+                self._old[key] = os.environ.get(key)
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            for key, value in self._old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            return False
+
+    return _EnvCtx()
+
+
+def _run_judge_review(
+    provider_name: str,
+    diff: str,
+    custom_prompt: Optional[str],
+    verbose: bool,
+    project_type: Optional[str],
+    review_extensions: Optional[List[str]],
+    api_key: Optional[str],
+    model: Optional[str],
+) -> CodeReviewResult:
+    from .providers import get_provider
+
+    model_hint = model or DEFAULT_MODELS.get(provider_name)
+    with _with_temp_env({
+        "AI_PROVIDER": provider_name,
+        "AI_MODEL": model_hint,
+        "API_KEY": api_key,
+    }):
+        selected_provider = get_provider(provider_name)
+
+        animation = start_thinking_animation()
+        try:
+            raw_review = selected_provider.generate_code_review(
+                diff, model=model_hint, custom_prompt=custom_prompt
+            )
+            animation.update("Analisando resultado...")
+            result = parse_standalone_review(raw_review)
+        finally:
+            stop_thinking_animation(animation)
+
+    if verbose:
+        exts = review_extensions or f"padrão para {project_type or 'generic'}"
+        ui.info(f"JUDGE usando extensões: {exts}", icon="📄")
+
+    click.echo("\n" + format_review_for_display(result, verbose))
+    return result
 
 
 def check_staged_files(paths: Optional[List[str]] = None) -> bool:
@@ -338,6 +436,9 @@ def commit_with_ai(
     provider_name = (
         selectedProvider.name if hasattr(selectedProvider, "name") else provider
     )
+    commit_provider = selectedProvider
+    commit_provider_name = provider_name
+    commit_model = model
     
     review_result = None
     
@@ -402,16 +503,65 @@ def commit_with_ai(
                      "Execute 'seshat init' novamente ou adicione 'log_dir' na seção code_review do .seshat."
                  )
 
-        # Block commit if there are critical issues (BUG or SECURITY)
-        if review_result.has_blocking_issues(threshold="error"):
-            ui.error("Code review encontrou problemas críticos. Commit bloqueado.")
+        review_blocking = bool(seshat_config.code_review.get("blocking", False))
+        skip_issue_confirmation = False
+
+        if review_blocking and _has_bug_issues(review_result):
+            action = _prompt_blocking_bug_action()
+            if action == "stop":
+                raise ValueError("Commit cancelado para investigar BUG apontado pela IA.")
+            if action == "judge":
+                try:
+                    judge_provider = _select_judge_provider(
+                        provider_name,
+                        os.getenv("JUDGE_PROVIDER"),
+                    )
+                    judge_model = os.getenv("JUDGE_MODEL")
+                    judge_api_key = os.getenv("JUDGE_API_KEY")
+                    ui.step(
+                        f"IA: JUDGE ({judge_provider})",
+                        icon="🧠",
+                        fg="cyan",
+                    )
+                    review_result = _run_judge_review(
+                        provider_name=judge_provider,
+                        diff=filtered_diff,
+                        custom_prompt=custom_prompt,
+                        verbose=verbose,
+                        project_type=seshat_config.project_type,
+                        review_extensions=review_extensions,
+                        api_key=judge_api_key,
+                        model=judge_model,
+                    )
+                    with _with_temp_env({"API_KEY": judge_api_key}):
+                        commit_provider = get_provider(judge_provider)
+                    commit_provider_name = judge_provider
+                    commit_model = judge_model
+                except Exception as e:
+                    raise ValueError(f"Falha ao obter JUDGE: {e}")
+
+                if _has_security_issues(review_result):
+                    ui.error("JUDGE encontrou problemas de segurança.")
+                    raise ValueError(
+                        "Code review bloqueou o commit devido a issue de segurança."
+                    )
+
+                if review_blocking and _has_bug_issues(review_result):
+                    ui.warning("JUDGE também apontou BUG.")
+                    if not click.confirm("Deseja continuar o commit mesmo assim?"):
+                        raise ValueError("Commit cancelado após JUDGE.")
+                    skip_issue_confirmation = True
+            if action == "continue":
+                skip_issue_confirmation = True
+
+        if _has_security_issues(review_result):
+            ui.error("Code review encontrou problemas de segurança. Commit bloqueado.")
             raise ValueError(
-                "Code review bloqueou o commit devido a issues de severidade 'error' "
-                "(BUG ou SECURITY). Corrija os problemas antes de commitar."
+                "Code review bloqueou o commit devido a issue de segurança."
             )
         
         # Warn but allow if there are warnings
-        if review_result.has_issues:
+        if review_result.has_issues and not skip_issue_confirmation:
             if not skip_confirmation:
                 if not click.confirm("\n⚠️  Code review encontrou issues. Deseja continuar com o commit?"):
                     raise ValueError("Commit cancelado pelo usuário após code review.")
@@ -419,16 +569,22 @@ def commit_with_ai(
                 ui.warning("Code review encontrou issues, mas continuando (--yes flag).")
     
     # Step 2: Generate commit message
-    ui.step(f"IA: gerando mensagem de commit ({provider_name})", icon="🤖", fg="magenta")
+    ui.step(f"IA: gerando mensagem de commit ({commit_provider_name})", icon="🤖", fg="magenta")
 
     # Inicia a animação de "pensando"
     animation = start_thinking_animation()
 
     try:
         # Generate commit message (without review addon since we already did review)
-        raw_response = selectedProvider.generate_commit_message(
-            diff, model=model, code_review=False
-        )
+        if commit_provider_name != provider_name:
+            with _with_temp_env({"API_KEY": os.getenv("JUDGE_API_KEY")}):
+                raw_response = commit_provider.generate_commit_message(
+                    diff, model=commit_model, code_review=False
+                )
+        else:
+            raw_response = commit_provider.generate_commit_message(
+                diff, model=commit_model, code_review=False
+            )
         animation.update("Validando formato...")
 
         commit_msg = raw_response
