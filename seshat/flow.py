@@ -10,7 +10,7 @@ from . import ui
 
 @cli.command()
 @click.argument("count", type=int, default=0)
-@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini)")
+@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)")
 @click.option("--model", help="Modelo específico do provedor")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
 @click.option("--verbose", "-v", is_flag=True, help="Verbose output")
