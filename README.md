@@ -39,6 +39,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 * 📝 **Commits Automáticos para Docs (NOVO!):** Commits contendo apenas arquivos Markdown geram mensagem automática sem IA.
+* 🚫 **Bypass configurável de IA (NOVO!):** `commit.no_ai_extensions` e `commit.no_ai_paths` permitem commits automáticos para tipos de arquivo específicos.
 
 ## 📚 Documentação detalhada
 
