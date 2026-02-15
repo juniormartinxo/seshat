@@ -38,6 +38,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * ⚖️ **JUDGE (NOVO!):** Segunda IA configurável que revisa e gera o commit quando acionada.
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
+* 📝 **Commits Automáticos para Docs (NOVO!):** Commits contendo apenas arquivos Markdown geram mensagem automática sem IA.
 
 ## 📚 Documentação detalhada
 
