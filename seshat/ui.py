@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import sys
+import re
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, TypeVar, overload
 
 import click
 import typer
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.prompt import Confirm, Prompt
+from rich.progress import Progress, SpinnerColumn, TextColumn, TaskID
+from rich.status import Status as RichStatus
+from rich.syntax import Syntax
 from rich.table import Table
 
 
@@ -96,24 +100,65 @@ def error(text: str, icon: str = "✗") -> None:
 
 
 def confirm(message: str, default: bool = False) -> bool:
+    if _use_rich():
+        return Confirm.ask(message, default=default)
     return typer.confirm(message, default=default)
 
 
+T = TypeVar("T")
+
+
+@overload
 def prompt(
     message: str,
     *,
     default: Optional[str] = None,
     show_default: bool = True,
+    type: None = None,
+    choices: Optional[Sequence[str]] = None,
+) -> str: ...
+
+
+@overload
+def prompt(
+    message: str,
+    *,
+    default: Optional[T] = None,
+    show_default: bool = True,
+    type: type[T],
+    choices: Optional[Sequence[str]] = None,
+) -> T: ...
+
+
+def prompt(
+    message: str,
+    *,
+    default: Optional[object] = None,
+    show_default: bool = True,
     type: type | None = None,
     choices: Optional[Sequence[str]] = None,
-) -> str:
+) -> object:
     if choices:
+        if _use_rich():
+            if default is None:
+                return Prompt.ask(
+                    message,
+                    show_default=show_default,
+                    choices=list(choices),
+                )
+            return Prompt.ask(
+                message,
+                default=default,
+                show_default=show_default,
+                choices=list(choices),
+            )
         return typer.prompt(
             message,
             default=default,
             show_default=show_default,
             type=click.Choice(list(choices)),
         )
+
     return typer.prompt(
         message,
         default=default,
@@ -125,7 +170,7 @@ def prompt(
 @dataclass
 class Status:
     message: str
-    _status: Optional[object] = None
+    _status: Optional[RichStatus] = None
 
     def __enter__(self) -> "Status":
         if _use_rich():
@@ -156,7 +201,7 @@ class ProgressUI:
     def __init__(self, total: int) -> None:
         self._total = total
         self._progress: Optional[Progress] = None
-        self._task_id: Optional[int] = None
+        self._task_id: Optional[TaskID] = None
         self._current = 0
 
     def __enter__(self) -> "ProgressUI":
@@ -204,6 +249,45 @@ def table(
         echo(" - " + " | ".join(str(cell) for cell in row))
 
 
+_CODE_LINE_RE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
+
+
+def render_tool_output(output: str, language: str = "python") -> None:
+    if not _use_rich():
+        echo(output)
+        return
+
+    console = _console()
+    lines = output.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        match = _CODE_LINE_RE.match(line)
+        if match:
+            code_lines: list[str] = []
+            first_line_no: Optional[int] = None
+            while i < len(lines):
+                match = _CODE_LINE_RE.match(lines[i])
+                if not match:
+                    break
+                if first_line_no is None:
+                    first_line_no = int(match.group(1))
+                code_lines.append(match.group(2))
+                i += 1
+            syntax = Syntax(
+                "\n".join(code_lines),
+                language,
+                line_numbers=True,
+                start_line=first_line_no or 1,
+                word_wrap=False,
+            )
+            console.print(syntax)
+            continue
+
+        console.print(line)
+        i += 1
+
+
 __all__ = [
     "is_tty",
     "echo",
@@ -221,4 +305,5 @@ __all__ = [
     "spinner",
     "progress",
     "table",
+    "render_tool_output",
 ]
