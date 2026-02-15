@@ -11,6 +11,14 @@ def _fake_config() -> dict[str, str]:
     return {"provider": provider, "model": model, "language": language}
 
 
+def _fake_prompts() -> None:
+    ui.section("Prompts")
+    ui.info("Exemplo de prompt com escolhas")
+    _ = ui.prompt("Ambiente", choices=["dev", "staging", "prod"], default="dev")
+    _ = ui.prompt("Retries", type=int, default=3)
+    _ = ui.confirm("Continuar?", default=True)
+
+
 def _fake_diff_summary() -> None:
     ui.section("Resumo do diff")
     ui.table(
@@ -61,6 +69,15 @@ help: Remove unused import: `typing.Tuple`
     ui.render_tool_output(output)
 
 
+def _fake_messages() -> None:
+    ui.section("Mensagens")
+    ui.info("Informação relevante")
+    ui.step("Etapa intermediária", icon="•", fg="bright_black")
+    ui.success("Tudo certo")
+    ui.warning("Algo para revisar")
+    ui.error("Falha simulada")
+
+
 def _fake_apply(commit_msg: str) -> None:
     ui.section("Aplicação")
     if not ui.confirm("Aplicar commit agora?", default=False):
@@ -73,10 +90,26 @@ def _fake_apply(commit_msg: str) -> None:
 
 
 def main() -> None:
-    ui.title("Seshat Fake — Preview UI")
-    ui.info("Simulação local, sem tocar no git nem APIs.")
+    palette = ui.UIColor(
+        primary="#00c2ff",
+        secondary="#9aa0a6",
+        accent="magenta",
+        success="#00c853",
+        warning="#ffab00",
+        error="#ff5252",
+        panel_border="#00c2ff",
+        panel_title="#00c2ff",
+    )
+    ui.apply_theme(ui.theme_from_palette(palette))
+    ui.title(
+        "Seshat — Preview UI",
+        "AI-powered commit assistant - Simulação local, sem tocar no git nem APIs.",
+        panel_style=ui.style["panel"],
+    )
     ui.hr()
 
+    _fake_messages()
+    _fake_prompts()
     config = _fake_config()
     _fake_diff_summary()
     commit_msg = _fake_generation(config)
