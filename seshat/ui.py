@@ -57,6 +57,7 @@ def is_tty() -> bool:
 
 _CONSOLE: Console | None = None
 _CONSOLE_ERR: Console | None = None
+_ACTIVE_PROGRESS: Progress | None = None
 
 
 def _console() -> Console:
@@ -70,6 +71,12 @@ def _console() -> Console:
             force_terminal=should_force,
         )
     return _CONSOLE
+
+
+def _active_console() -> Console:
+    if _ACTIVE_PROGRESS is not None:
+        return _ACTIVE_PROGRESS.console
+    return _console()
 
 
 def _console_err() -> Console:
@@ -189,13 +196,13 @@ def theme_from_palette(palette: UIColor) -> UITheme:
 
 
 def echo(text: str = "", *, err: bool = False) -> None:
-    console = _console_err() if err else _console()
+    console = _console_err() if err else _active_console()
     console.print(text)
 
 
 def hr(char: str = "─") -> None:
     if _use_rich():
-        _console().print(Rule(style=style["hr"]))
+        _active_console().print(Rule(style=style["hr"]))
         return
     echo(char * 80)
 
@@ -243,8 +250,8 @@ def panel(
             title_align="center",
             subtitle=Text(f" {subtitle} ", style=s_style) if subtitle and s_style else (subtitle or None),
         )
-        _console().print()
-        _console().print(p)
+        _active_console().print()
+        _active_console().print(p)
         return
 
     hr()
@@ -291,8 +298,8 @@ def title(
             title=Text(f" {title_text} ", style=t_style) if t_style else title_text,
             subtitle=Text(f" {subtitle} ", style=s_style) if subtitle and s_style else (subtitle or None),
         )
-        _console().print()
-        _console().print(p)
+        _active_console().print()
+        _active_console().print(p)
         return
 
     hr()
@@ -307,8 +314,8 @@ def title(
 
 def section(text: str) -> None:
     if _use_rich():
-        _console().print()
-        _console().print(
+        _active_console().print()
+        _active_console().print(
             Rule(
                 Text(f" {text} ", style=style["section"]),
                 style=style["hr"],
@@ -332,7 +339,7 @@ _ICON_STYLES: dict[str, Style] = {
 
 def info(text: str, icon: str = "ℹ") -> None:
     if _use_rich():
-        _console().print(
+        _active_console().print(
             Text.assemble(
                 (f" {icon}  ", _ICON_STYLES.get("info", Style())),
                 (text, style["info"]),
@@ -345,7 +352,7 @@ def info(text: str, icon: str = "ℹ") -> None:
 def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
     if _use_rich():
         text_style = style.get(fg, Style.parse(fg))
-        _console().print(
+        _active_console().print(
             Text.assemble(
                 (f" {icon}  ", Style(color="grey50")),
                 (text, text_style),
@@ -357,7 +364,7 @@ def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
 
 def success(text: str, icon: str = "✓") -> None:
     if _use_rich():
-        _console().print(
+        _active_console().print(
             Text.assemble(
                 (f" {icon}  ", _ICON_STYLES.get("success", Style())),
                 (text, style["success"]),
@@ -369,7 +376,7 @@ def success(text: str, icon: str = "✓") -> None:
 
 def warning(text: str, icon: str = "⚠") -> None:
     if _use_rich():
-        _console().print(
+        _active_console().print(
             Text.assemble(
                 (f" {icon}  ", _ICON_STYLES.get("warning", Style())),
                 (text, style["warning"]),
@@ -472,7 +479,7 @@ class Status:
 
     def __enter__(self) -> "Status":
         if _use_rich():
-            self._status = _console().status(
+            self._status = _active_console().status(
                 Text(f" {self.message}", style=Style(color="cyan")),
                 spinner="dots",
                 spinner_style=Style(color="cyan"),
@@ -513,6 +520,7 @@ class ProgressUI:
 
     def __enter__(self) -> "ProgressUI":
         if _use_rich():
+            global _ACTIVE_PROGRESS
             self._progress = Progress(
                 SpinnerColumn(style=Style(color="cyan")),
                 TextColumn("[bold cyan]{task.description}[/]"),
@@ -526,6 +534,7 @@ class ProgressUI:
                 TextColumn("[bright_black]{task.completed}/{task.total}[/]"),
                 console=_console(),
             )
+            _ACTIVE_PROGRESS = self._progress
             self._progress.__enter__()
             self._task_id = self._progress.add_task("", total=self._total)
         return self
@@ -552,6 +561,9 @@ class ProgressUI:
     def __exit__(self, exc_type, exc, tb) -> None:
         if self._progress:
             self._progress.__exit__(exc_type, exc, tb)
+        global _ACTIVE_PROGRESS
+        if _ACTIVE_PROGRESS is self._progress:
+            _ACTIVE_PROGRESS = None
 
 
 def progress(total: int) -> ProgressUI:
@@ -584,8 +596,8 @@ def table(
             tbl.add_column(col, justify=align, style=Style(color="white"))
         for row in rows:
             tbl.add_row(*[str(cell) for cell in row])
-        _console().print()
-        _console().print(Padding(tbl, (0, 1)))
+        _active_console().print()
+        _active_console().print(Padding(tbl, (0, 1)))
         return
     echo(title_text)
     for row in rows:
@@ -602,7 +614,7 @@ def render_tool_output(output: str, language: str = "python") -> None:
         echo(output)
         return
 
-    console = _console()
+    console = _active_console()
     lines = output.splitlines()
     if not lines:
         return
@@ -735,8 +747,8 @@ def display_code_review(text: str) -> None:
             padding=(1, 2),
             expand=True,
         )
-        _console().print()
-        _console().print(p)
+        _active_console().print()
+        _active_console().print(p)
         return
     echo(f"\n{text}")
 
