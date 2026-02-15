@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence, TypeVar, overload
+from typing import Iterable, Optional, Sequence, TypeVar, overload, Literal
 
 import click
 import typer
@@ -364,11 +364,14 @@ def table(
     title_text: str,
     columns: Sequence[str],
     rows: Iterable[Sequence[str]],
+    *,
+    alignments: Optional[Sequence[Literal["default", "left", "center", "right", "full"]]] = None,
 ) -> None:
     if _use_rich():
         tbl = Table(title=title_text, box=box.SIMPLE, show_header=True)
-        for col in columns:
-            tbl.add_column(col)
+        for idx, col in enumerate(columns):
+            align = alignments[idx] if alignments and idx < len(alignments) else "default"
+            tbl.add_column(col, justify=align)
         for row in rows:
             tbl.add_row(*[str(cell) for cell in row])
         _console().print(tbl)
