@@ -332,6 +332,7 @@ def test_commit_with_ai_markdown_only(monkeypatch: pytest.MonkeyPatch) -> None:
             self.code_review = {}
             self.checks = {}
             self.project_type = None
+            self.commit = {}
 
         @staticmethod
         def load(_path: object = None) -> "DummyConfig":
@@ -471,6 +472,7 @@ def test_commit_with_ai_code_review_no_files(monkeypatch: pytest.MonkeyPatch) ->
             self.code_review = {"enabled": True}
             self.checks = {}
             self.project_type = "python"
+            self.commit = {}
 
         @staticmethod
         def load(_path: object = None) -> "DummyConfig":
