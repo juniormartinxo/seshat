@@ -672,7 +672,13 @@ def commit_with_ai(
                 ui.warning("Code review encontrou issues, mas continuando (--yes flag).")
     
     # Step 2: Generate commit message
-    ui.step(f"IA: gerando mensagem de commit ({commit_provider_name})", icon="🤖", fg="magenta")
+    ui.step(
+        ui.styled(
+            f"\nIA: gerando mensagem de commit ({commit_provider_name})",
+            "magenta",
+        ),
+        icon="🤖",
+    )
 
     # Inicia a animação de "pensando"
     animation = start_thinking_animation()
