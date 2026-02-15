@@ -112,6 +112,23 @@ def set_secure_key(key_name: str, value: str) -> bool:
         return False
 
 
+def _prompt_plaintext_fallback(key_name: str) -> bool:
+    """Confirmar salvamento em texto plano quando keyring falha."""
+    click.secho(
+        f"Aviso: Keyring indisponível para {key_name}.",
+        fg="yellow",
+    )
+    click.secho(
+        "Salvar em texto plano no arquivo ~/.seshat expõe sua chave.",
+        fg="yellow",
+    )
+    click.secho(
+        "Recomendação: instale o chaveiro do sistema (GNOME Keyring, KWallet, macOS Keychain, Windows Credential Manager).",
+        fg="yellow",
+    )
+    return click.confirm("Deseja salvar em texto plano mesmo assim?", default=False)
+
+
 def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
     """
     Valida se a configuração mínima necessária está presente.
@@ -167,13 +184,12 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
     if "API_KEY" in updates:
         api_key = updates.pop("API_KEY")
         if api_key:
-            # Tenta salvar seguro
             if not set_secure_key("API_KEY", api_key):
-                # Se falhar (ex: sem backend), salva no arquivo mesmo
-                click.secho("Aviso: Keyring indisponível, salvando API_KEY em texto plano.", fg="yellow")
-                current_config["API_KEY"] = api_key
+                if _prompt_plaintext_fallback("API_KEY"):
+                    current_config["API_KEY"] = api_key
+                else:
+                    click.secho("API_KEY não foi salva.", fg="red")
             else:
-                # Se salvou no keyring, garante que não está no arquivo
                 if "API_KEY" in current_config:
                     del current_config["API_KEY"]
 
@@ -181,8 +197,10 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
         judge_api_key = updates.pop("JUDGE_API_KEY")
         if judge_api_key:
             if not set_secure_key("JUDGE_API_KEY", judge_api_key):
-                click.secho("Aviso: Keyring indisponível, salvando JUDGE_API_KEY em texto plano.", fg="yellow")
-                current_config["JUDGE_API_KEY"] = judge_api_key
+                if _prompt_plaintext_fallback("JUDGE_API_KEY"):
+                    current_config["JUDGE_API_KEY"] = judge_api_key
+                else:
+                    click.secho("JUDGE_API_KEY não foi salva.", fg="red")
             else:
                 if "JUDGE_API_KEY" in current_config:
                     del current_config["JUDGE_API_KEY"]
