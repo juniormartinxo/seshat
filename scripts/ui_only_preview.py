@@ -5,7 +5,14 @@ Roda: python -m scripts.ui_only_preview
 
 from __future__ import annotations
 
-from seshat import ui
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from seshat import ui  # noqa: E402
 
 
 def main() -> None:
