@@ -7,11 +7,12 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
-## [1.4.1] - 2026-02-15
+## [1.4.2] - 2026-02-15
 
 ### Adicionado
 
 - **Commits Automáticos para Docs**: quando o commit contém apenas arquivos `.md`/`.mdx`, o Seshat gera uma mensagem automática `docs: update ...` sem chamar a IA.
+- **Bypass configurável de IA**: novo `commit.no_ai_extensions` e `commit.no_ai_paths` para gerar commit automático sem IA quando todos os arquivos staged correspondem às regras.
 
 ## [1.4.0] - 2026-02-14
 
