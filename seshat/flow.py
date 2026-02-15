@@ -130,7 +130,12 @@ def flow(
         )
         
         if ui.is_tty():
-            ui.table("Resumo", ["Campo", "Valor"], [["Arquivos", str(len(files))]])
+            ui.table(
+                "Resumo",
+                ["Campo", "Valor"],
+                [["Arquivos", str(len(files))]],
+                alignments=["left", "center"],
+            )
         else:
             ui.info(f"Processando {len(files)} arquivos", icon="🔄")
         
