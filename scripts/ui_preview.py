@@ -42,11 +42,18 @@ def _fake_generation(config: dict[str, str]) -> str:
     ui.section("Geração do commit")
     with ui.status("Analisando contexto"):
         pass
+    import time
     with ui.progress(total=4) as prog:
+        prog.info("Iniciando...")
+        time.sleep(0.2)
         prog.update("Lendo diff")
+        time.sleep(0.2)
         prog.update("Classificando mudanças")
+        time.sleep(0.2)
         prog.update("Gerando mensagem")
+        time.sleep(0.2)
         prog.update("Validando padrão")
+        time.sleep(0.2)
     msg = (
         f"feat(ui): melhora prompts e fallback\n\n"
         f"Provider: {config['provider']} | Modelo: {config['model']} | Idioma: {config['language']}"
