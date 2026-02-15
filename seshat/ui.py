@@ -639,12 +639,17 @@ def render_tool_output(output: str, language: str = "python") -> None:
     # If the user insists on yellow, they can configure the theme.
     # For now, I will use the mapped styles.
 
+    # If header detected, use it as panel title instead of printing separately
     start_index = 0
     if header_style:
-        console.print(Text(f" {lines[0]}", style=header_style))
+        # console.print(Text(f" {lines[0]}", style=header_style)) # Removed separate print
         start_index = 1
     
     if start_index >= len(lines):
+        # If only header exists, print it as text or empty panel?
+        # If it was an error/success line alone, just print it.
+        if header_style:
+             console.print(Text(f" {lines[0]}", style=header_style))
         return
 
     renderables: list[RenderableType] = []
@@ -705,6 +710,8 @@ def render_tool_output(output: str, language: str = "python") -> None:
             box=box.ROUNDED,
             border_style=border_style,
             style="on grey11", # Background color for the block
+            title=Text(f" {first_line} ", style=header_style) if header_style else None,
+            title_align="left",
             padding=(1, 2),
             expand=True
         )
