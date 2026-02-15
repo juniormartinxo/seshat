@@ -455,8 +455,9 @@ def commit_with_ai(
         return commit_msg, None
 
     # Configurable no-AI bypass for selected file types/paths
-    no_ai_extensions = _normalize_ext_list(seshat_config.commit.get("no_ai_extensions"))
-    no_ai_paths = _normalize_path_list(seshat_config.commit.get("no_ai_paths"))
+    commit_config = getattr(seshat_config, "commit", {}) or {}
+    no_ai_extensions = _normalize_ext_list(commit_config.get("no_ai_extensions"))
+    no_ai_paths = _normalize_path_list(commit_config.get("no_ai_paths"))
     if no_ai_extensions or no_ai_paths:
         staged_files = get_staged_files(paths, exclude_deleted=True)
         if is_no_ai_only_commit(staged_files, no_ai_extensions, no_ai_paths):
