@@ -98,6 +98,12 @@ class SeshatConfig:
             model = pick_value("model", "ai_model", "AI_MODEL")
             if model is not None:
                 commit["model"] = model
+            no_ai_extensions = pick_value("no_ai_extensions", "NO_AI_EXTENSIONS")
+            if no_ai_extensions is not None:
+                commit["no_ai_extensions"] = no_ai_extensions
+            no_ai_paths = pick_value("no_ai_paths", "NO_AI_PATHS")
+            if no_ai_paths is not None:
+                commit["no_ai_paths"] = no_ai_paths
             return cls(
                 project_type=data.get("project_type"),
                 checks=data.get("checks", {}),
