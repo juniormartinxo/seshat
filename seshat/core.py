@@ -3,7 +3,6 @@ import subprocess
 import os
 from typing import List, Optional, Tuple
 from .providers import get_provider
-from . import ui
 from .utils import (
     start_thinking_animation,
     stop_thinking_animation,
@@ -390,8 +389,9 @@ def run_pre_commit_checks(
         return True, []
     
     # Display results
-    output = runner.format_results(results, verbose)
-    ui.echo(output)
+    blocks = runner.format_results(results, verbose)
+    for block in blocks:
+        ui.render_tool_output(block)
     
     has_blocking_failures = runner.has_blocking_failures(results)
     
@@ -508,8 +508,9 @@ def commit_with_ai(
                     all_results.extend(results)
                 
                 if all_results:
-                    output = runner.format_results(all_results, verbose)
-                    ui.echo(output)
+                    blocks = runner.format_results(all_results, verbose)
+                    for block in blocks:
+                        ui.render_tool_output(block)
                     
                     has_blocking_failures = runner.has_blocking_failures(all_results)
                     if has_blocking_failures:
