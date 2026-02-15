@@ -685,6 +685,10 @@ def render_tool_output(output: str, language: str = "python") -> None:
             text_style = style["success"]
         elif stripped.startswith("⚠"):
             text_style = style["warning"]
+        elif "error:" in line:
+            text_style = style["error"]
+        elif "warning:" in line:
+            text_style = style["warning"]
         elif stripped.startswith("help:"):
             text_style = Style(color="dodger_blue2")
         elif stripped.startswith("-->") or stripped.startswith("->"):
@@ -695,20 +699,13 @@ def render_tool_output(output: str, language: str = "python") -> None:
         i += 1
     
     if renderables:
-        # Wrap in Panel
-        # Using gold1 for border to match "yellow box" request if it looks like an issue list with file paths
-        # But let's stick to border_style detected from header.
-        
-        # NOTE: User specifically pointed to a yellow box for mypy errors.
-        # If I use Red, he might complain. 
-        # But "❌" is red.
-        # I'll use border_style derived above.
-        
+        # Wrap in Panel with background for "block" effect
         p = Panel(
             Group(*renderables),
             box=box.ROUNDED,
             border_style=border_style,
-            padding=(0, 1),
+            style="on grey11", # Background color for the block
+            padding=(1, 2),
             expand=True
         )
         console.print(p)
