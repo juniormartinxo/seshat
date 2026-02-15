@@ -678,8 +678,8 @@ def commit_with_ai(
     
     # Step 2: Generate commit message
     ui.step(
-        f"\nIA: gerando mensagem de commit ({commit_provider_name})",
-        icon="🤖",
+        f"IA: gerando mensagem de commit ({commit_provider_name})",
+        icon="\n\n🤖",
         fg="magenta",
     )
 
