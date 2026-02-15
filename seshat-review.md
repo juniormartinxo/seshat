@@ -54,3 +54,4 @@ Report issues using the following single-line format for easy parsing:
 - Do not provide conversational filler ("Here is your review..."). Just the list.
 - Prioritize blocking issues.
 - **IMPORTANT:** This project is intentionally in Brazilian Portuguese (PT-BR). Do NOT flag user-facing messages in Portuguese as issues.
+- **Grounding:** Only report issues you can verify in the provided code. Do NOT guess missing imports or type hints if they exist in the same file or referenced module. If uncertain, omit the issue.
