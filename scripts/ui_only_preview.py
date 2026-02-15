@@ -19,6 +19,7 @@ def main() -> None:
         "Resumo",
         ["Campo", "Valor"],
         [["Arquivos", "3"], ["Status", "OK"], ["Tempo", "120ms"]],
+        alignments=["left", "right"],
     )
 
     ui.section("Progress")
