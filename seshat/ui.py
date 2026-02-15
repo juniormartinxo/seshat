@@ -531,10 +531,22 @@ class ProgressUI:
         return self
 
     def update(self, description: str) -> None:
+        """Updates description and advances by 1 (legacy behavior)."""
+        self.info(description)
+        self.advance()
+
+    def advance(self, amount: int = 1) -> None:
+        """Advances progress by the given amount."""
         if self._progress and self._task_id is not None:
-            self._progress.update(self._task_id, description=description, advance=1)
+            self._progress.update(self._task_id, advance=amount)
         else:
-            self._current += 1
+            self._current += amount
+
+    def info(self, description: str) -> None:
+        """Updates description without advancing progress."""
+        if self._progress and self._task_id is not None:
+            self._progress.update(self._task_id, description=description)
+        else:
             echo(f"[{self._current}/{self._total}] {description}")
 
     def __exit__(self, exc_type, exc, tb) -> None:
