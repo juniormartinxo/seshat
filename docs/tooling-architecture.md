@@ -60,7 +60,7 @@ seshat/tooling/
          │                   │     │                   │
          │ Detecção:         │     │ Detecção:         │
          │ - package.json    │     │ - pyproject.toml  │
-         │                   │     │ - setup.py        │
+         │                   │     │ - pyproject.toml  │
          │ Ferramentas:      │     │ - requirements.txt│
          │ - ESLint          │     │                   │
          │ - Biome           │     │ Ferramentas:      │
@@ -256,7 +256,7 @@ def test_detect_rust_from_cargo_toml(self, tmp_path):
 A ordem em `LANGUAGE_STRATEGIES` define a prioridade quando múltiplos indicadores existem:
 
 1. **TypeScriptStrategy** - `package.json`
-2. **PythonStrategy** - `pyproject.toml`, `setup.py`, `requirements.txt`
+2. **PythonStrategy** - `pyproject.toml`
 
 Isso significa que um projeto com ambos `package.json` e `pyproject.toml` será detectado como TypeScript. Para forçar outra detecção, use `project_type` no `.seshat`.
 
@@ -294,7 +294,7 @@ pytest tests/test_tooling.py -v
 
 Testes cobrem:
 - Detecção de projeto TypeScript
-- Detecção de projeto Python (pyproject.toml, setup.py, requirements.txt)
+- Detecção de projeto Python (pyproject.toml)
 - Prioridade de detecção
 - Descoberta de ferramentas
 - Filtragem de arquivos por tipo de check
