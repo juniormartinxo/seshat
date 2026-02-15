@@ -220,13 +220,16 @@ def panel(
     content: str | RenderableType = "",
 ) -> None:
     if _use_rich():
-        resolved_panel = panel_style or style.get("panel", "cyan")
+        resolved_panel_raw = panel_style or style.get("panel", "cyan")
+        resolved_panel: Style | str = (
+            resolved_panel_raw if resolved_panel_raw is not None else "cyan"
+        )
         if isinstance(resolved_panel, str):
             resolved_panel = Style.parse(resolved_panel)
 
-        border = border_style or style.get("panel_border", resolved_panel)
-        t_style = title_style or style.get("panel_title")
-        s_style = subtitle_style or style.get("panel_subtitle")
+        border: Style | str = border_style or style.get("panel_border", resolved_panel)
+        t_style: Style | str | None = title_style or style.get("panel_title")
+        s_style: Style | str | None = subtitle_style or style.get("panel_subtitle")
 
         if isinstance(border, str):
             border = Style.parse(border)
@@ -621,13 +624,12 @@ def render_tool_output(output: str, language: str = "python") -> None:
 
     # Check for header line to print outside/style the panel
     first_line = lines[0].strip()
-    header_style = None
-    border_style = style["panel_border"] # Default Cyan
+    header_style: Style | None = None
+    border_style: Style | str = style["panel_border"] # Default Cyan
 
     # Detect status from common prefixes
     if first_line.startswith("❌"):
         header_style = style["error"] # Red
-        border_style = style["error"]
         border_style = "gold1" # Override to yellow/gold as requested by user image
     elif first_line.startswith("⚠"):
         header_style = style["warning"] # Gold
