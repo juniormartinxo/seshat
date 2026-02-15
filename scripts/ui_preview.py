@@ -1,3 +1,8 @@
+"""Preview interativo de TODA a UI do Seshat.
+
+Roda: python -m scripts.ui_preview
+"""
+
 from __future__ import annotations
 
 from seshat import ui
@@ -22,7 +27,7 @@ def _fake_prompts() -> None:
 def _fake_diff_summary() -> None:
     ui.section("Resumo do diff")
     ui.table(
-        "Arquivos",
+        "Arquivos alterados",
         ["Arquivo", "Mudanças"],
         alignments=["left", "center"],
         rows=[
@@ -74,6 +79,7 @@ def _fake_messages() -> None:
     ui.section("Mensagens")
     ui.info("Informação relevante")
     ui.step("Etapa intermediária", icon="•", fg="bright_black")
+    ui.step("Etapa com destaque", icon="→", fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
     ui.error("Falha simulada")
@@ -90,32 +96,40 @@ def _fake_apply(commit_msg: str) -> None:
     ui.step(commit_msg, fg="bright_white")
 
 
-def main() -> None:
-    palette = ui.UIColor(
-        primary="#00c2ff",
-        secondary="#9aa0a6",
-        accent="magenta",
-        success="#00c853",
-        warning="#ffab00",
-        error="#ff5252",
-        panel_border="#00c2ff",
-        panel_title="#00c2ff",
-    )
-    ui.apply_theme(ui.theme_from_palette(palette))
-    ui.title(
-        "Seshat — Preview UI",
-        "AI-powered commit assistant - Simulação local, sem tocar no git nem APIs.",
-        panel_style=ui.style["panel"],
-    )
-    ui.hr()
 
-    _fake_messages()
-    _fake_prompts()
-    config = _fake_config()
-    _fake_diff_summary()
-    commit_msg = _fake_generation(config)
-    _fake_tool_output()
-    _fake_apply(commit_msg)
+def main() -> None:
+    try:
+        palette = ui.UIColor(
+            primary="#00c2ff",
+            secondary="#9aa0a6",
+            accent="magenta",
+            info="#5eafff",
+            success="#00c853",
+            warning="#ffab00",
+            error="#ff5252",
+            panel_border="#00c2ff",
+            panel_title="#00c2ff",
+            panel_subtitle="#9aa0a6",
+            section="#00c2ff",
+            hr="#555555",
+        )
+        ui.apply_theme(ui.theme_from_palette(palette))
+
+        ui.panel(
+            "Seshat — Preview UI",
+            "AI-powered commit assistant · Simulação local",
+        )
+
+        _fake_messages()
+        _fake_prompts()
+        config = _fake_config()
+        _fake_diff_summary()
+        commit_msg = _fake_generation(config)
+        _fake_tool_output()
+        _fake_apply(commit_msg)
+
+    except KeyboardInterrupt:
+        ui.warning("\nOperação cancelada pelo usuário.")
 
 
 if __name__ == "__main__":
