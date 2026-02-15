@@ -10,6 +10,7 @@ Gera mensagem de commit via IA e executa o `git commit`.
 
 - **`.seshat` é obrigatório**. Se não existir, o comando oferece `seshat init` e sai.
 - **Commit de deleção**: se só houver arquivos deletados, o Seshat **não chama IA** e gera mensagem automática.
+- **Commit de documentação**: se só houver arquivos `.md`/`.mdx`, o Seshat **não chama IA** e gera mensagem automática.
 - **Checks**: podem rodar por `--check` ou configuração em `.seshat`.
 - **Code review**: habilitado por `--review` ou `code_review.enabled`.
 - **`--no-review`** desabilita o review mesmo se estiver no `.seshat`.
