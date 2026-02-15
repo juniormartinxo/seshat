@@ -261,6 +261,14 @@ def is_deletion_only_commit(paths: Optional[List[str]] = None) -> bool:
     return len(deleted_files) > 0 and len(other_files) == 0
 
 
+def is_markdown_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes are only markdown documentation files."""
+    staged_files = get_staged_files(paths, exclude_deleted=True)
+    if not staged_files:
+        return False
+    return all(f.lower().endswith((".md", ".mdx")) for f in staged_files)
+
+
 def generate_deletion_commit_message(deleted_files: List[str]) -> str:
     """Generate automatic commit message for file deletions.
     
@@ -278,6 +286,16 @@ def generate_deletion_commit_message(deleted_files: List[str]) -> str:
     else:
         # For many files, just show count
         return f"chore: remove {len(deleted_files)} arquivos"
+
+
+def generate_markdown_commit_message(files: List[str]) -> str:
+    """Generate automatic commit message for markdown documentation updates."""
+    if len(files) == 1:
+        return f"docs: update {files[0]}"
+    elif len(files) <= 3:
+        files_str = ", ".join(files)
+        return f"docs: update {files_str}"
+    return f"docs: update {len(files)} arquivos"
 
 
 def run_pre_commit_checks(
@@ -365,6 +383,17 @@ def commit_with_ai(
         commit_msg = generate_deletion_commit_message(deleted_files)
         ui.info(f"Commit de deleção detectado ({len(deleted_files)} arquivo(s))", icon="🗑️")
         ui.info(f"Mensagem automática: {commit_msg}", icon="📝")
+        return commit_msg, None
+
+    # Fast path: if commit is only markdown docs, skip AI and generate automatic message
+    if is_markdown_only_commit(paths):
+        markdown_files = get_staged_files(paths, exclude_deleted=True)
+        commit_msg = generate_markdown_commit_message(markdown_files)
+        ui.info(
+            f"Commit de documentação detectado ({len(markdown_files)} arquivo(s))",
+            icon="📝",
+        )
+        ui.info(f"Mensagem automática: {commit_msg}", icon="✅")
         return commit_msg, None
     
     # Check if code_review is enabled via .seshat (if not explicitly set via CLI)
