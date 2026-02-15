@@ -673,11 +673,9 @@ def commit_with_ai(
     
     # Step 2: Generate commit message
     ui.step(
-        ui.styled(
-            f"\nIA: gerando mensagem de commit ({commit_provider_name})",
-            "magenta",
-        ),
+        f"\nIA: gerando mensagem de commit ({commit_provider_name})",
         icon="🤖",
+        fg="magenta",
     )
 
     # Inicia a animação de "pensando"
