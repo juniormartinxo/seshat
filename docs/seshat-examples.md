@@ -11,6 +11,8 @@ commit:
   language: PT-BR
   provider: openai
   model: gpt-4-turbo-preview
+  no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
 
 checks:
   lint:
@@ -49,6 +51,8 @@ project_type: python
 
 commit:
   language: PT-BR
+  no_ai_extensions: [".md", ".mdx"]
+  no_ai_paths: ["docs/"]
 
 checks:
   lint:
@@ -77,6 +81,10 @@ code_review:
 
 ```yaml
 project_type: typescript
+
+commit:
+  no_ai_extensions: [".md", ".mdx"]
+  no_ai_paths: ["docs/", ".github/"]
 
 checks:
   lint:
@@ -110,3 +118,13 @@ seshat commit --no-check  # apenas para evitar checks
 ```
 
 > Para commit manual, use o Git diretamente. O Seshat exige provider configurado para gerar mensagem.
+
+## Commit automático sem IA (docs/config)
+
+Use `commit.no_ai_extensions` e `commit.no_ai_paths` para gerar commit automático quando todos os arquivos staged forem compatíveis:
+
+```yaml
+commit:
+  no_ai_extensions: [".md", ".mdx", ".yml", ".yaml", ".toml"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", "LICENSE"]
+```
