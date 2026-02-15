@@ -91,3 +91,5 @@ coverage.xml
 # Arquivos gerados pelo usuário
 *.mo
 *.pot
+
+/scripts/problematic_*
