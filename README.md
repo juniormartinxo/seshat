@@ -569,6 +569,8 @@ commit:
   warn_diff_size: 2500
   # provider: openai
   # model: gpt-4-turbo-preview
+  # no_ai_extensions: [".md", ".mdx"]
+  # no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
 
 checks:
   lint:
