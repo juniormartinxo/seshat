@@ -24,7 +24,8 @@ def _fake_diff_summary() -> None:
     ui.table(
         "Arquivos",
         ["Arquivo", "Mudanças"],
-        [
+        alignments=["left", "center"],
+        rows=[
             ["seshat/core.py", "+12 -4"],
             ["seshat/ui.py", "+24 -6"],
             ["README.md", "+3 -0"],
