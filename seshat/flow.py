@@ -108,11 +108,9 @@ def flow(
         if count > 0:
             files = files[:count]
             
-        ui.title(f"Seshat Flow · {service.provider} · {service.language}")
-        
-        # Show .seshat config notification if loaded
+        # Prepare content for main panel
+        panel_content = ""
         if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
-            ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
             details = []
             if seshat_config.project_type:
                 details.append(f"projeto: {seshat_config.project_type}")
@@ -122,11 +120,14 @@ def flow(
                     details.append(f"checks: {', '.join(checks_list)}")
             if seshat_config.code_review.get("enabled"):
                 details.append("code_review: ativo")
+            
             if details:
-                if ui.is_tty():
-                    ui.table("Configuração carregada", ["Detalhes"], [[" | ".join(details)]])
-                else:
-                    ui.step(" | ".join(details), icon=" ")
+                panel_content = "Configurações carregadas do arquivo .seshat\n\n" + " | ".join(details)
+        
+        ui.panel(
+            f"Seshat Flow · {service.provider} · {service.language}",
+            content=panel_content
+        )
         
         if ui.is_tty():
             ui.table("Resumo", ["Campo", "Valor"], [["Arquivos", str(len(files))]])
@@ -160,19 +161,21 @@ def flow(
             for idx, file in enumerate(files, 1):
                 if not ui.is_tty():
                     ui.section(f"[{idx}/{len(files)}] {file}")
-                prog.update(file)
+                
+                prog.info(f"Processando {file}...")
 
-                with ui.status(f"Processando {file}"):
-                    result = service.process_file(
-                        file=file,
-                        date=date,
-                        verbose=verbose,
-                        skip_confirm=yes,
-                        confirm_callback=confirm_commit,
-                        check=check,
-                        code_review=review,
-                        no_check=no_check,
-                    )
+                result = service.process_file(
+                    file=file,
+                    date=date,
+                    verbose=verbose,
+                    skip_confirm=yes,
+                    confirm_callback=confirm_commit,
+                    check=check,
+                    code_review=review,
+                    no_check=no_check,
+                )
+                
+                prog.advance()
 
                 if result.skipped:
                     ui.warning(f"Pulando: {result.message}")
