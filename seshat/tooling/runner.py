@@ -299,25 +299,29 @@ class ToolingRunner:
             for r in results
         )
     
-    def format_results(self, results: list[ToolResult], verbose: bool = False) -> str:
+    def format_results(self, results: list[ToolResult], verbose: bool = False) -> list[str]:
         """Format results for display."""
-        lines = []
-        
+        blocks: list[str] = []
+
         for result in results:
             if result.skipped:
-                lines.append(f"⏭️ {result.tool} ({result.check_type}) - {result.skip_reason}")
+                blocks.append(
+                    f"⏭️ {result.tool} ({result.check_type}) - {result.skip_reason}"
+                )
                 continue
-                
+
             status = "✅" if result.success else ("⚠️" if not result.blocking else "❌")
-            lines.append(f"{status} {result.tool} ({result.check_type})")
-            
+            header = f"{status} {result.tool} ({result.check_type})"
+
             if verbose or not result.success:
                 if result.output:
-                    # Truncate long output
                     output = result.output
                     if len(output) > 500:
                         output = output[:500] + "\n... (truncated)"
-                    for line in output.split("\n"):
-                        lines.append(f"   {line}")
-        
-        return "\n".join(lines)
+                    block = "\n".join([header] + output.split("\n"))
+                    blocks.append(block)
+                    continue
+
+            blocks.append(header)
+
+        return blocks
