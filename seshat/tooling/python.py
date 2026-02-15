@@ -1,7 +1,7 @@
 """
 Python language strategy for the tooling system.
 
-Supports projects with pyproject.toml, setup.py, or requirements.txt,
+Supports projects with pyproject.toml only,
 detecting and running tools like Ruff, Mypy, and Pytest.
 """
 
@@ -39,7 +39,7 @@ class PythonStrategy(BaseLanguageStrategy):
     """
     Strategy for Python projects.
     
-    Detects projects with pyproject.toml, setup.py, or requirements.txt
+    Detects projects with pyproject.toml
     and discovers tools like Ruff, Mypy, and Pytest.
     """
     
@@ -49,7 +49,7 @@ class PythonStrategy(BaseLanguageStrategy):
     
     @property
     def detection_files(self) -> list[str]:
-        return ["pyproject.toml", "setup.py", "requirements.txt"]
+        return ["pyproject.toml"]
     
     @property
     def lint_extensions(self) -> set[str]:
