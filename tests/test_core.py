@@ -362,6 +362,55 @@ def test_commit_with_ai_markdown_only(monkeypatch: pytest.MonkeyPatch) -> None:
     assert review is None
 
 
+def test_is_no_ai_only_commit() -> None:
+    files = ["docs/guide.md", "README.md"]
+    assert core.is_no_ai_only_commit(files, [".md"], []) is True
+    assert core.is_no_ai_only_commit(files, [], ["docs/"]) is False
+    assert core.is_no_ai_only_commit(["docs/guide.md"], [], ["docs/"]) is True
+    assert core.is_no_ai_only_commit(["config/app.yml"], [".yml"], []) is True
+    assert core.is_no_ai_only_commit(["src/app.py"], [".yml"], ["docs/"]) is False
+
+
+def test_commit_with_ai_no_ai_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review = {}
+            self.checks = {}
+            self.project_type = None
+            self.commit = {
+                "no_ai_extensions": [".yml", ".yaml"],
+                "no_ai_paths": [".github/"],
+            }
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: [".github/workflows/ci.yml"],
+    )
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "docs: update .github/workflows/ci.yml"
+    assert review is None
+
+
 def test_commit_with_ai_generates_message(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyProvider:
         name = "openai"
