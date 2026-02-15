@@ -262,5 +262,13 @@ def apply_project_overrides(
         lambda v: str(v).lower(),
     )
     _set_if_value("AI_MODEL", commit_overrides.get("model"), str)
+    _set_if_value(
+        "NO_AI_EXTENSIONS",
+        commit_overrides.get("no_ai_extensions"),
+    )
+    _set_if_value(
+        "NO_AI_PATHS",
+        commit_overrides.get("no_ai_paths"),
+    )
 
     return config
