@@ -13,8 +13,10 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.progress import Progress, SpinnerColumn, TextColumn, TaskID
 from rich.status import Status as RichStatus
+from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 
 def _use_rich() -> bool:
@@ -33,6 +35,98 @@ def _console_err() -> Console:
     return Console(stderr=True, color_system=None if not _use_rich() else "auto")
 
 
+@dataclass(frozen=True)
+class UITheme:
+    title: Style = Style(color="cyan")
+    subtitle: Style = Style(color="blue")
+    panel: Style = Style(color="cyan")
+    panel_border: Style = Style(color="cyan")
+    panel_title: Style = Style(color="cyan", bold=True)
+    panel_subtitle: Style = Style(color="bright_black")
+    section: Style = Style(color="cyan", bold=True)
+    info: Style = Style(color="blue")
+    step: Style = Style(color="bright_black")
+    success: Style = Style(color="green")
+    warning: Style = Style(color="yellow")
+    error: Style = Style(color="red")
+    hr: Style = Style(color="bright_black")
+
+
+@dataclass(frozen=True)
+class UIColor:
+    primary: str = "cyan"
+    secondary: str = "blue"
+    accent: str = "magenta"
+    muted: str = "bright_black"
+    info: str = "blue"
+    success: str = "green"
+    warning: str = "yellow"
+    error: str = "red"
+    panel: str = "cyan"
+    panel_border: str = "cyan"
+    panel_title: str = "cyan"
+    panel_subtitle: str = "bright_black"
+    section: str = "cyan"
+    step: str = "bright_black"
+    hr: str = "bright_black"
+
+
+style = {
+    "title": UITheme.title,
+    "subtitle": UITheme.subtitle,
+    "panel": UITheme.panel,
+    "panel_border": UITheme.panel_border,
+    "panel_title": UITheme.panel_title,
+    "panel_subtitle": UITheme.panel_subtitle,
+    "section": UITheme.section,
+    "info": UITheme.info,
+    "step": UITheme.step,
+    "success": UITheme.success,
+    "warning": UITheme.warning,
+    "error": UITheme.error,
+    "hr": UITheme.hr,
+}
+
+
+
+def apply_theme(theme: UITheme) -> None:
+    style.update(
+        {
+            "title": theme.title,
+            "subtitle": theme.subtitle,
+            "panel": theme.panel,
+            "panel_border": theme.panel_border,
+            "panel_title": theme.panel_title,
+            "panel_subtitle": theme.panel_subtitle,
+            "section": theme.section,
+            "info": theme.info,
+            "step": theme.step,
+            "success": theme.success,
+            "warning": theme.warning,
+            "error": theme.error,
+            "hr": theme.hr,
+        }
+    )
+
+
+def theme_from_palette(palette: UIColor) -> UITheme:
+    return UITheme(
+        title=Style.parse(palette.primary),
+        subtitle=Style.parse(palette.secondary),
+        panel=Style.parse(palette.panel),
+        panel_border=Style.parse(palette.panel_border),
+        panel_title=Style.parse(palette.panel_title),
+        panel_subtitle=Style.parse(palette.panel_subtitle),
+        section=Style.parse(palette.section),
+        info=Style.parse(palette.info),
+        step=Style.parse(palette.step),
+        success=Style.parse(palette.success),
+        warning=Style.parse(palette.warning),
+        error=Style.parse(palette.error),
+        hr=Style.parse(palette.hr),
+    )
+
+
 def echo(text: str = "", *, err: bool = False) -> None:
     console = _console_err() if err else _console()
     console.print(text)
@@ -42,59 +136,94 @@ def hr(char: str = "─") -> None:
     if _use_rich():
         console = _console()
         width = console.size.width
-        console.print(char * min(width, 80), style="bright_black")
+        console.print(char * min(width, 80), style=style["hr"])
         return
     echo(char * 80)
 
 
-def title(text: str) -> None:
+def title(
+    title: str,
+    subtitle: str = "",
+    panel_style: str | Style = "cyan",
+    *,
+    border_style: str | Style | None = None,
+    title_style: str | Style | None = None,
+    subtitle_style: str | Style | None = None,
+) -> None:
     if _use_rich():
-        panel = Panel(text, style="cyan", box=box.ROUNDED, expand=False)
+        resolved_panel_style = panel_style
+        if isinstance(resolved_panel_style, str):
+            resolved_panel_style = Style.parse(resolved_panel_style)
+        border = border_style or style.get(
+            "panel_border", style.get("panel", resolved_panel_style)
+        )
+        title_style_value = title_style or style.get("panel_title")
+        subtitle_style_value = subtitle_style or style.get("panel_subtitle")
+        if isinstance(border, str):
+            border = Style.parse(border)
+        if isinstance(title_style_value, str):
+            title_style_value = Style.parse(title_style_value)
+        if isinstance(subtitle_style_value, str):
+            subtitle_style_value = Style.parse(subtitle_style_value)
+        panel = Panel(
+            title,
+            style=resolved_panel_style,
+            border_style=border,
+            box=box.ROUNDED,
+            expand=True,
+            subtitle=subtitle or None,
+        )
+        if title_style_value is not None:
+            panel.title = Text(title, style=title_style_value)
+        if subtitle and subtitle_style_value is not None:
+            panel.subtitle = Text(subtitle, style=subtitle_style_value)
         _console().print(panel)
         return
     hr()
-    echo(text)
+    echo(title)
+    if subtitle:
+        echo(subtitle)
     hr()
 
 
 def section(text: str) -> None:
     if _use_rich():
-        _console().print(f"\n{text}", style="cyan bold")
+        _console().print(f"\n{text}", style=style["section"])
         return
     echo(f"\n{text}")
 
 
 def info(text: str, icon: str = "ℹ") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style="blue")
+        _console().print(f"{icon}  {text}", style=style["info"])
         return
     echo(f"{icon} {text}")
 
 
 def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
     if _use_rich():
-        _console().print(f"  {icon} {text}", style=fg)
+        _console().print(f"{icon} {text}", style=style.get(fg, Style.parse(fg)))
         return
-    echo(f"  {icon} {text}")
+    echo(f"{icon} {text}")
 
 
 def success(text: str, icon: str = "✓") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style="green")
+        _console().print(f"{icon} {text}", style=style["success"])
         return
     echo(f"{icon} {text}")
 
 
 def warning(text: str, icon: str = "⚠") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style="yellow")
+        _console().print(f"{icon} {text}", style=style["warning"])
         return
     echo(f"{icon} {text}")
 
 
 def error(text: str, icon: str = "✗") -> None:
     if _use_rich():
-        _console_err().print(f"{icon} {text}", style="red")
+        _console_err().print(f"{icon} {text}", style=style["error"])
         return
     echo(f"{icon} {text}", err=True)
 
@@ -306,4 +435,9 @@ __all__ = [
     "progress",
     "table",
     "render_tool_output",
+    "style",
+    "UITheme",
+    "UIColor",
+    "apply_theme",
+    "theme_from_palette",
 ]
