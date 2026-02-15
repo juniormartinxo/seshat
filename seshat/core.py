@@ -547,7 +547,7 @@ def commit_with_ai(
     
     # Step 1: Run code review first (if enabled)
     if code_review:
-        ui.step(f"IA: executando code review ({provider_name})", icon="🔍", fg="cyan")
+        ui.step(f"IA: executando code review ({provider_name})", icon="🤖", fg="cyan")
         
         # Load custom prompt if configured
         custom_prompt_path = seshat_config.code_review.get("prompt")
@@ -583,7 +583,8 @@ def commit_with_ai(
                 stop_thinking_animation(animation)
         
         # Display review results
-        ui.echo("\n" + format_review_for_display(review_result, verbose))
+        # Display review results
+        ui.display_code_review(format_review_for_display(review_result, verbose))
         
         # Log Review Results if issues found
         if review_result.has_issues:
