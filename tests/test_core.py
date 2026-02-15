@@ -274,6 +274,38 @@ def test_generate_deletion_commit_message() -> None:
     assert core.generate_deletion_commit_message(["a", "b", "c", "d"]) == "chore: remove 4 arquivos"
 
 
+def test_is_markdown_only_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["README.md", "docs/guide.mdx"],
+    )
+    assert core.is_markdown_only_commit() is True
+
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["README.md", "app.py"],
+    )
+    assert core.is_markdown_only_commit() is False
+
+
+def test_generate_markdown_commit_message() -> None:
+    assert core.generate_markdown_commit_message(["README.md"]) == "docs: update README.md"
+    assert (
+        core.generate_markdown_commit_message(["a.md", "b.md"])
+        == "docs: update a.md, b.md"
+    )
+    assert (
+        core.generate_markdown_commit_message(["a.md", "b.md", "c.md"])
+        == "docs: update a.md, b.md, c.md"
+    )
+    assert (
+        core.generate_markdown_commit_message(["a.md", "b.md", "c.md", "d.md"])
+        == "docs: update 4 arquivos"
+    )
+
+
 def test_commit_with_ai_deletion_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: True)
     monkeypatch.setattr(core, "get_deleted_staged_files", lambda _paths=None: ["a.txt"])
@@ -291,6 +323,42 @@ def test_commit_with_ai_deletion_only(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert commit_msg == "chore: remove a.txt"
+    assert review is None
+
+
+def test_commit_with_ai_markdown_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review = {}
+            self.checks = {}
+            self.project_type = None
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: True)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["README.md"],
+    )
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "docs: update README.md"
     assert review is None
 
 
@@ -313,6 +381,7 @@ def test_commit_with_ai_generates_message(monkeypatch: pytest.MonkeyPatch) -> No
             return DummyConfig()
 
     monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
     monkeypatch.setattr(core, "get_git_diff", lambda *args, **kwargs: "diff")
     monkeypatch.setattr(core, "get_provider", lambda _p: DummyProvider())
     monkeypatch.setattr(core, "start_thinking_animation", lambda: DummyAnimation())
@@ -359,6 +428,7 @@ def test_commit_with_ai_code_review_no_files(monkeypatch: pytest.MonkeyPatch) ->
             return DummyConfig()
 
     monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
     monkeypatch.setattr(core, "get_git_diff", lambda *args, **kwargs: "diff")
     monkeypatch.setattr(core, "get_provider", lambda _p: DummyProvider())
     monkeypatch.setattr(core, "start_thinking_animation", lambda: DummyAnimation())
