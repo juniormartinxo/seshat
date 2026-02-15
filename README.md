@@ -504,7 +504,7 @@ checks:
 
 | Tipo de Projeto | Arquivos de Detecção |
 |-----------------|---------------------|
-| Python | `pyproject.toml`, `setup.py`, `requirements.txt` |
+| Python | `pyproject.toml` |
 | TypeScript/JS | `package.json` |
 
 > **Nota:** Quando ambos os tipos de arquivo existem (ex: um backend Python com frontend React), o TypeScript tem prioridade. Use `project_type: python` no `.seshat` para forçar a detecção.
