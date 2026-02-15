@@ -25,7 +25,6 @@ classifiers = [
 ]
 license = {text = "MIT License"}
 dependencies = [
-    "click>=8.0",
     "rich>=13.0",
     "typer>=0.12.0",
     "requests>=2.26",
