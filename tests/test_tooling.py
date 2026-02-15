@@ -166,7 +166,7 @@ commands:
     def test_detect_python_from_requirements_txt(self, tmp_path: Path) -> None:
         """Should detect Python project from requirements.txt."""
         requirements = tmp_path / "requirements.txt"
-        requirements.write_text('requests\nclick\n')
+        requirements.write_text('requests\nclick\nrich\ntyper\n')
         
         runner = ToolingRunner(str(tmp_path))
         assert runner.detect_project_type() == "python"

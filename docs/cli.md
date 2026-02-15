@@ -2,6 +2,11 @@
 
 Este documento descreve os comandos e o comportamento real da CLI.
 
+## UI e stack
+
+- A CLI usa **Typer** como framework e **Rich** para UI quando TTY está disponível.
+- Em modo **non-TTY** (stdout não é TTY), a saída é **texto simples** sem formatação avançada.
+
 ## `seshat commit`
 
 Gera mensagem de commit via IA e executa o `git commit`.

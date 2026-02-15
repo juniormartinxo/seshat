@@ -84,7 +84,7 @@ def test_run_pre_commit_checks_blocking_failure(
 
     monkeypatch.setattr(core, "ToolingRunner", DummyRunner)
     monkeypatch.setattr(core, "get_staged_files", lambda: ["a.txt"])
-    monkeypatch.setattr(core.click, "echo", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "echo", lambda *args, **kwargs: None)
 
     errors = []
     monkeypatch.setattr(core.ui, "error", lambda msg: errors.append(msg))
@@ -115,7 +115,7 @@ def test_run_pre_commit_checks_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(core, "ToolingRunner", DummyRunner)
     monkeypatch.setattr(core, "get_staged_files", lambda: ["a.txt"])
-    monkeypatch.setattr(core.click, "echo", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "echo", lambda *args, **kwargs: None)
 
     success_msgs: list[str] = []
     monkeypatch.setattr(core.ui, "success", lambda msg: success_msgs.append(msg))
@@ -140,21 +140,21 @@ def test_has_issue_helpers() -> None:
 
 def test_prompt_blocking_bug_action_returns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(core.ui, "section", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(core.click, "echo", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(core.ui, "echo", lambda *_args, **_kwargs: None)
 
-    monkeypatch.setattr(core.click, "prompt", lambda *args, **kwargs: "1")
+    monkeypatch.setattr(core.ui, "prompt", lambda *args, **kwargs: "1")
     assert core._prompt_blocking_bug_action() == "continue"
 
-    monkeypatch.setattr(core.click, "prompt", lambda *args, **kwargs: "2")
+    monkeypatch.setattr(core.ui, "prompt", lambda *args, **kwargs: "2")
     assert core._prompt_blocking_bug_action() == "stop"
 
-    monkeypatch.setattr(core.click, "prompt", lambda *args, **kwargs: "3")
+    monkeypatch.setattr(core.ui, "prompt", lambda *args, **kwargs: "3")
     assert core._prompt_blocking_bug_action() == "judge"
 
 
 def test_select_judge_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(core, "VALID_PROVIDERS", ["openai", "anthropic"])
-    monkeypatch.setattr(core.click, "prompt", lambda *args, **kwargs: "anthropic")
+    monkeypatch.setattr(core.ui, "prompt", lambda *args, **kwargs: "anthropic")
     assert core._select_judge_provider("openai", None) == "anthropic"
 
     assert core._select_judge_provider("openai", "configured") == "configured"
@@ -195,7 +195,7 @@ def test_run_judge_review(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(core, "parse_standalone_review", lambda _raw: result)
     monkeypatch.setattr(core, "format_review_for_display", lambda _r, _v: "display")
     outputs: list[str] = []
-    monkeypatch.setattr(core.click, "echo", lambda msg: outputs.append(msg))
+    monkeypatch.setattr(core.ui, "echo", lambda msg, **kw: outputs.append(msg))
     infos: list[str] = []
     monkeypatch.setattr(core.ui, "info", lambda msg, **kwargs: infos.append(msg))
 
@@ -220,7 +220,8 @@ def test_validate_diff_size_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("MAX_DIFF_SIZE", "8")
     monkeypatch.setenv("COMMIT_LANGUAGE", "ENG")
     secho_calls: list[str] = []
-    monkeypatch.setattr(core.click, "secho", lambda msg, **kwargs: secho_calls.append(msg))
+    monkeypatch.setattr(core.ui, "warning", lambda msg, **kwargs: secho_calls.append(msg))
+    monkeypatch.setattr(core.ui, "echo", lambda *args, **kwargs: None)
 
     assert core.validate_diff_size("123456", skip_confirmation=True) is True
     assert core.validate_diff_size("1234567", skip_confirmation=True) is True
@@ -329,10 +330,10 @@ def test_commit_with_ai_deletion_only(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_commit_with_ai_markdown_only(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyConfig:
         def __init__(self) -> None:
-            self.code_review = {}
-            self.checks = {}
-            self.project_type = None
-            self.commit = {}
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {}
 
         @staticmethod
         def load(_path: object = None) -> "DummyConfig":
@@ -375,10 +376,10 @@ def test_is_no_ai_only_commit() -> None:
 def test_commit_with_ai_no_ai_config(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyConfig:
         def __init__(self) -> None:
-            self.code_review = {}
-            self.checks = {}
-            self.project_type = None
-            self.commit = {
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {
                 "no_ai_extensions": [".yml", ".yaml"],
                 "no_ai_paths": [".github/"],
             }
@@ -492,7 +493,7 @@ def test_commit_with_ai_code_review_no_files(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(core, "get_review_prompt", lambda **_kwargs: None)
     monkeypatch.setattr(core, "filter_diff_by_extensions", lambda diff, **_kwargs: "")
     monkeypatch.setattr(core, "format_review_for_display", lambda _r, _v: "display")
-    monkeypatch.setattr(core.click, "echo", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "echo", lambda *args, **kwargs: None)
 
     commit_msg, review = core.commit_with_ai(
         provider="openai",

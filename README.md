@@ -44,7 +44,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 ## 📚 Documentação detalhada
 
 - `docs/configuracao.md` — precedência de config, keyring, env vars e schema do `.seshat`.
-- `docs/cli.md` — comandos, flags e comportamento real de `commit`, `flow`, `init` e `fix`.
+- `docs/cli.md` — comandos, flags e comportamento real de `commit`, `flow`, `init` e `fix` (UI Typer + Rich com fallback non-TTY).
 - `docs/seshat-examples.md` — variações de `.seshat` para cenários comuns.
 - `docs/tooling-architecture.md` — arquitetura interna do sistema de tooling.
 

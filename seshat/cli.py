@@ -1,10 +1,11 @@
 import os
-import click
 import sys
 import subprocess
+import typer
 from pathlib import Path
-from typing import Optional, Tuple, Any
-from .core import commit_with_ai
+from typing import Annotated, Literal, Optional, Tuple, Any
+from . import core, ui, config as cli_config, __version__
+from .core import commit_with_ai  # noqa: F401
 from .utils import display_error, get_last_commit_summary
 from .config import (
     load_config,
@@ -15,51 +16,51 @@ from .config import (
 )
 from .commands import cli
 from .tooling_ts import SeshatConfig
-from . import ui
 # Import for side effects: register flow command.
 from . import flow  # noqa: F401
 
 
 
 @cli.command()
-@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)")
-@click.option("--model", help="Modelo específico do provedor")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
-@click.option("--max-diff", type=int, help="Limite máximo de caracteres para o diff")
-@click.option(
-    "--check", "-c",
-    type=click.Choice(["full", "lint", "test", "typecheck"]),
-    default=None,
-    help="Run pre-commit checks: full (all), lint, test, or typecheck",
-)
-@click.option(
-    "--review", "-r",
-    is_flag=True,
-    help="Enable AI code review (also enabled via .seshat code_review.enabled)",
-)
-@click.option(
-    "--no-review",
-    is_flag=True,
-    help="Disable AI code review (overrides .seshat)",
-)
-@click.option(
-    "--no-check",
-    is_flag=True,
-    help="Disable all pre-commit checks",
-)
 def commit(
-    provider: Optional[str],
-    model: Optional[str],
-    yes: bool,
-    verbose: bool,
-    date: Optional[str],
-    max_diff: Optional[int],
-    check: Optional[str],
-    review: bool,
-    no_review: bool,
-    no_check: bool,
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)"
+    ),
+    model: Optional[str] = typer.Option(None, "--model", help="Modelo específico do provedor"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    date: Optional[str] = typer.Option(
+        None, "--date", "-d", help="Data para o commit (formato aceito pelo Git)"
+    ),
+    max_diff: Optional[int] = typer.Option(
+        None, "--max-diff", help="Limite máximo de caracteres para o diff"
+    ),
+    check: Annotated[
+        Optional[Literal["full", "lint", "test", "typecheck"]],
+        typer.Option(
+            "--check",
+            "-c",
+            help="Run pre-commit checks: full (all), lint, test, or typecheck",
+            case_sensitive=False,
+            show_choices=True,
+        ),
+    ] = None,
+    review: bool = typer.Option(
+        False,
+        "--review",
+        "-r",
+        help="Enable AI code review (also enabled via .seshat code_review.enabled)",
+    ),
+    no_review: bool = typer.Option(
+        False,
+        "--no-review",
+        help="Disable AI code review (overrides .seshat)",
+    ),
+    no_check: bool = typer.Option(
+        False,
+        "--no-check",
+        help="Disable all pre-commit checks",
+    ),
 ) -> None:
     """Generate and execute AI-powered commits"""
     try:
@@ -68,9 +69,9 @@ def commit(
             ui.error("Arquivo .seshat não encontrado.")
             ui.info("O Seshat requer um arquivo de configuração .seshat no projeto.")
             
-            if click.confirm("\nDeseja criar um agora? (roda 'seshat init')"):
+            if ui.confirm("\nDeseja criar um agora? (roda 'seshat init')"):
                 # Invoca o comando init
-                ctx = click.get_current_context()
+                ctx = typer.get_current_context()
                 ctx.invoke(init)
                 ui.info("Agora você pode rodar 'seshat commit' novamente!", icon="✨")
             
@@ -141,23 +142,31 @@ def commit(
             if seshat_config.code_review.get("enabled"):
                 details.append("code_review: ativo")
             if details:
-                ui.step(" | ".join(details), icon=" ")
+                if ui.is_tty():
+                    ui.table("Configuração carregada", ["Detalhes"], [[" | ".join(details)]])
+                else:
+                    ui.step(" | ".join(details), icon=" ")
 
-        # Passar parâmetros
-        commit_message, review_result = commit_with_ai(
-            provider=provider_name, 
-            model=config.get("AI_MODEL"), 
-            verbose=verbose, 
-            skip_confirmation=yes,
-            check=check,
-            code_review=review,
-            no_review=no_review,
-            no_check=no_check,
-        )
+        with ui.status("Gerando mensagem de commit"):
+            commit_message, review_result = commit_with_ai(
+                provider=provider_name,
+                model=config.get("AI_MODEL"),
+                verbose=verbose,
+                skip_confirmation=yes,
+                check=check,
+                code_review=review,
+                no_review=no_review,
+                no_check=no_check,
+            )
 
-        if yes or click.confirm(
-            f"\nMensagem sugerida:\n\n{commit_message}\n"
-        ):
+        if ui.is_tty():
+            ui.table("Mensagem sugerida", ["Commit"], [[commit_message]])
+            should_commit = yes or ui.confirm("\nDeseja confirmar o commit?")
+        else:
+            should_commit = yes or ui.confirm(
+                f"\nMensagem sugerida:\n\n{commit_message}\n"
+            )
+        if should_commit:
             # Se a data for fornecida, use o parâmetro --date do Git
             git_args = ["git", "commit"]
             if not verbose:
@@ -181,27 +190,33 @@ def commit(
 
 
 @cli.command()
-@click.option("--api-key", help="Configure a API Key")
-@click.option("--provider", help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai)")
-@click.option("--model", help="Configure o modelo padrão para o seu provider")
-@click.option("--judge-api-key", help="Configure a API Key do JUDGE")
-@click.option("--judge-provider", help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai)")
-@click.option("--judge-model", help="Configure o modelo padrão para o JUDGE")
-@click.option("--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)")
-@click.option("--max-diff", type=int, help="Configure o limite máximo de caracteres para o diff")
-@click.option("--warn-diff", type=int, help="Configure o limite de aviso para o tamanho do diff")
-@click.option("--language", help="Configure a linguagem das mensagens de commit (PT-BR, ENG, ESP, FRA, DEU, ITA)")
 def config(
-    api_key: Optional[str],
-    provider: Optional[str],
-    model: Optional[str],
-    judge_api_key: Optional[str],
-    judge_provider: Optional[str],
-    judge_model: Optional[str],
-    default_date: Optional[str],
-    max_diff: Optional[int],
-    warn_diff: Optional[int],
-    language: Optional[str],
+    api_key: Optional[str] = typer.Option(None, "--api-key", help="Configure a API Key"),
+    provider: Optional[str] = typer.Option(
+        None,
+        "--provider",
+        help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai)",
+    ),
+    model: Optional[str] = typer.Option(None, "--model", help="Configure o modelo padrão para o seu provider"),
+    judge_api_key: Optional[str] = typer.Option(None, "--judge-api-key", help="Configure a API Key do JUDGE"),
+    judge_provider: Optional[str] = typer.Option(
+        None,
+        "--judge-provider",
+        help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai)",
+    ),
+    judge_model: Optional[str] = typer.Option(None, "--judge-model", help="Configure o modelo padrão para o JUDGE"),
+    default_date: Optional[str] = typer.Option(
+        None, "--default-date", help="Configure uma data padrão para commits (formato aceito pelo Git)"
+    ),
+    max_diff: Optional[int] = typer.Option(
+        None, "--max-diff", help="Configure o limite máximo de caracteres para o diff"
+    ),
+    warn_diff: Optional[int] = typer.Option(
+        None, "--warn-diff", help="Configure o limite de aviso para o tamanho do diff"
+    ),
+    language: Optional[str] = typer.Option(
+        None, "--language", help="Configure a linguagem das mensagens de commit (PT-BR, ENG, ESP, FRA, DEU, ITA)"
+    ),
 ) -> None:
     """Configure API Key e provedor padrão"""
     try:
@@ -269,7 +284,7 @@ def config(
 
         if modified:
             save_config(updates)
-            click.secho("✓ Configuração atualizada com sucesso!", fg="green")
+            ui.success("Configuração atualizada com sucesso!")
         else:
             current_config = load_config()
             
@@ -289,29 +304,43 @@ def config(
             judge_model_value = current_config.get("JUDGE_MODEL") or ("not set" if language == "ENG" else "não configurado")
             
             if language == "ENG":
-                click.echo("Current configuration:")
-                click.echo(f"API Key: {masked_key}")
-                click.echo(f"Provider: {provider_value}")
-                click.echo(f"Model: {model_value}")
-                click.echo(f"Judge API Key: {masked_judge_key}")
-                click.echo(f"Judge Provider: {judge_provider_value}")
-                click.echo(f"Judge Model: {judge_model_value}")
-                click.echo(f"Maximum diff limit: {current_config.get('MAX_DIFF_SIZE')}")
-                click.echo(f"Warning diff limit: {current_config.get('WARN_DIFF_SIZE')}")
-                click.echo(f"Commit language: {current_config.get('COMMIT_LANGUAGE')}")
-                click.echo(f"Default date: {current_config.get('DEFAULT_DATE') or 'not set'}")
+                rows = [
+                    ["API Key", masked_key],
+                    ["Provider", provider_value],
+                    ["Model", model_value],
+                    ["Judge API Key", masked_judge_key],
+                    ["Judge Provider", judge_provider_value],
+                    ["Judge Model", judge_model_value],
+                    ["Maximum diff limit", current_config.get("MAX_DIFF_SIZE")],
+                    ["Warning diff limit", current_config.get("WARN_DIFF_SIZE")],
+                    ["Commit language", current_config.get("COMMIT_LANGUAGE")],
+                    ["Default date", current_config.get("DEFAULT_DATE") or "not set"],
+                ]
+                if ui.is_tty():
+                    ui.table("Current configuration", ["Key", "Value"], rows)
+                else:
+                    ui.echo("Current configuration:")
+                    for key, value in rows:
+                        ui.echo(f"{key}: {value}")
             else:
-                click.echo("Configuração atual:")
-                click.echo(f"API Key: {masked_key}")
-                click.echo(f"Provider: {provider_value}")
-                click.echo(f"Model: {model_value}")
-                click.echo(f"Judge API Key: {masked_judge_key}")
-                click.echo(f"Judge Provider: {judge_provider_value}")
-                click.echo(f"Judge Model: {judge_model_value}")
-                click.echo(f"Limite máximo do diff: {current_config.get('MAX_DIFF_SIZE')}")
-                click.echo(f"Limite de aviso do diff: {current_config.get('WARN_DIFF_SIZE')}")
-                click.echo(f"Linguagem dos commits: {current_config.get('COMMIT_LANGUAGE')}")
-                click.echo(f"Data padrão: {current_config.get('DEFAULT_DATE') or 'não configurada'}")
+                rows = [
+                    ["API Key", masked_key],
+                    ["Provider", provider_value],
+                    ["Model", model_value],
+                    ["Judge API Key", masked_judge_key],
+                    ["Judge Provider", judge_provider_value],
+                    ["Judge Model", judge_model_value],
+                    ["Limite máximo do diff", current_config.get("MAX_DIFF_SIZE")],
+                    ["Limite de aviso do diff", current_config.get("WARN_DIFF_SIZE")],
+                    ["Linguagem dos commits", current_config.get("COMMIT_LANGUAGE")],
+                    ["Data padrão", current_config.get("DEFAULT_DATE") or "não configurada"],
+                ]
+                if ui.is_tty():
+                    ui.table("Configuração atual", ["Chave", "Valor"], rows)
+                else:
+                    ui.echo("Configuração atual:")
+                    for key, value in rows:
+                        ui.echo(f"{key}: {value}")
 
 
     except Exception as e:
@@ -320,9 +349,10 @@ def config(
 
 
 @cli.command()
-@click.option("--force", "-f", is_flag=True, help="Overwrite existing .seshat file")
-@click.option("--path", "-p", default=".", help="Path to the project root")
-def init(force: bool, path: str) -> None:
+def init(
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing .seshat file"),
+    path: str = typer.Option(".", "--path", "-p", help="Path to the project root"),
+) -> None:
     """Initialize a .seshat configuration file for the current project.
     
     Automatically detects project type and available tooling.
@@ -351,10 +381,10 @@ def init(force: bool, path: str) -> None:
         choices = ["python", "typescript"]
         ui.info("Escolha o tipo de projeto:")
         for i, choice in enumerate(choices, 1):
-            click.echo(f"  {i}. {choice}")
+            ui.echo(f"  {i}. {choice}")
         
         try:
-            selection = click.prompt("Opção", type=int, default=1)
+            selection = ui.prompt("Opção", type=int, default=1)
             project_type = choices[selection - 1] if 1 <= selection <= len(choices) else "python"
         except (ValueError, IndexError):
             project_type = "python"
@@ -418,7 +448,7 @@ def init(force: bool, path: str) -> None:
             lines.append(f"    # detected: {tool.name} ({cmd_str})")
     
     # Adding log directory prompt
-    log_dir = click.prompt("Diretório para salvar logs de code review (deixe em branco para ignorar)", default="", show_default=False)
+    log_dir = ui.prompt("Diretório para salvar logs de code review (deixe em branco para ignorar)", default="", show_default=False)
     
     lines.extend([
         "",
@@ -500,7 +530,7 @@ def init(force: bool, path: str) -> None:
         # Show summary
         ui.hr()
         ui.info("Configuração gerada:")
-        click.echo(f"\n{content}")
+        ui.echo(f"\n{content}")
         
     except Exception as e:
         ui.error(f"Erro ao criar arquivo: {e}")
@@ -508,19 +538,26 @@ def init(force: bool, path: str) -> None:
 
 
 @cli.command()
-@click.option(
-    "--check", "-c",
-    type=click.Choice(["lint"]),
-    default="lint",
-    help="Type of check to fix (default: lint)",
-)
-@click.option(
-    "--all", "-a", "run_all",
-    is_flag=True,
-    help="Run fixes on all files (ignores staged files)",
-)
-@click.argument("files", nargs=-1)
-def fix(check: str, run_all: bool, files: Tuple[str, ...]) -> None:
+def fix(
+    check: Annotated[
+        Literal["lint"],
+        typer.Option(
+            "--check",
+            "-c",
+            help="Type of check to fix (default: lint)",
+        ),
+    ] = "lint",
+    run_all: bool = typer.Option(
+        False,
+        "--all",
+        "-a",
+        help="Run fixes on all files (ignores staged files)",
+    ),
+    files: Annotated[
+        Optional[list[str]],
+        typer.Argument(help="Specific files to fix"),
+    ] = None,
+) -> None:
     """
     Run automatic fixes for tooling issues.
     

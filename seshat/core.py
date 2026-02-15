@@ -1,9 +1,9 @@
 import sys
 import subprocess
-import click
 import os
 from typing import List, Optional, Tuple
 from .providers import get_provider
+from . import ui
 from .utils import (
     start_thinking_animation,
     stop_thinking_animation,
@@ -32,11 +32,11 @@ def _has_security_issues(result: CodeReviewResult) -> bool:
 
 def _prompt_blocking_bug_action() -> str:
     ui.section("⚠️  BUG encontrado no code review")
-    click.echo("Escolha o que deseja fazer:")
-    click.echo("  1. Continuar o commit (falso positivo)")
-    click.echo("  2. Parar e não commitar para investigar")
-    click.echo("  3. Enviar para outra IA (JUDGE)")
-    choice = click.prompt("Opção", type=click.Choice(["1", "2", "3"]), default="2")
+    ui.echo("Escolha o que deseja fazer:")
+    ui.echo("  1. Continuar o commit (falso positivo)")
+    ui.echo("  2. Parar e não commitar para investigar")
+    ui.echo("  3. Enviar para outra IA (JUDGE)")
+    choice = ui.prompt("Opção", choices=["1", "2", "3"], default="2")
     if choice == "1":
         return "continue"
     if choice == "3":
@@ -50,9 +50,9 @@ def _select_judge_provider(current_provider: str, configured_provider: Optional[
     providers = [p for p in sorted(VALID_PROVIDERS) if p != current_provider]
     if not providers:
         raise ValueError("Nenhum outro provedor disponível para o JUDGE.")
-    choice = click.prompt(
+    choice = ui.prompt(
         "Provedor para o JUDGE",
-        type=click.Choice(providers),
+        choices=providers,
         default=providers[0],
     )
     return choice
@@ -115,7 +115,7 @@ def _run_judge_review(
         exts = review_extensions or f"padrão para {project_type or 'generic'}"
         ui.info(f"JUDGE usando extensões: {exts}", icon="📄")
 
-    click.echo("\n" + format_review_for_display(result, verbose))
+    ui.echo("\n" + format_review_for_display(result, verbose))
     return result
 
 
@@ -153,13 +153,13 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
 
     if diff_size > MAX_SIZE:
         if LANGUAGE == "ENG":
-            click.secho(
+            ui.warning(
                 "\n🤖 Maximum recommended character limit for a single commit reached!\n"
                 f"Maximum allowed characters: {MAX_SIZE}\n"
                 f"Number of characters in diff: {diff_size}\n",
-                fg="yellow",
+                icon="",
             )
-            click.secho(
+            ui.echo(
                 "Please consider:\n"
                 "1. Splitting changes into smaller commits\n"
                 "2. Reviewing if all changes are really necessary\n"
@@ -167,39 +167,39 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
                 "4. Increasing the limit with: seshat config --max-diff <number>\n"
             )
         else:
-            click.secho(
+            ui.warning(
                 "\n🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
                 f"Máximo de caracteres permitido: {MAX_SIZE}\n"
                 f"Número de caracteres no diff: {diff_size}\n",
-                fg="yellow",
+                icon="",
             )
-            click.secho(
+            ui.echo(
                 "Por favor, considere:\n"
                 "1. Dividir as alterações em commits menores\n"
                 "2. Revisar se todas as alterações são realmente necessárias\n"
                 "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
                 "4. Aumentar o limite com: seshat config --max-diff <número>\n"
             )
-        if not skip_confirmation and not click.confirm("📢 Deseja continuar?"):
-            click.secho("❌ Commit cancelado!", fg="red")
+        if not skip_confirmation and not ui.confirm("📢 Deseja continuar?"):
+            ui.error("Commit cancelado!", icon="❌")
             sys.exit(0)
 
     elif diff_size > WARN_SIZE:
         if LANGUAGE == "ENG":
-            click.secho(
-                "\n⚠️ Warning: The diff is relatively large.\n"
+            ui.warning(
+                "\nWarning: The diff is relatively large.\n"
                 f"Warning limit: {WARN_SIZE} characters\n"
                 f"Current size: {diff_size} characters\n"
                 "Consider making smaller commits for better traceability.\n",
-                fg="yellow",
+                icon="⚠️",
             )
         else:
-            click.secho(
-                "\n⚠️ Atenção: O diff está relativamente grande.\n"
+            ui.warning(
+                "\nAtenção: O diff está relativamente grande.\n"
                 f"Limite de aviso: {WARN_SIZE} caracteres\n"
                 f"Tamanho atual: {diff_size} caracteres\n"
                 "Considere fazer commits menores para melhor rastreabilidade.\n",
-                fg="yellow",
+                icon="⚠️",
             )
 
     return True
@@ -391,7 +391,7 @@ def run_pre_commit_checks(
     
     # Display results
     output = runner.format_results(results, verbose)
-    click.echo(output)
+    ui.echo(output)
     
     has_blocking_failures = runner.has_blocking_failures(results)
     
@@ -509,7 +509,7 @@ def commit_with_ai(
                 
                 if all_results:
                     output = runner.format_results(all_results, verbose)
-                    click.echo(output)
+                    ui.echo(output)
                     
                     has_blocking_failures = runner.has_blocking_failures(all_results)
                     if has_blocking_failures:
@@ -521,13 +521,13 @@ def commit_with_ai(
     diff = get_git_diff(skip_confirmation, paths=paths)
 
     if verbose:
-        click.echo("📋 Diff analysis:")
-        click.echo(diff[:500] + "...\n")
+        ui.echo("📋 Diff analysis:")
+        ui.echo(diff[:500] + "...\n")
 
         # Mostrar limites configurados
         max_diff = os.getenv("MAX_DIFF_SIZE", "3000")
         warn_diff = os.getenv("WARN_DIFF_SIZE", "2500")
-        click.echo(f"📏 Limites configurados: max={max_diff}, warn={warn_diff}")
+        ui.echo(f"📏 Limites configurados: max={max_diff}, warn={warn_diff}")
 
     try:
         selectedProvider = get_provider(provider)
@@ -582,7 +582,7 @@ def commit_with_ai(
                 stop_thinking_animation(animation)
         
         # Display review results
-        click.echo("\n" + format_review_for_display(review_result, verbose))
+        ui.echo("\n" + format_review_for_display(review_result, verbose))
         
         # Log Review Results if issues found
         if review_result.has_issues:
@@ -650,7 +650,7 @@ def commit_with_ai(
 
                 if review_blocking and _has_bug_issues(review_result):
                     ui.warning("JUDGE também apontou BUG.")
-                    if not click.confirm("Deseja continuar o commit mesmo assim?"):
+                    if not ui.confirm("Deseja continuar o commit mesmo assim?"):
                         raise ValueError("Commit cancelado após JUDGE.")
                     skip_issue_confirmation = True
             if action == "continue":
@@ -665,7 +665,7 @@ def commit_with_ai(
         # Warn but allow if there are warnings
         if review_result.has_issues and not skip_issue_confirmation:
             if not skip_confirmation:
-                if not click.confirm("\n⚠️  Code review encontrou issues. Deseja continuar com o commit?"):
+                if not ui.confirm("\n⚠️  Code review encontrou issues. Deseja continuar com o commit?"):
                     raise ValueError("Commit cancelado pelo usuário após code review.")
             else:
                 ui.warning("Code review encontrou issues, mas continuando (--yes flag).")
@@ -692,7 +692,7 @@ def commit_with_ai(
         commit_msg = raw_response
 
         if verbose:
-            click.echo("🤖 AI-generated message:")
+            ui.echo("🤖 AI-generated message:")
 
         commit_msg = (commit_msg or "").strip()
         commit_msg = normalize_commit_subject_case(commit_msg)

@@ -1,7 +1,7 @@
 import os
-import click
 import sys
-from typing import Optional
+import typer
+from typing import Annotated, Literal, Optional
 from .services import BatchCommitService
 from .commands import cli
 from .config import load_config, normalize_config, validate_config, apply_project_overrides
@@ -9,40 +9,41 @@ from .tooling_ts import SeshatConfig
 from . import ui
 
 @cli.command()
-@click.argument("count", type=int, default=0)
-@click.option("--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)")
-@click.option("--model", help="Modelo específico do provedor")
-@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-@click.option("--verbose", "-v", is_flag=True, help="Verbose output")
-@click.option("--date", "-d", help="Data para o commit (formato aceito pelo Git)")
-@click.option("--path", "-p", help="Caminho para buscar arquivos modificados", default=".")
-@click.option(
-    "--check", "-c",
-    type=click.Choice(["full", "lint", "test", "typecheck"]),
-    default=None,
-    help="Run pre-commit checks: full (all), lint, test, or typecheck",
-)
-@click.option(
-    "--review", "-r",
-    is_flag=True,
-    help="Include AI code review in commit message generation",
-)
-@click.option(
-    "--no-check",
-    is_flag=True,
-    help="Disable all pre-commit checks",
-)
 def flow(
-    count: int,
-    provider: Optional[str],
-    model: Optional[str],
-    yes: bool,
-    verbose: bool,
-    date: Optional[str],
-    path: str,
-    check: Optional[str],
-    review: bool,
-    no_check: bool,
+    count: int = typer.Argument(0, help="Número máximo de arquivos a processar"),
+    provider: Optional[str] = typer.Option(
+        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)"
+    ),
+    model: Optional[str] = typer.Option(None, "--model", help="Modelo específico do provedor"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    date: Optional[str] = typer.Option(
+        None, "--date", "-d", help="Data para o commit (formato aceito pelo Git)"
+    ),
+    path: str = typer.Option(
+        ".", "--path", "-p", help="Caminho para buscar arquivos modificados"
+    ),
+    check: Annotated[
+        Optional[Literal["full", "lint", "test", "typecheck"]],
+        typer.Option(
+            "--check",
+            "-c",
+            help="Run pre-commit checks: full (all), lint, test, or typecheck",
+            case_sensitive=False,
+            show_choices=True,
+        ),
+    ] = None,
+    review: bool = typer.Option(
+        False,
+        "--review",
+        "-r",
+        help="Include AI code review in commit message generation",
+    ),
+    no_check: bool = typer.Option(
+        False,
+        "--no-check",
+        help="Disable all pre-commit checks",
+    ),
 ) -> None:
     """Processa e comita múltiplos arquivos individualmente.
     
@@ -122,15 +123,25 @@ def flow(
             if seshat_config.code_review.get("enabled"):
                 details.append("code_review: ativo")
             if details:
-                ui.step(" | ".join(details), icon=" ")
+                if ui.is_tty():
+                    ui.table("Configuração carregada", ["Detalhes"], [[" | ".join(details)]])
+                else:
+                    ui.step(" | ".join(details), icon=" ")
         
-        ui.info(f"Processando {len(files)} arquivos", icon="🔄")
+        if ui.is_tty():
+            ui.table("Resumo", ["Campo", "Valor"], [["Arquivos", str(len(files))]])
+        else:
+            ui.info(f"Processando {len(files)} arquivos", icon="🔄")
         
         if not yes:
-            ui.section("Arquivos a serem processados")
-            for f in files:
-                ui.step(f, icon="•")
-            if not click.confirm("\n⚠️ Deseja prosseguir?"):
+            rows = [[f] for f in files]
+            if ui.is_tty():
+                ui.table("Arquivos a serem processados", ["Arquivo"], rows)
+            else:
+                ui.section("Arquivos a serem processados")
+                for f in files:
+                    ui.step(f, icon="•")
+            if not ui.confirm("\n⚠️ Deseja prosseguir?"):
                 return
 
         success_count = 0
@@ -139,37 +150,55 @@ def flow(
         
         def confirm_commit(file: str, msg: str) -> bool:
             ui.info(f"Mensagem gerada para {file}:")
-            click.echo(f"\n{msg}\n")
-            return click.confirm("Confirmar commit?")
+            if ui.is_tty():
+                ui.table("Mensagem gerada", ["Commit"], [[msg]])
+                return ui.confirm("Confirmar commit?")
+            ui.echo(f"\n{msg}\n")
+            return ui.confirm("Confirmar commit?")
 
-        for idx, file in enumerate(files, 1):
-            ui.section(f"[{idx}/{len(files)}] {file}")
-            
-            result = service.process_file(
-                file=file,
-                date=date,
-                verbose=verbose,
-                skip_confirm=yes,
-                confirm_callback=confirm_commit,
-                check=check,
-                code_review=review,
-                no_check=no_check,
-            )
-            
-            if result.skipped:
-                ui.warning(f"Pulando: {result.message}")
-                skipped_count += 1
-            elif result.success:
-                ui.success(f"Sucesso: {result.message}")
-                success_count += 1
-            else:
-                ui.error(f"Falha: {result.message}")
-                fail_count += 1
+        with ui.progress(len(files)) as prog:
+            for idx, file in enumerate(files, 1):
+                if not ui.is_tty():
+                    ui.section(f"[{idx}/{len(files)}] {file}")
+                prog.update(file)
+
+                with ui.status(f"Processando {file}"):
+                    result = service.process_file(
+                        file=file,
+                        date=date,
+                        verbose=verbose,
+                        skip_confirm=yes,
+                        confirm_callback=confirm_commit,
+                        check=check,
+                        code_review=review,
+                        no_check=no_check,
+                    )
+
+                if result.skipped:
+                    ui.warning(f"Pulando: {result.message}")
+                    skipped_count += 1
+                elif result.success:
+                    ui.success(f"Sucesso: {result.message}")
+                    success_count += 1
+                else:
+                    ui.error(f"Falha: {result.message}")
+                    fail_count += 1
 
         ui.hr()
-        ui.info(
-            f"Sucesso: {success_count} | Falhas: {fail_count} | Pulados: {skipped_count}"
-        )
+        if ui.is_tty():
+            ui.table(
+                "Resultado",
+                ["Campo", "Valor"],
+                [
+                    ["Sucesso", str(success_count)],
+                    ["Falhas", str(fail_count)],
+                    ["Pulados", str(skipped_count)],
+                ],
+            )
+        else:
+            ui.info(
+                f"Sucesso: {success_count} | Falhas: {fail_count} | Pulados: {skipped_count}"
+            )
 
     except Exception as e:
         ui.error(str(e))

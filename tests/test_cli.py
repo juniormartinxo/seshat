@@ -1,6 +1,6 @@
 from pathlib import Path
 import pytest
-from click.testing import CliRunner
+from typer.testing import CliRunner
 
 from seshat.commands import cli
 import seshat.cli as cli_module
@@ -56,7 +56,7 @@ def test_commit_yes_skips_confirmation_and_runs_git(
     monkeypatch.setattr(
         cli_module.ui, "success", lambda msg: called.setdefault("success", msg)
     )
-    monkeypatch.setattr(cli_module.click, "confirm", lambda *a, **k: False)
+    monkeypatch.setattr(cli_module.ui, "confirm", lambda *a, **k: True)
 
     with runner.isolated_filesystem():
         with open(".seshat", "w") as f:

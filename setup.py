@@ -18,6 +18,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         "click>=8.0",
+        "rich>=13.0",
+        "typer>=0.12.0",
         "requests>=2.26",
         "python-dotenv>=0.19",
         "anthropic>=0.19",

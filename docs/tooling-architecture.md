@@ -337,8 +337,10 @@ O comando está em `seshat/cli.py`:
 
 ```python
 @cli.command()
-@click.option("--force", "-f", is_flag=True)
-@click.option("--path", "-p", default=".")
+def init(
+    force: bool = typer.Option(False, "--force", "-f"),
+    path: str = typer.Option(".", "--path", "-p"),
+):
 def init(force, path):
     """Initialize a .seshat configuration file."""
     from .tooling import ToolingRunner
@@ -456,4 +458,3 @@ class TestInitCommand:
     def test_init_detects_available_tools(self, tmp_path):
         """Should show detected tools in output."""
 ```
-

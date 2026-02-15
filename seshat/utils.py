@@ -1,10 +1,16 @@
 import re
-import click
 import sys
 import subprocess
 import time
 import threading
 from typing import Callable, Optional, Sequence
+
+from . import ui
+
+
+def _write_inline(text: str) -> None:
+    sys.stdout.write(text)
+    sys.stdout.flush()
 
 
 def show_thinking_animation(
@@ -18,6 +24,16 @@ def show_thinking_animation(
         stop_event: threading.Event para parar a animação
         get_message: callable para obter a mensagem atual
     """
+    if ui.is_tty():
+        while not stop_event.is_set():
+            time.sleep(0.1)
+        return
+
+    _write_inline("Processando...\n")
+    while not stop_event.is_set():
+        time.sleep(0.1)
+    return
+
     animation_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
     i = 0
@@ -32,16 +48,14 @@ def show_thinking_animation(
         # Escreve na mesma linha, limpando o conteúdo anterior
         line = f"{char} {message}"
         padding = " " * max(0, last_len - len(line))
-        click.echo(f"\r{line}{padding}", nl=False)
+        _write_inline(f"\r{line}{padding}")
         last_len = len(line)
-        sys.stdout.flush()
 
         time.sleep(0.1)  # Atualiza a cada 100ms
         i += 1
 
     # Limpa a linha final
-    click.echo("\r" + " " * last_len + "\r", nl=False)
-    sys.stdout.flush()
+    _write_inline("\r" + " " * last_len + "\r")
 
 
 class ThinkingAnimation:
@@ -61,6 +75,9 @@ class ThinkingAnimation:
             "Aguardando resposta da IA...",
         ]
         self._lock = threading.Lock()
+        self._status = ui.status("Processando...") if ui.is_tty() else None
+        if self._status:
+            self._status.__enter__()
         self.stop_event = threading.Event()
         self.thread = threading.Thread(
             target=show_thinking_animation,
@@ -72,6 +89,8 @@ class ThinkingAnimation:
     def update(self, message: str) -> None:
         with self._lock:
             self._override_message = message
+        if self._status:
+            self._status.update(message)
 
     def get_message(self) -> str:
         with self._lock:
@@ -107,13 +126,15 @@ def stop_thinking_animation(animation: ThinkingAnimation) -> None:
     """
     animation.stop_event.set()
     animation.thread.join(timeout=1)  # Aguarda até 1 segundo para a thread terminar
-    click.echo()  # Nova linha após a animação
+    if animation._status:
+        animation._status.__exit__(None, None, None)
+    ui.echo()  # Nova linha após a animação
 
 
 
 def display_error(message: str) -> None:
     """Exibe erros formatados"""
-    click.secho(f"🚨 Erro: {message}", fg="red")
+    ui.error(f"🚨 Erro: {message}")
 
 
 def get_last_commit_summary() -> Optional[str]:

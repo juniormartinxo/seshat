@@ -1,7 +1,7 @@
 import os
 import json
 import keyring
-import click
+import typer
 from pathlib import Path
 from typing import Any, Callable, Optional
 from dotenv import load_dotenv, find_dotenv
@@ -114,19 +114,19 @@ def set_secure_key(key_name: str, value: str) -> bool:
 
 def _prompt_plaintext_fallback(key_name: str) -> bool:
     """Confirmar salvamento em texto plano quando keyring falha."""
-    click.secho(
+    typer.secho(
         f"Aviso: Keyring indisponível para {key_name}.",
         fg="yellow",
     )
-    click.secho(
+    typer.secho(
         "Salvar em texto plano no arquivo ~/.seshat expõe sua chave.",
         fg="yellow",
     )
-    click.secho(
+    typer.secho(
         "Recomendação: instale o chaveiro do sistema (GNOME Keyring, KWallet, macOS Keychain, Windows Credential Manager).",
         fg="yellow",
     )
-    return click.confirm("Deseja salvar em texto plano mesmo assim?", default=False)
+    return typer.confirm("Deseja salvar em texto plano mesmo assim?", default=False)
 
 
 def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
@@ -188,7 +188,7 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
                 if _prompt_plaintext_fallback("API_KEY"):
                     current_config["API_KEY"] = api_key
                 else:
-                    click.secho("API_KEY não foi salva.", fg="red")
+                    typer.secho("API_KEY não foi salva.", fg="red")
             else:
                 if "API_KEY" in current_config:
                     del current_config["API_KEY"]
@@ -200,7 +200,7 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
                 if _prompt_plaintext_fallback("JUDGE_API_KEY"):
                     current_config["JUDGE_API_KEY"] = judge_api_key
                 else:
-                    click.secho("JUDGE_API_KEY não foi salva.", fg="red")
+                    typer.secho("JUDGE_API_KEY não foi salva.", fg="red")
             else:
                 if "JUDGE_API_KEY" in current_config:
                     del current_config["JUDGE_API_KEY"]

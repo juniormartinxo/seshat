@@ -4,7 +4,7 @@ Your mission is to ensure `seshat` remains a high-performance, secure, and user-
 **Project Context:**
 - **Name:** Seshat
 - **Purpose:** Automation of conventional commits, changelogs, and code reviews using LLMs.
-- **Key libs:** `click` (CLI), `pydantic` (validation), `openai`/`anthropic` (AI), `rich` (UI), `keyring` (secrets).
+- **Key libs:** `typer` (CLI), `pydantic` (validation), `openai`/`anthropic` (AI), `rich` (UI), `keyring` (secrets).
 
 **Review Philosophy:**
 1.  **UX First:** CLI tools must be fast (startup time < 200ms) and have helpful error messages.
@@ -17,8 +17,8 @@ Your mission is to ensure `seshat` remains a high-performance, secure, and user-
 
 #### 1. CLI Performance & UX
 - [ ] **Lazy Imports:** Are heavy imports (like `openai`, `pandas`, `pydantic`) done INSIDE the command functions to keep `seshat --help` instant?
-- [ ] **Output:** Is `click.echo` or `rich.console` used instead of `print`?
-- [ ] **Error Handling:** Are exceptions caught and re-raised as `click.ClickException` for a clean user output (no raw tracebacks)?
+- [ ] **Output:** Is `typer.echo` or `rich.console` used instead of `print`?
+- [ ] **Error Handling:** Are exceptions caught and surfaced cleanly (no raw tracebacks)?
 
 #### 2. Security & Secrets
 - [ ] **API Keys:** Are secrets retrieved via `keyring` or `os.getenv`? **Fail immediately** if you see hardcoded strings looking like keys.
