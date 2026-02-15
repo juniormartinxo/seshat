@@ -104,7 +104,7 @@ class UITheme:
     panel_title: Style = Style(color="cyan", bold=True)
     panel_subtitle: Style = Style(color="bright_black", italic=True)
     section: Style = Style(color="cyan", bold=True)
-    info: Style = Style(color="dodger_blue2")
+    info: Style = Style(color="#254159")
     step: Style = Style(color="bright_black")
     success: Style = Style(color="green1", bold=True)
     warning: Style = Style(color="gold1", bold=True)
@@ -120,7 +120,7 @@ class UIColor:
     secondary: str = "blue"
     accent: str = "magenta"
     muted: str = "bright_black"
-    info: str = "dodger_blue2"
+    info: str = "#254159"
     success: str = "green1"
     warning: str = "gold1"
     error: str = "red1"
