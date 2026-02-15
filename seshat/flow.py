@@ -194,6 +194,7 @@ def flow(
                     ["Falhas", str(fail_count)],
                     ["Pulados", str(skipped_count)],
                 ],
+                alignments=["left", "center"],
             )
         else:
             ui.info(
