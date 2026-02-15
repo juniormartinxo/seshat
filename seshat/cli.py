@@ -392,6 +392,8 @@ def init(force: bool, path: str) -> None:
         f"  warn_diff_size: {warn_diff_size}",
         f"  # provider: {provider_hint}",
         f"  # model: {model_hint}",
+        "  # no_ai_extensions: [\".md\", \".mdx\"]",
+        "  # no_ai_paths: [\"docs/\", \".github/\", \"CHANGELOG.md\"]",
         "",
         "# Pre-commit checks",
         "checks:",
