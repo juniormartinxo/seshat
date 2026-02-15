@@ -1,22 +1,28 @@
+"""Preview da UI sem interação (sem prompts ou confirms).
+
+Roda: python -m scripts.ui_only_preview
+"""
+
 from __future__ import annotations
 
 from seshat import ui
 
 
 def main() -> None:
-    ui.title("Seshat — UI Only", "Preview somente da UI", panel_style=ui.style["panel"])
+    ui.title("Seshat — UI Only", "Demonstração visual sem interação")
     ui.hr()
 
     ui.section("Mensagens")
     ui.info("Informação relevante")
     ui.step("Etapa intermediária", icon="•", fg="bright_black")
+    ui.step("Etapa com destaque", icon="→", fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
     ui.error("Falha simulada")
 
     ui.section("Tabela")
     ui.table(
-        "Resumo",
+        "Resumo da Operação",
         ["Campo", "Valor"],
         [["Arquivos", "3"], ["Status", "OK"], ["Tempo", "120ms"]],
         alignments=["left", "right"],
@@ -47,6 +53,9 @@ F401 [*] `typing.Tuple` imported but unused
 help: Remove unused import: `typing.Tuple`
 """
     ui.render_tool_output(output)
+
+    ui.hr()
+    ui.success("Preview completo!")
 
 
 if __name__ == "__main__":
