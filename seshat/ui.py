@@ -213,35 +213,48 @@ def section(text: str) -> None:
 
 def info(text: str, icon: str = "ℹ") -> None:
     if _use_rich():
-        _console().print(f"{icon} {Text(text,style=style['info'])}")
+        _console().print(icon, Text(text, style=style["info"]))
         return
     echo(f"{icon} {text}")
 
 
-def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
+def step(text: str | Text, icon: str = "•", fg: str | Style = "bright_black") -> None:
     if _use_rich():
-        _console().print(f"{icon} {Text(text,style=style.get(fg, Style.parse(fg)))}")
+        if isinstance(text, Text):
+            _console().print(icon, text)
+            return
+        step_style = fg
+        if isinstance(step_style, str):
+            step_style = style.get(step_style, Style.parse(step_style))
+        _console().print(icon, Text(text, style=step_style))
         return
     echo(f"{icon} {text}")
+
+
+def styled(text: str, text_style: str | Style) -> Text:
+    resolved = text_style
+    if isinstance(resolved, str):
+        resolved = Style.parse(resolved)
+    return Text(text, style=resolved)
 
 
 def success(text: str, icon: str = "✓") -> None:
     if _use_rich():
-        _console().print(f"{icon} {Text(text,style=style['success'])}")
+        _console().print(icon, Text(text, style=style["success"]))
         return
     echo(f"{icon} {text}")
 
 
 def warning(text: str, icon: str = "⚠") -> None:
     if _use_rich():
-        _console().print(f"{icon} {Text(text,style=style['warning'])}")
+        _console().print(icon, Text(text, style=style["warning"]))
         return
     echo(f"{icon} {text}")
 
 
 def error(text: str, icon: str = "✗") -> None:
     if _use_rich():
-        _console_err().print(f"{icon} {Text(text,style=style['error'])}")
+        _console_err().print(icon, Text(text, style=style["error"]))
         return
     echo(f"{icon} {text}", err=True)
 
@@ -461,4 +474,5 @@ __all__ = [
     "UIColor",
     "apply_theme",
     "theme_from_palette",
+    "styled",
 ]
