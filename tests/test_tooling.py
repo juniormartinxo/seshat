@@ -156,20 +156,20 @@ commands:
         assert runner.detect_project_type() == "python"
 
     def test_detect_python_from_setup_py(self, tmp_path: Path) -> None:
-        """Should detect Python project from setup.py."""
+        """Should not detect Python project from setup.py only."""
         setup_py = tmp_path / "setup.py"
         setup_py.write_text('from setuptools import setup\nsetup(name="test")')
-        
+
         runner = ToolingRunner(str(tmp_path))
-        assert runner.detect_project_type() == "python"
+        assert runner.detect_project_type() is None
 
     def test_detect_python_from_requirements_txt(self, tmp_path: Path) -> None:
-        """Should detect Python project from requirements.txt."""
+        """Should not detect Python project from requirements.txt only."""
         requirements = tmp_path / "requirements.txt"
         requirements.write_text('requests\nclick\nrich\ntyper\n')
-        
+
         runner = ToolingRunner(str(tmp_path))
-        assert runner.detect_project_type() == "python"
+        assert runner.detect_project_type() is None
 
     def test_typescript_takes_priority_over_python(self, tmp_path: Path) -> None:
         """TypeScript should take priority when both project types exist."""
