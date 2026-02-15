@@ -298,6 +298,64 @@ def generate_markdown_commit_message(files: List[str]) -> str:
     return f"docs: update {len(files)} arquivos"
 
 
+def _normalize_ext_list(values: Optional[object]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values]
+    if isinstance(values, (list, tuple, set)):
+        return [str(v) for v in values]
+    return []
+
+
+def _normalize_path_list(values: Optional[object]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        return [values]
+    if isinstance(values, (list, tuple, set)):
+        return [str(v) for v in values]
+    return []
+
+
+def is_no_ai_only_commit(
+    files: List[str],
+    no_ai_extensions: List[str],
+    no_ai_paths: List[str],
+) -> bool:
+    """Check if all files match no-AI extensions or paths."""
+    if not files:
+        return False
+
+    normalized_exts = {
+        (ext if ext.startswith(".") else f".{ext}").lower()
+        for ext in no_ai_extensions
+        if ext
+    }
+    normalized_paths = [p.replace("\\", "/") for p in no_ai_paths if p]
+
+    def is_allowed(file_path: str) -> bool:
+        normalized_file = file_path.replace("\\", "/")
+        file_lower = normalized_file.lower()
+
+        if any(file_lower.endswith(ext) for ext in normalized_exts):
+            return True
+
+        for path in normalized_paths:
+            normalized_path = path.replace("\\", "/")
+            if normalized_path.endswith("/"):
+                if file_lower.startswith(normalized_path.lower()):
+                    return True
+            else:
+                if file_lower == normalized_path.lower():
+                    return True
+                if file_lower.startswith(f"{normalized_path.lower()}/"):
+                    return True
+        return False
+
+    return all(is_allowed(f) for f in files)
+
+
 def run_pre_commit_checks(
     check_type: str = "full",
     paths: Optional[List[str]] = None,
@@ -395,6 +453,20 @@ def commit_with_ai(
         )
         ui.info(f"Mensagem automática: {commit_msg}", icon="✅")
         return commit_msg, None
+
+    # Configurable no-AI bypass for selected file types/paths
+    no_ai_extensions = _normalize_ext_list(seshat_config.commit.get("no_ai_extensions"))
+    no_ai_paths = _normalize_path_list(seshat_config.commit.get("no_ai_paths"))
+    if no_ai_extensions or no_ai_paths:
+        staged_files = get_staged_files(paths, exclude_deleted=True)
+        if is_no_ai_only_commit(staged_files, no_ai_extensions, no_ai_paths):
+            commit_msg = generate_markdown_commit_message(staged_files)
+            ui.info(
+                f"Commit sem IA detectado ({len(staged_files)} arquivo(s))",
+                icon="⚡",
+            )
+            ui.info(f"Mensagem automática: {commit_msg}", icon="✅")
+            return commit_msg, None
     
     # Check if code_review is enabled via .seshat (if not explicitly set via CLI)
     # --no-review flag takes precedence over everything
