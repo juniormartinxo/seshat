@@ -15,7 +15,7 @@ from typing import Iterable, Optional, Sequence, TypeVar, overload, Literal
 import click
 import typer
 from rich import box
-from rich.console import Console
+from rich.console import Console, RenderableType
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.progress import (
@@ -62,11 +62,12 @@ _CONSOLE_ERR: Console | None = None
 def _console() -> Console:
     global _CONSOLE
     if _CONSOLE is None:
-        force = _force_color()
+        # Se for TTY ou FORCE_COLOR, forçamos o terminal para garantir cores
+        should_force = _use_rich()
         _CONSOLE = Console(
             stderr=False,
-            color_system="auto" if _use_rich() else None,
-            force_terminal=force,
+            color_system="auto" if should_force else None,
+            force_terminal=should_force,
         )
     return _CONSOLE
 
@@ -74,11 +75,12 @@ def _console() -> Console:
 def _console_err() -> Console:
     global _CONSOLE_ERR
     if _CONSOLE_ERR is None:
-        force = _force_color()
+        # Se for TTY ou FORCE_COLOR, forçamos o terminal para garantir cores
+        should_force = _use_rich()
         _CONSOLE_ERR = Console(
             stderr=True,
-            color_system="auto" if _use_rich() else None,
-            force_terminal=force,
+            color_system="auto" if should_force else None,
+            force_terminal=should_force,
         )
     return _CONSOLE_ERR
 
@@ -208,6 +210,7 @@ def panel(
     border_style: str | Style | None = None,
     title_style: str | Style | None = None,
     subtitle_style: str | Style | None = None,
+    content: str | RenderableType = "",
 ) -> None:
     if _use_rich():
         resolved_panel = panel_style or style.get("panel", "cyan")
@@ -225,14 +228,19 @@ def panel(
         if isinstance(s_style, str):
             s_style = Style.parse(s_style)
 
+        body: RenderableType = Text(content) if isinstance(content, str) else content  # type: ignore
+        if not body and isinstance(content, str):
+             body = Text("")
+
         p = Panel(
-            Text(""),
+            body,
             style=resolved_panel,
             border_style=border,
             box=box.DOUBLE_EDGE,
             expand=True,
             padding=(1, 2),
             title=Text(f" {title} ", style=t_style) if t_style else title,
+            title_align="center",
             subtitle=Text(f" {subtitle} ", style=s_style) if subtitle and s_style else (subtitle or None),
         )
         _console().print()
@@ -241,6 +249,8 @@ def panel(
 
     hr()
     echo(title)
+    if content and isinstance(content, str):
+        echo(content)
     if subtitle:
         echo(subtitle)
     hr()
