@@ -9,6 +9,19 @@
 
 Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o padrão Conventional Commits, utilizando o poder da Inteligência Artificial.
 
+## 📌 Índice
+
+- [Recursos](#-recursos)
+- [Documentação detalhada](#-documentação-detalhada)
+- [Instalação](#-instalação)
+- [Configuração](#-configuração)
+- [Exemplos de .seshat](#-exemplos-de-seshat)
+- [Uso](#-uso)
+- [Tipos de Commit](#-tipos-de-commit-conventional-commits)
+- [Solução de Problemas](#️-solução-de-problemas)
+- [Contribuindo](#-contribuindo)
+- [Licença](#-licença)
+
 ## ✨ Recursos
 
 * ✅ **Múltiplos Provedores de IA:** Suporte para DeepSeek API, Claude API (Anthropic), OpenAI API, Gemini API (Google), Z.AI (GLM) e Ollama (local).
@@ -25,6 +38,13 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * ⚖️ **JUDGE (NOVO!):** Segunda IA configurável que revisa e gera o commit quando acionada.
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
+
+## 📚 Documentação detalhada
+
+- `docs/configuracao.md` — precedência de config, keyring, env vars e schema do `.seshat`.
+- `docs/cli.md` — comandos, flags e comportamento real de `commit`, `flow`, `init` e `fix`.
+- `docs/seshat-examples.md` — variações de `.seshat` para cenários comuns.
+- `docs/tooling-architecture.md` — arquitetura interna do sistema de tooling.
 
 ## 🚀 Instalação
 
@@ -101,7 +121,7 @@ Seshat suporta os seguintes provedores de IA:
     ```bash
     seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
     seshat config --api-key SUA_CHAVE_API
-    seshat config --model SEU_MODEL #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash, glm-5
+    seshat config --model SEU_MODEL #ex: deepseek-chat, claude-3-opus-20240229, gpt-4-turbo-preview, gemini-2.0-flash, glm-5
     ```
 
     Para configurar o JUDGE (segunda IA):
@@ -119,6 +139,8 @@ Seshat suporta os seguintes provedores de IA:
     API_KEY=sua_chave_aqui 
     AI_MODEL=seu-modelo
     ```
+
+    > **Detalhes avançados:** precedência de configuração, keyring e env vars adicionais estão em `docs/configuracao.md`.
 
 ### Configuração do Z.AI (GLM)
 
@@ -192,6 +214,97 @@ Ou via `.env`:
 
 ```bash
 COMMIT_LANGUAGE=PT-BR|ENG|ESP|FRA|DEU|ITA
+```
+
+### Data padrão de commit (DEFAULT_DATE)
+
+Você pode definir uma data padrão para todos os commits (sobrescrevível por `--date`):
+
+```bash
+seshat config --default-date "2025-02-20 14:30:00"
+```
+
+Ou via `.env`:
+
+```bash
+DEFAULT_DATE="yesterday"
+```
+
+## 🧩 Exemplos de `.seshat`
+
+### Python
+
+```yaml
+project_type: python
+
+commit:
+  language: PT-BR
+  max_diff_size: 3000
+  warn_diff_size: 2500
+  provider: openai
+  model: gpt-4-turbo-preview
+
+checks:
+  lint:
+    enabled: true
+    blocking: true
+    auto_fix: true
+    command: "ruff check"
+    fix_command: "ruff check --fix"
+    extensions: [".py"]
+    pass_files: true
+  test:
+    enabled: true
+    blocking: false
+    command: "pytest"
+  typecheck:
+    enabled: true
+    blocking: true
+    command: "mypy"
+
+code_review:
+  enabled: true
+  blocking: true
+  prompt: seshat-review.md
+  extensions: [".py", ".pyi"]
+  log_dir: logs/reviews
+```
+
+### TypeScript/JS
+
+```yaml
+project_type: typescript
+
+commit:
+  language: PT-BR
+  max_diff_size: 3000
+  warn_diff_size: 2500
+  provider: openai
+  model: gpt-4-turbo-preview
+
+checks:
+  lint:
+    enabled: true
+    blocking: true
+    auto_fix: true
+    command: "pnpm eslint"
+    fix_command: "pnpm eslint --fix"
+    extensions: [".ts", ".tsx"]
+    pass_files: true
+  test:
+    enabled: false
+    blocking: false
+  typecheck:
+    enabled: true
+    blocking: true
+    command: "pnpm tsc --noEmit"
+
+code_review:
+  enabled: true
+  blocking: true
+  prompt: seshat-review.md
+  extensions: [".ts", ".tsx", ".js"]
+  log_dir: logs/reviews
 ```
 
 ## 💻 Uso
@@ -276,6 +389,8 @@ Notas importantes sobre o fluxo:
 * Em execuções concorrentes, o Seshat usa um lock por arquivo. Se outro agente já estiver processando o arquivo, ele será **pulado** para evitar bloqueios e gastos desnecessários com IA.
 * O resumo final mostra contagem de **Sucesso**, **Falhas** e **Pulados**.
 
+> **Detalhes de lock e seleção de arquivos** (modified + untracked + staged) estão em `docs/cli.md`.
+
 ### Exemplos Avançados
 
 ## 🧪 Testes com Docker
@@ -356,6 +471,8 @@ seshat fix --all
 seshat fix src/app.ts src/utils.py
 ```
 
+> O comando `fix` roda **apenas lint** e, por padrão, **somente arquivos staged**. Ver detalhes em `docs/cli.md`.
+
 **2. Correção Automática em Commits:**
 
 Você pode configurar o `.seshat` para aplicar correções automaticamente sempre que rodar um commit ou check:
@@ -423,6 +540,8 @@ Você pode configurar o Seshat para salvar todos os apontamentos da IA em arquiv
 4. Somente após a aprovação do review, a mensagem de commit é gerada.
 5. Se `code_review.blocking` estiver ativo e houver `[BUG]`, o usuário pode acionar o **JUDGE**, que faz a revisão e gera o commit.
 
+> O flag `--no-review` e o fluxo completo (incluindo segurança) estão documentados em `docs/cli.md`.
+
 ### Configuração por Projeto (.seshat)
 
 O arquivo `.seshat` é **obrigatório** para a execução do commit. Caso não exista, o comando `seshat commit` oferecerá a criação automática via `seshat init`.
@@ -483,6 +602,8 @@ commands:
     extensions: [".ts", ".tsx"]
 ```
 
+> Para o schema completo (incluindo `pass_files`, `fix_command`, `auto_fix` e overrides por ferramenta), veja `docs/configuracao.md`.
+
 
 ### Opções Disponíveis
 
@@ -495,6 +616,7 @@ commands:
   * `--model`: Especifica o modelo de IA.
   * `--check` ou `-c`: Executa verificações pre-commit (`full`, `lint`, `test`, `typecheck`).
   * `--review` ou `-r`: Inclui code review via IA.
+  * `--no-review`: Desabilita code review mesmo se estiver no `.seshat`.
 
 * **Comando `flow`**:
   * Todas as opções do comando `commit` mais:
@@ -511,10 +633,13 @@ commands:
   * `--max-diff`: Configura o limite máximo do diff.
   * `--warn-diff`: Configura o limite de aviso do diff.
   * `--language`: Configura a linguagem das mensagens (PT-BR, ENG, ESP, FRA, DEU, ITA).
+  * `--default-date`: Configura uma data padrão para commits.
 
 * **Comando `init`**:
   * `--path` ou `-p`: Caminho para o diretório do projeto (padrão: diretório atual).
   * `--force` ou `-f`: Sobrescreve arquivo `.seshat` existente.
+
+> Documentação completa dos comandos em `docs/cli.md`.
 
 ## 📚 Tipos de Commit (Conventional Commits)
 
@@ -543,7 +668,7 @@ seshat config
 # Redefinir a configuração
 seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
 seshat config --api-key SUA_NOVA_CHAVE
-seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-coder-v2, claude-3-haiku-20240307, gemini-2.5-flash, glm-5
+seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-chat, claude-3-opus-20240229, gpt-4-turbo-preview, gemini-2.0-flash, glm-5
 ```
 
 **Problemas com o Ollama:**
