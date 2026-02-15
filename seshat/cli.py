@@ -2,9 +2,10 @@ import os
 import sys
 import subprocess
 import typer
+import click
 from pathlib import Path
-from typing import Annotated, Literal, Optional, Tuple, Any
-from . import core, ui, config as cli_config, __version__
+from typing import Annotated, Literal, Optional, Any
+from . import ui
 from .core import commit_with_ai  # noqa: F401
 from .utils import display_error, get_last_commit_summary
 from .config import (
@@ -71,7 +72,7 @@ def commit(
             
             if ui.confirm("\nDeseja criar um agora? (roda 'seshat init')"):
                 # Invoca o comando init
-                ctx = typer.get_current_context()
+                ctx = click.get_current_context()
                 ctx.invoke(init)
                 ui.info("Agora você pode rodar 'seshat commit' novamente!", icon="✨")
             
@@ -305,16 +306,16 @@ def config(
             
             if language == "ENG":
                 rows = [
-                    ["API Key", masked_key],
-                    ["Provider", provider_value],
-                    ["Model", model_value],
-                    ["Judge API Key", masked_judge_key],
-                    ["Judge Provider", judge_provider_value],
-                    ["Judge Model", judge_model_value],
-                    ["Maximum diff limit", current_config.get("MAX_DIFF_SIZE")],
-                    ["Warning diff limit", current_config.get("WARN_DIFF_SIZE")],
-                    ["Commit language", current_config.get("COMMIT_LANGUAGE")],
-                    ["Default date", current_config.get("DEFAULT_DATE") or "not set"],
+                    ["API Key", str(masked_key)],
+                    ["Provider", str(provider_value)],
+                    ["Model", str(model_value)],
+                    ["Judge API Key", str(masked_judge_key)],
+                    ["Judge Provider", str(judge_provider_value)],
+                    ["Judge Model", str(judge_model_value)],
+                    ["Maximum diff limit", str(current_config.get("MAX_DIFF_SIZE"))],
+                    ["Warning diff limit", str(current_config.get("WARN_DIFF_SIZE"))],
+                    ["Commit language", str(current_config.get("COMMIT_LANGUAGE"))],
+                    ["Default date", str(current_config.get("DEFAULT_DATE") or "not set")],
                 ]
                 if ui.is_tty():
                     ui.table("Current configuration", ["Key", "Value"], rows)
@@ -324,16 +325,16 @@ def config(
                         ui.echo(f"{key}: {value}")
             else:
                 rows = [
-                    ["API Key", masked_key],
-                    ["Provider", provider_value],
-                    ["Model", model_value],
-                    ["Judge API Key", masked_judge_key],
-                    ["Judge Provider", judge_provider_value],
-                    ["Judge Model", judge_model_value],
-                    ["Limite máximo do diff", current_config.get("MAX_DIFF_SIZE")],
-                    ["Limite de aviso do diff", current_config.get("WARN_DIFF_SIZE")],
-                    ["Linguagem dos commits", current_config.get("COMMIT_LANGUAGE")],
-                    ["Data padrão", current_config.get("DEFAULT_DATE") or "não configurada"],
+                    ["API Key", str(masked_key)],
+                    ["Provider", str(provider_value)],
+                    ["Model", str(model_value)],
+                    ["Judge API Key", str(masked_judge_key)],
+                    ["Judge Provider", str(judge_provider_value)],
+                    ["Judge Model", str(judge_model_value)],
+                    ["Limite máximo do diff", str(current_config.get("MAX_DIFF_SIZE"))],
+                    ["Limite de aviso do diff", str(current_config.get("WARN_DIFF_SIZE"))],
+                    ["Linguagem dos commits", str(current_config.get("COMMIT_LANGUAGE"))],
+                    ["Data padrão", str(current_config.get("DEFAULT_DATE") or "não configurada")],
                 ]
                 if ui.is_tty():
                     ui.table("Configuração atual", ["Chave", "Valor"], rows)
@@ -385,7 +386,11 @@ def init(
         
         try:
             selection = ui.prompt("Opção", type=int, default=1)
-            project_type = choices[selection - 1] if 1 <= selection <= len(choices) else "python"
+            project_type = (
+                choices[selection - 1]
+                if isinstance(selection, int) and 1 <= selection <= len(choices)
+                else "python"
+            )
         except (ValueError, IndexError):
             project_type = "python"
     
@@ -609,7 +614,8 @@ def fix(
             return
 
         ui.hr()
-        print(runner.format_results(results, verbose=True))
+        for block in runner.format_results(results, verbose=True):
+            ui.render_tool_output(block)
         
         if runner.has_blocking_failures(results):
              ui.error("Algumas ferramentas falharam ao aplicar correções.")
