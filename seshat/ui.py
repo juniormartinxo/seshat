@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import re
 from dataclasses import dataclass
@@ -19,8 +20,15 @@ from rich.table import Table
 from rich.text import Text
 
 
+def _force_color() -> bool:
+    return any(
+        os.getenv(key) in {"1", "true", "TRUE", "yes", "YES"}
+        for key in ("FORCE_COLOR", "CLICOLOR_FORCE", "SESHAT_FORCE_COLOR")
+    )
+
+
 def _use_rich() -> bool:
-    return sys.stdout.isatty()
+    return sys.stdout.isatty() or _force_color()
 
 
 def is_tty() -> bool:
@@ -28,11 +36,21 @@ def is_tty() -> bool:
 
 
 def _console() -> Console:
-    return Console(stderr=False, color_system=None if not _use_rich() else "auto")
+    force = _force_color()
+    return Console(
+        stderr=False,
+        color_system="auto" if _use_rich() else None,
+        force_terminal=force,
+    )
 
 
 def _console_err() -> Console:
-    return Console(stderr=True, color_system=None if not _use_rich() else "auto")
+    force = _force_color()
+    return Console(
+        stderr=True,
+        color_system="auto" if _use_rich() else None,
+        force_terminal=force,
+    )
 
 
 @dataclass(frozen=True)
@@ -195,35 +213,35 @@ def section(text: str) -> None:
 
 def info(text: str, icon: str = "ℹ") -> None:
     if _use_rich():
-        _console().print(f"{icon}  {text}", style=style["info"])
+        _console().print(f"{icon} {Text(text,style=style['info'])}")
         return
     echo(f"{icon} {text}")
 
 
 def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style=style.get(fg, Style.parse(fg)))
+        _console().print(f"{icon} {Text(text,style=style.get(fg, Style.parse(fg)))}")
         return
     echo(f"{icon} {text}")
 
 
 def success(text: str, icon: str = "✓") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style=style["success"])
+        _console().print(f"{icon} {Text(text,style=style['success'])}")
         return
     echo(f"{icon} {text}")
 
 
 def warning(text: str, icon: str = "⚠") -> None:
     if _use_rich():
-        _console().print(f"{icon} {text}", style=style["warning"])
+        _console().print(f"{icon} {Text(text,style=style['warning'])}")
         return
     echo(f"{icon} {text}")
 
 
 def error(text: str, icon: str = "✗") -> None:
     if _use_rich():
-        _console_err().print(f"{icon} {text}", style=style["error"])
+        _console_err().print(f"{icon} {Text(text,style=style['error'])}")
         return
     echo(f"{icon} {text}", err=True)
 
