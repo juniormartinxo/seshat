@@ -50,6 +50,8 @@ commit:
   warn_diff_size: 2500
   provider: openai
   model: gpt-4-turbo-preview
+  no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
 
 checks:
   lint:
@@ -100,6 +102,8 @@ Define defaults por projeto e **sobrescreve** config global/env:
 - `warn_diff_size`
 - `provider`
 - `model`
+- `no_ai_extensions` (lista) — extensões que não precisam ir para a IA
+- `no_ai_paths` (lista) — caminhos ou arquivos que não precisam ir para a IA
 
 > Essas chaves também aceitam variações legadas (`COMMIT_LANGUAGE`, `MAX_DIFF_SIZE`, etc.).
 
