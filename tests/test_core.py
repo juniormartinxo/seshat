@@ -1,4 +1,6 @@
 import os
+from typing import Optional
+
 import pytest
 
 from seshat import core
@@ -423,9 +425,10 @@ def test_commit_with_ai_generates_message(monkeypatch: pytest.MonkeyPatch) -> No
 
     class DummyConfig:
         def __init__(self) -> None:
-            self.code_review = {}
-            self.checks = {}
-            self.project_type = None
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {}
 
         @staticmethod
         def load(_path: object = None) -> "DummyConfig":
@@ -470,10 +473,10 @@ def test_commit_with_ai_code_review_no_files(monkeypatch: pytest.MonkeyPatch) ->
 
     class DummyConfig:
         def __init__(self) -> None:
-            self.code_review = {"enabled": True}
-            self.checks = {}
-            self.project_type = "python"
-            self.commit = {}
+            self.code_review: dict[str, object] = {"enabled": True}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = "python"
+            self.commit: dict[str, object] = {}
 
         @staticmethod
         def load(_path: object = None) -> "DummyConfig":
