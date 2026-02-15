@@ -29,7 +29,7 @@ def show_thinking_animation(
             time.sleep(0.1)
         return
 
-    _write_inline("Processando...\n")
+    #_write_inline("Processando...\n")
     while not stop_event.is_set():
         time.sleep(0.1)
     return
