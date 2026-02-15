@@ -15,7 +15,7 @@ from typing import Iterable, Optional, Sequence, TypeVar, overload, Literal
 import click
 import typer
 from rich import box
-from rich.console import Console, RenderableType
+from rich.console import Console, RenderableType, Group
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.progress import (
@@ -604,7 +604,52 @@ def render_tool_output(output: str, language: str = "python") -> None:
 
     console = _console()
     lines = output.splitlines()
-    i = 0
+    if not lines:
+        return
+
+    # Check for header line to print outside/style the panel
+    first_line = lines[0].strip()
+    header_style = None
+    border_style = style["panel_border"] # Default Cyan
+
+    # Detect status from common prefixes
+    if first_line.startswith("❌"):
+        header_style = style["error"] # Red
+        border_style = style["error"]
+        border_style = "gold1" # Override to yellow/gold as requested by user image
+    elif first_line.startswith("⚠"):
+        header_style = style["warning"] # Gold
+        border_style = style["warning"]
+    elif first_line.startswith("✅"):
+        header_style = style["success"] # Green
+        border_style = style["success"]
+    
+    # If user explicitly wants "yellow box" for errors (as per image 3 context where mypy failed), 
+    # we might want to follow convention. The user image showed yellow box for mypy error.
+    # Let's stick to semantic colors (Red for error) unless specifically overrides.
+    # Wait, the user said "O conteúdo do box amarelo deveria estar em um bloco igual ao da segunda imagem".
+    # And pointed to mypy error.
+    # If I use Red for errors, it might conflict with "box amarelo".
+    # But semantically Red is better for ❌. 
+    # I will use the detected color (Red for error). The user likely meant "boxed style", not necessarily yellow.
+    # Actually, in step 269 image, the box IS yellow/gold even though it has ❌.
+    # Okay, I will force Yellow/Gold for this "Problem" look if it's an issue list.
+    
+    # Let's rely on the style["error"] which is Red1.
+    # If the user insists on yellow, they can configure the theme.
+    # For now, I will use the mapped styles.
+
+    start_index = 0
+    if header_style:
+        console.print(Text(f" {lines[0]}", style=header_style))
+        start_index = 1
+    
+    if start_index >= len(lines):
+        return
+
+    renderables: list[RenderableType] = []
+    
+    i = start_index
     while i < len(lines):
         line = lines[i]
         match = _CODE_LINE_RE.match(line)
@@ -626,26 +671,70 @@ def render_tool_output(output: str, language: str = "python") -> None:
                 line_numbers=True,
                 start_line=first_line_no or 1,
                 word_wrap=False,
-                padding=(0, 1),
+                padding=(0, 0), # No padding inside syntax, panel handles it
             )
-            console.print(Padding(syntax, (0, 1)))
+            renderables.append(syntax)
             continue
 
-        # Colorize known prefixes in tool output
+        # Colorize known prefixes
         stripped = line.strip()
+        text_style = None
         if stripped.startswith("❌"):
-            console.print(Text(f" {line}", style=style["error"]))
+            text_style = style["error"]
         elif stripped.startswith("✅"):
-            console.print(Text(f" {line}", style=style["success"]))
+            text_style = style["success"]
         elif stripped.startswith("⚠"):
-            console.print(Text(f" {line}", style=style["warning"]))
+            text_style = style["warning"]
         elif stripped.startswith("help:"):
-            console.print(Text(f" {line}", style=Style(color="dodger_blue2")))
+            text_style = Style(color="dodger_blue2")
         elif stripped.startswith("-->") or stripped.startswith("->"):
-            console.print(Text(f" {line}", style=Style(color="bright_black")))
-        else:
-            console.print(f" {line}")
+            text_style = Style(color="bright_black")
+        
+        # Add indentation to match panel padding visual
+        renderables.append(Text(f"{line}", style=text_style) if text_style else Text(line))
         i += 1
+    
+    if renderables:
+        # Wrap in Panel
+        # Using gold1 for border to match "yellow box" request if it looks like an issue list with file paths
+        # But let's stick to border_style detected from header.
+        
+        # NOTE: User specifically pointed to a yellow box for mypy errors.
+        # If I use Red, he might complain. 
+        # But "❌" is red.
+        # I'll use border_style derived above.
+        
+        p = Panel(
+            Group(*renderables),
+            box=box.ROUNDED,
+            border_style=border_style,
+            padding=(0, 1),
+            expand=True
+        )
+        console.print(p)
+
+
+def display_code_review(text: str) -> None:
+    if _use_rich():
+        # Remove extra format text if needed, or render as is
+        # We strip the "📝 Code review: ..." header from the text if present
+        # because the Panel title already says it.
+        clean_text = text
+        if clean_text.strip().startswith("📝 Code review:"):
+            clean_text = clean_text.split("\n", 1)[-1].strip()
+
+        p = Panel(
+            Text(clean_text),
+            box=box.ROUNDED,
+            border_style=style["warning"],
+            title="[bold gold1]Code Review[/]",
+            padding=(1, 2),
+            expand=True,
+        )
+        _console().print()
+        _console().print(p)
+        return
+    echo(f"\n{text}")
 
 
 # ─── Exports ──────────────────────────────────────────────────────
@@ -669,6 +758,7 @@ __all__ = [
     "progress",
     "table",
     "render_tool_output",
+    "display_code_review",
     "style",
     "UITheme",
     "UIColor",
