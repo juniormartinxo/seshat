@@ -152,32 +152,36 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
 
     if diff_size > MAX_SIZE:
         if LANGUAGE == "ENG":
-            ui.warning(
-                "\n🤖 Maximum recommended character limit for a single commit reached!\n"
-                f"Maximum allowed characters: {MAX_SIZE}\n"
-                f"Number of characters in diff: {diff_size}\n",
-                icon="",
-            )
-            ui.echo(
-                "Please consider:\n"
-                "1. Splitting changes into smaller commits\n"
-                "2. Reviewing if all changes are really necessary\n"
-                "3. Following the principle of 'one commit, one logical change'\n"
-                "4. Increasing the limit with: seshat config --max-diff <number>\n"
+            ui.panel(
+                "Maximum Limit Reached",
+                content=(
+                    "🤖 Maximum recommended character limit for a single commit reached!\n"
+                    f"Maximum allowed characters: {MAX_SIZE}\n"
+                    f"Number of characters in diff: {diff_size}\n\n"
+                    "Please consider:\n"
+                    "1. Splitting changes into smaller commits\n"
+                    "2. Reviewing if all changes are really necessary\n"
+                    "3. Following the principle of 'one commit, one logical change'\n"
+                    "4. Increasing the limit with: seshat config --max-diff <number>"
+                ),
+                border_style="gold1",
+                panel_style="gold1",
             )
         else:
-            ui.warning(
-                "\n🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
-                f"Máximo de caracteres permitido: {MAX_SIZE}\n"
-                f"Número de caracteres no diff: {diff_size}\n",
-                icon="",
-            )
-            ui.echo(
-                "Por favor, considere:\n"
-                "1. Dividir as alterações em commits menores\n"
-                "2. Revisar se todas as alterações são realmente necessárias\n"
-                "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
-                "4. Aumentar o limite com: seshat config --max-diff <número>\n"
+            ui.panel(
+                "Limite Máximo Atingido",
+                content=(
+                    "🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
+                    f"Máximo de caracteres permitido: {MAX_SIZE}\n"
+                    f"Número de caracteres no diff: {diff_size}\n\n"
+                    "Por favor, considere:\n"
+                    "1. Dividir as alterações em commits menores\n"
+                    "2. Revisar se todas as alterações são realmente necessárias\n"
+                    "3. Seguir o princípio de 'um commit, uma alteração lógica'\n"
+                    "4. Aumentar o limite com: seshat config --max-diff <número>"
+                ),
+                border_style="gold1",
+                panel_style="gold1",
             )
         if not skip_confirmation and not ui.confirm("📢 Deseja continuar?"):
             ui.error("Commit cancelado!", icon="❌")
