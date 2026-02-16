@@ -391,7 +391,7 @@ def warning(text: str, icon: str = "⮑") -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f" {icon}  ", _ICON_STYLES.get("warning", Style())),
+                (f"{icon}  ", _ICON_STYLES.get("warning", Style())),
                 (text, style["warning"]),
             )
         )
