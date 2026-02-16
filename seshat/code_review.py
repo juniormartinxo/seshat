@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Optional, List
 import re
 
+from . import ui
 
 @dataclass
 class CodeIssue:
@@ -430,9 +431,9 @@ def parse_code_review_response(response: str) -> tuple[str, CodeReviewResult]:
 def format_review_for_display(result: CodeReviewResult, verbose: bool = False) -> str:
     """Format code review result for terminal display."""
     if not result.has_issues:
-        return f"{ui.icons['info']} Code review: No issues found."
+        return f"{ui.icons['confirm']} Code review: No issues found."
     
-    lines = [f"{ui.icons['info']} Code review: {result.summary}"]
+    lines = [f"{ui.icons['confirm']} Code review: {result.summary}"]
     
     severity_icons = {
         "info": ui.icons["info"],

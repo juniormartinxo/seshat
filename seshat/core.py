@@ -376,8 +376,11 @@ def run_pre_commit_checks(
         Tuple of (success, results)
     """
     runner = ToolingRunner()
-    ui.apply_configured_theme(runner.seshat_config.ui)
-    ui.apply_configured_icons(runner.seshat_config.ui)
+    seshat_config = getattr(runner, "seshat_config", None)
+    ui_config = getattr(seshat_config, "ui", None) if seshat_config is not None else None
+    if ui_config is not None:
+        ui.apply_configured_theme(ui_config)
+        ui.apply_configured_icons(ui_config)
     project_type = runner.detect_project_type()
     
     if not project_type:
@@ -400,8 +403,11 @@ def run_pre_commit_checks(
     
     # Display results
     blocks = runner.format_results(results, verbose)
-    for block in blocks:
-        ui.render_tool_output(block.text, status=block.status)
+    if isinstance(blocks, str):
+        ui.render_tool_output(blocks)
+    else:
+        for block in blocks:
+            ui.render_tool_output(block.text, status=block.status)
     
     has_blocking_failures = runner.has_blocking_failures(results)
     

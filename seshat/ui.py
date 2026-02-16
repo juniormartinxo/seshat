@@ -34,6 +34,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.padding import Padding
 
+from .theme import UITheme, UIIcons, default_theme, theme_from_palette, theme_from_config
 
 _FORCE_RICH: bool | None = None
 
@@ -100,8 +101,6 @@ def _console_err() -> Console:
             force_terminal=should_force,
         )
     return _CONSOLE_ERR
-
-from .theme import UITheme, UIIcons, default_theme, theme_from_palette, theme_from_config
 
 
 # ─── Theme / Color system ────────────────────────────────────────
