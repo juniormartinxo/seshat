@@ -59,6 +59,7 @@ class SeshatConfig:
     code_review: dict = field(default_factory=dict)
     commands: dict = field(default_factory=dict)
     commit: dict = field(default_factory=dict)
+    ui: dict = field(default_factory=dict)
     
     @classmethod
     def load(cls, path: str = ".") -> "SeshatConfig":
@@ -110,6 +111,7 @@ class SeshatConfig:
                 code_review=data.get("code_review", {}),
                 commands=data.get("commands", {}),
                 commit=commit,
+                ui=data.get("ui", {}),
             )
         except Exception:
             return cls()
