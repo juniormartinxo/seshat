@@ -7,6 +7,34 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ## [Unreleased]
 
+### Adicionado
+
+- **Tema Configurável (UITheme)**: novo módulo `seshat/theme.py` centraliza estilos, paleta de cores e ícones da UI.
+  - `UITheme` (dataclass) com estilos Rich para todos os componentes visuais.
+  - `UIIcons` (dataclass) com ícones configuráveis para toda a interface.
+  - `DEFAULT_PALETTE` com paleta de cores padrão.
+  - Funções `theme_from_palette()`, `theme_from_config()` e `default_theme()` para criação de temas.
+- **Ícones Centralizados**: todos os ícones da UI agora são referenciados via `ui.icons["key"]` em vez de strings hardcoded.
+- **Configuração de UI via `.seshat`**: nova seção `ui` no arquivo `.seshat` com suporte a:
+  - `force_rich` (bool) — força uso do Rich mesmo em terminais non-TTY.
+  - `theme` (dict) — sobrescreve paleta de cores do tema padrão.
+  - `icons` (dict) — sobrescreve ícones individuais.
+- **Tipos Estruturados para Tooling**: novo `ToolOutputBlock` (dataclass) com status tipado (`ToolStatus`) para saída formatada de ferramentas.
+- **Scripts de Preview**: `scripts/ui_preview.py` e `scripts/ui_only_preview.py` para visualização local da UI.
+
+### Alterado
+
+- Refatorada toda a UI para usar tema centralizado (`seshat/theme.py`) em vez de estilos inline.
+- Ícones padronizados para `⮑` em toda a interface (info, warning, error, success, step).
+- Estilo das caixas (Panel) alterado para `box.ROUNDED`.
+- `ToolingRunner.format_results()` agora retorna `list[ToolOutputBlock]` em vez de string.
+- Funções `apply_configured_theme()` e `apply_configured_icons()` aplicam configuração do `.seshat` automaticamente.
+
+### Corrigido
+
+- Segurança de tipos melhorada em `seshat/ui.py` (remoção de redundâncias, type guards).
+- Console ativo usado corretamente durante progresso (evita output misturado).
+
 ## [1.4.2] - 2026-02-15
 
 ### Adicionado
