@@ -354,7 +354,7 @@ def info(text: str, icon: str = "ℹ") -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f" {icon}  ", _ICON_STYLES.get("info", Style())),
+                (f"{icon}  ", _ICON_STYLES.get("info", Style())),
                 (text, style["info"]),
             )
         )
