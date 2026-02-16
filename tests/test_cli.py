@@ -102,7 +102,7 @@ def test_config_shows_current_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = runner.invoke(cli, ["config"])
     assert result.exit_code == 0
-    assert "Current configuration" in result.output
+    assert "Current Configuration" in result.output
 
 
 class TestInitCommand:
