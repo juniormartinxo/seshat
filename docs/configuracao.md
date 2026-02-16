@@ -91,6 +91,17 @@ commands:
     extensions: [".ts", ".tsx"]
   lint:
     command: "ruff check"  # também pode sobrescrever por tipo de check
+
+ui:
+  force_rich: false
+  theme:
+    primary: "cyan"
+    success: "green1"
+    warning: "gold1"
+    error: "red1"
+  icons:
+    info: "⮑"
+    success: "⮑"
 ```
 
 ### `commit`
@@ -132,6 +143,29 @@ Se `commands.<tool>` existir, ele tem prioridade sobre `checks.<type>`.
 - `prompt` (path) — prompt customizado
 - `extensions` (lista) — filtra arquivos do diff
 - `log_dir` (path) — salva logs quando houver issues
+
+### `ui`
+
+Configuração visual da interface:
+
+- `force_rich` (bool) — força uso do Rich mesmo em terminais non-TTY.
+- `theme` (dict) — sobrescreve cores da paleta padrão. Chaves aceitas: `primary`, `secondary`, `accent`, `muted`, `info`, `success`, `warning`, `error`, `panel`, `panel_border`, `panel_title`, `panel_subtitle`, `section`, `step`, `hr`.
+- `icons` (dict) — sobrescreve ícones individuais. Chaves aceitas: `info`, `warning`, `error`, `success`, `step`, `confirm`, `search`, `loading`, `package`, `tools`, `trash`, `ai`, `bolt`, `brain`, `sparkle`, `bullet`.
+
+Exemplo:
+
+```yaml
+ui:
+  force_rich: true
+  theme:
+    primary: "#00c2ff"
+    success: "#00c853"
+  icons:
+    info: "ℹ️"
+    success: "✅"
+```
+
+> Detalhes completos em `docs/ui-customization.md`.
 
 ## Auto-fix
 
