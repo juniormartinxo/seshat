@@ -306,11 +306,11 @@ class ToolingRunner:
         for result in results:
             if result.skipped:
                 blocks.append(
-                    f"⏭️ {result.tool} ({result.check_type}) - {result.skip_reason}"
+                    f"⮑ {result.tool} ({result.check_type}) - {result.skip_reason}"
                 )
                 continue
 
-            status = "✅" if result.success else ("⚠️" if not result.blocking else "❌")
+            status = "⮑" if result.success else ("⮑️" if not result.blocking else "⮑")
             header = f"{status} {result.tool} ({result.check_type})"
 
             if verbose or not result.success:
