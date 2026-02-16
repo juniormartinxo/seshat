@@ -101,49 +101,33 @@ def _console_err() -> Console:
         )
     return _CONSOLE_ERR
 
+from .theme import UITheme, UIIcons, default_theme, theme_from_palette, theme_from_config
+
 
 # ─── Theme / Color system ────────────────────────────────────────
 
 
-@dataclass(frozen=True)
-class UITheme:
-    title: Style = Style(color="cyan", bold=True)
-    subtitle: Style = Style(color="bright_black")
-    panel: Style = Style(color="cyan")
-    panel_border: Style = Style(color="cyan")
-    panel_title: Style = Style(color="cyan", bold=True)
-    panel_subtitle: Style = Style(color="bright_black", italic=True)
-    section: Style = Style(color="cyan", bold=True)
-    info: Style = Style(color="#D0D9D4")
-    step: Style = Style(color="bright_black")
-    success: Style = Style(color="green1", bold=True)
-    warning: Style = Style(color="gold1", bold=True)
-    error: Style = Style(color="red1", bold=True)
-    hr: Style = Style(color="grey37")
-    muted: Style = Style(color="bright_black")
-    accent: Style = Style(color="medium_purple1")
+_default_theme = default_theme()
+_default_icons = UIIcons()
 
-
-@dataclass(frozen=True)
-class UIColor:
-    primary: str = "cyan"
-    secondary: str = "blue"
-    accent: str = "magenta"
-    muted: str = "bright_black"
-    info: str = "#D0D9D4"
-    success: str = "green1"
-    warning: str = "gold1"
-    error: str = "red1"
-    panel: str = "cyan"
-    panel_border: str = "cyan"
-    panel_title: str = "cyan"
-    panel_subtitle: str = "bright_black"
-    section: str = "cyan"
-    step: str = "bright_black"
-    hr: str = "grey37"
-
-
-_default_theme = UITheme()
+icons: dict[str, str] = {
+    "info": _default_icons.info,
+    "warning": _default_icons.warning,
+    "error": _default_icons.error,
+    "success": _default_icons.success,
+    "step": _default_icons.step,
+    "confirm": _default_icons.confirm,
+    "search": _default_icons.search,
+    "loading": _default_icons.loading,
+    "package": _default_icons.package,
+    "tools": _default_icons.tools,
+    "trash": _default_icons.trash,
+    "ai": _default_icons.ai,
+    "bolt": _default_icons.bolt,
+    "brain": _default_icons.brain,
+    "sparkle": _default_icons.sparkle,
+    "bullet": _default_icons.bullet,
+}
 
 style: dict[str, Style] = {
     "title": _default_theme.title,
@@ -184,22 +168,24 @@ def apply_theme(theme: UITheme) -> None:
     )
 
 
-def theme_from_palette(palette: UIColor) -> UITheme:
-    return UITheme(
-        title=Style.parse(f"{palette.primary} bold"),
-        subtitle=Style.parse(palette.panel_subtitle),
-        panel=Style.parse(palette.panel),
-        panel_border=Style.parse(palette.panel_border),
-        panel_title=Style.parse(f"{palette.panel_title} bold"),
-        panel_subtitle=Style.parse(f"{palette.panel_subtitle} italic"),
-        section=Style.parse(f"{palette.section} bold"),
-        info=Style.parse(palette.info),
-        step=Style.parse(palette.step),
-        success=Style.parse(f"{palette.success} bold"),
-        warning=Style.parse(f"{palette.warning} bold"),
-        error=Style.parse(f"{palette.error} bold"),
-        hr=Style.parse(palette.hr),
-    )
+def apply_icons(icon_map: dict[str, str]) -> None:
+    icons.update({k: v for k, v in icon_map.items() if isinstance(v, str)})
+
+
+def apply_configured_theme(config: dict) -> None:
+    """Aplica tema caso exista configuração em `.seshat` (ui.theme)."""
+    theme_cfg = config.get("theme") if isinstance(config, dict) else None
+    if not isinstance(theme_cfg, dict):
+        return
+    apply_theme(theme_from_config(theme_cfg))
+
+
+def apply_configured_icons(config: dict) -> None:
+    """Aplica ícones caso exista configuração em `.seshat` (ui.icons)."""
+    icons_cfg = config.get("icons") if isinstance(config, dict) else None
+    if not isinstance(icons_cfg, dict):
+        return
+    apply_icons(icons_cfg)
 
 
 # ─── Primitives ───────────────────────────────────────────────────
@@ -341,28 +327,10 @@ def section(text: str) -> None:
 
 # ─── Messages ─────────────────────────────────────────────────────
 
-_ICON_STYLES: dict[str, Style] = {
-    "info": Style(color="dodger_blue2"),
-    "success": Style(color="green1"),
-    "warning": Style(color="gold1"),
-    "error": Style(color="red1"),
-    "step": Style(color="grey50"),
-}
 
 
-def info(text: str, icon: str = "ℹ") -> None:
-    if _use_rich():
-        _active_console().print(
-            Text.assemble(
-                (f"{icon}  ", _ICON_STYLES.get("info", Style())),
-                (text, style["info"]),
-            )
-        )
-        return
-    echo(f"{icon} {text}")
-
-
-def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
+def step(text: str, icon: str | None = None, fg: str = "bright_black") -> None:
+    icon = icons["step"] if icon is None else icon
     if _use_rich():
         text_style = style.get(fg, Style.parse(fg))
         _active_console().print(
@@ -375,11 +343,25 @@ def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
     echo(f"{icon} {text}")
 
 
-def success(text: str, icon: str = "⮑") -> None:
+def info(text: str, icon: str | None = None) -> None:
+    icon = icons["info"] if icon is None else icon
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon}  ", _ICON_STYLES.get("success", Style())),
+                (f"{icon} ", style["info"]),
+                (text, style["info"]),
+            )
+        )
+        return
+    echo(f"{icon} {text}")
+
+
+def success(text: str, icon: str | None = None) -> None:
+    icon = icons["success"] if icon is None else icon
+    if _use_rich():
+        _active_console().print(
+            Text.assemble(
+                (f"{icon} ", style["success"]),
                 (text, style["success"]),
             )
         )
@@ -387,11 +369,12 @@ def success(text: str, icon: str = "⮑") -> None:
     echo(f"{icon} {text}")
 
 
-def warning(text: str, icon: str = "⮑") -> None:
+def warning(text: str, icon: str | None = None) -> None:
+    icon = icons["warning"] if icon is None else icon
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon}  ", _ICON_STYLES.get("warning", Style())),
+                (f"{icon} ", style["warning"]),
                 (text, style["warning"]),
             )
         )
@@ -399,11 +382,12 @@ def warning(text: str, icon: str = "⮑") -> None:
     echo(f"{icon} {text}")
 
 
-def error(text: str, icon: str = "⮑") -> None:
+def error(text: str, icon: str | None = None) -> None:
+    icon = icons["error"] if icon is None else icon
     if _use_rich():
         _console_err().print(
             Text.assemble(
-                (f"{icon} ", _ICON_STYLES.get("error", Style())),
+                (f"{icon} ", style["error"]),
                 (text, style["error"]),
             )
         )
@@ -416,7 +400,7 @@ def error(text: str, icon: str = "⮑") -> None:
 
 def confirm(message: str, default: bool = False) -> bool:
     if _use_rich():
-        return Confirm.ask(f" {message}", default=default)
+        return Confirm.ask(f" {icons['confirm']} {message}", default=default)
     return typer.confirm(message, default=default)
 
 
@@ -622,7 +606,50 @@ def table(
 _CODE_LINE_RE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
 
 
-def render_tool_output(output: str, language: str = "python") -> None:
+def _status_styles(status: str | None) -> tuple[Style | None, Style | str]:
+    if status == "error":
+        return style["error"], "gold1"
+    if status == "warning":
+        return style["warning"], style["warning"]
+    if status == "success":
+        return style["success"], style["success"]
+    if status == "skipped":
+        return style["info"], style["info"]
+    return None, style["panel_border"]
+
+
+def _build_tool_panel_title(
+    first_line: str,
+    header_style: Style | None,
+) -> Text | None:
+    if not header_style:
+        return None
+    return Text(f"{icons['step']} {first_line} ", style=header_style)
+
+
+def _line_style(line: str, status: str | None) -> Style | None:
+    if status == "error":
+        return style["error"]
+    if status == "success":
+        return style["success"]
+    if status == "warning":
+        return style["warning"]
+    if "error:" in line:
+        return style["error"]
+    if "warning:" in line:
+        return style["warning"]
+    if line.strip().startswith("help:"):
+        return Style(color="dodger_blue2")
+    if line.strip().startswith("-->") or line.strip().startswith("->"):
+        return Style(color="bright_black")
+    return None
+
+
+def render_tool_output(
+    output: str,
+    language: str = "python",
+    status: str | None = None,
+) -> None:
     if not _use_rich():
         echo(output)
         return
@@ -632,48 +659,15 @@ def render_tool_output(output: str, language: str = "python") -> None:
     if not lines:
         return
 
-    # Check for header line to print outside/style the panel
     first_line = lines[0].strip()
-    header_style: Style | None = None
-    border_style: Style | str = style["panel_border"] # Default Cyan
-
-    # Detect status from common prefixes
-    if first_line.startswith("⮑"):
-        header_style = style["error"] # Red
-        border_style = "gold1" # Override to yellow/gold as requested by user image
-    elif first_line.startswith("⮑"):
-        header_style = style["warning"] # Gold
-        border_style = style["warning"]
-    elif first_line.startswith("⮑"):
-        header_style = style["success"] # Green
-        border_style = style["success"]
+    header_style, border_style = _status_styles(status)
     
-    # If user explicitly wants "yellow box" for errors (as per image 3 context where mypy failed), 
-    # we might want to follow convention. The user image showed yellow box for mypy error.
-    # Let's stick to semantic colors (Red for error) unless specifically overrides.
-    # Wait, the user said "O conteúdo do box amarelo deveria estar em um bloco igual ao da segunda imagem".
-    # And pointed to mypy error.
-    # If I use Red for errors, it might conflict with "box amarelo".
-    # But semantically Red is better for ⮑. 
-    # I will use the detected color (Red for error). The user likely meant "boxed style", not necessarily yellow.
-    # Actually, in step 269 image, the box IS yellow/gold even though it has ⮑.
-    # Okay, I will force Yellow/Gold for this "Problem" look if it's an issue list.
-    
-    # Let's rely on the style["error"] which is Red1.
-    # If the user insists on yellow, they can configure the theme.
-    # For now, I will use the mapped styles.
-
     # If header detected, use it as panel title instead of printing separately
-    start_index = 0
-    if header_style:
-        # console.print(Text(f" {lines[0]}", style=header_style)) # Removed separate print
-        start_index = 1
+    start_index = 1 if header_style else 0
     
     if start_index >= len(lines):
-        # If only header exists, print it as text or empty panel?
-        # If it was an error/success line alone, just print it.
         if header_style:
-             console.print(Text(f" {lines[0]}", style=header_style))
+            console.print(Text(f" {lines[0]}", style=header_style))
         return
 
     renderables: list[RenderableType] = []
@@ -705,23 +699,7 @@ def render_tool_output(output: str, language: str = "python") -> None:
             renderables.append(syntax)
             continue
 
-        # Colorize known prefixes
-        stripped = line.strip()
-        text_style = None
-        if stripped.startswith("⮑"):
-            text_style = style["error"]
-        elif stripped.startswith("⮑"):
-            text_style = style["success"]
-        elif stripped.startswith("⮑"):
-            text_style = style["warning"]
-        elif "error:" in line:
-            text_style = style["error"]
-        elif "warning:" in line:
-            text_style = style["warning"]
-        elif stripped.startswith("help:"):
-            text_style = Style(color="dodger_blue2")
-        elif stripped.startswith("-->") or stripped.startswith("->"):
-            text_style = Style(color="bright_black")
+        text_style = _line_style(line, status)
         
         # Add indentation to match panel padding visual
         renderables.append(Text(f"{line}", style=text_style) if text_style else Text(line))
@@ -734,7 +712,7 @@ def render_tool_output(output: str, language: str = "python") -> None:
             box=box.SIMPLE,
             border_style=border_style,
             style="", # Background color for the block
-            title=Text(f"{first_line} ", style=header_style) if header_style else None,
+            title=_build_tool_panel_title(first_line, header_style),
             title_align="left",
             padding=(1, 2),
             expand=True
@@ -745,10 +723,10 @@ def render_tool_output(output: str, language: str = "python") -> None:
 def display_code_review(text: str) -> None:
     if _use_rich():
         # Remove extra format text if needed, or render as is
-        # We strip the "⮑ Code review: ..." header from the text if present
+        # We strip the iconized "Code review" header from the text if present
         # because the Panel title already says it.
         clean_text = text
-        if clean_text.strip().startswith("⮑ Code review:"):
+        if clean_text.strip().startswith(f"{icons['info']} Code review:"):
             clean_text = clean_text.split("\n", 1)[-1].strip()
 
         p = Panel(
@@ -788,8 +766,10 @@ __all__ = [
     "render_tool_output",
     "display_code_review",
     "style",
+    "icons",
     "UITheme",
-    "UIColor",
+    "apply_configured_theme",
+    "apply_configured_icons",
     "apply_theme",
     "theme_from_palette",
 ]
