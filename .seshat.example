@@ -63,3 +63,16 @@ commands:
   #   command: "pnpm tsc --noEmit"
   # jest:
   #   command: "pnpm test -- --passWithNoTests"
+
+# UI customization (optional)
+# ui:
+#   force_rich: false  # force Rich output even in non-TTY terminals
+#   theme:             # override default color palette
+#     primary: "cyan"
+#     success: "green1"
+#     warning: "gold1"
+#     error: "red1"
+#   icons:             # override default icons
+#     info: "⮑"
+#     success: "⮑"
+#     warning: "⮑"
