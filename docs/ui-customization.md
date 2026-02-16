@@ -1,141 +1,280 @@
 # Customização da UI
 
-Este documento mostra onde e como alterar cores, estilos e componentes visuais
+Este documento mostra onde e como alterar cores, estilos, ícones e componentes visuais
 da UI do Seshat.
 
-## Onde ficam as configurações
+## Arquitetura
 
-Toda a UI é centralizada em `seshat/ui.py`. É ali que você ajusta:
+A UI é dividida em dois módulos:
 
-- Cores e estilos (`style=...`)
-- Ícones e símbolos
-- Boxes do Rich
-- Tabelas e progress/spinner
-- Renderização de saída dos tools (`render_tool_output`)
+- `seshat/theme.py` — define `UITheme`, `UIIcons`, `DEFAULT_PALETTE` e funções de criação de tema.
+- `seshat/ui.py` — centraliza toda a saída visual (funções públicas, console Rich, progress, etc.).
 
-## Principais pontos para editar
+## Tema centralizado (`seshat/theme.py`)
 
-### Cores e estilos
+### `UITheme`
 
-As funções abaixo aplicam estilos via Rich:
-
-- `title()`
-- `section()`
-- `info()`
-- `step()`
-- `success()`
-- `warning()`
-- `error()`
-
-Exemplo (cores):
+Dataclass imutável com estilos Rich para cada componente:
 
 ```py
-def success(text: str, icon: str = "✓") -> None:
-    if _use_rich():
-        _console().print(f"{icon} {text}", style="green")
-        return
-    echo(f"{icon} {text}")
+@dataclass(frozen=True)
+class UITheme:
+    title: Style
+    subtitle: Style
+    panel: Style
+    panel_border: Style
+    panel_title: Style
+    panel_subtitle: Style
+    section: Style
+    info: Style
+    step: Style
+    success: Style
+    warning: Style
+    error: Style
+    hr: Style
+    muted: Style
+    accent: Style
 ```
 
-Para trocar as cores, altere o `style="green"` para outra cor/estilo do Rich.
+### `UIIcons`
 
-### Box do título
-
-O título usa `Panel` com box e cor:
+Dataclass imutável com ícones padrão:
 
 ```py
-panel = Panel(text, style="cyan", box=box.ROUNDED, expand=False)
+@dataclass(frozen=True)
+class UIIcons:
+    info: str = "⮑"
+    warning: str = "⮑"
+    error: str = "⮑"
+    success: str = "⮑"
+    step: str = "⮑"
+    confirm: str = "⮑️"
+    search: str = "🔍"
+    loading: str = "🔄"
+    package: str = "📦"
+    tools: str = "🔧"
+    trash: str = "🗑️"
+    ai: str = "🤖"
+    bolt: str = "⚡"
+    brain: str = "🧠"
+    sparkle: str = "✨"
+    bullet: str = "•"
 ```
 
-Você pode trocar o `box=box.ROUNDED` por `box.SIMPLE`, `box.DOUBLE`, etc.
+### `DEFAULT_PALETTE`
 
-### Progress e spinner
-
-O layout do progress é definido em `ProgressUI.__enter__()`:
+Dicionário com as cores padrão usadas para gerar o tema:
 
 ```py
-self._progress = Progress(
-    SpinnerColumn(),
-    TextColumn("{task.description}"),
-    TextColumn("{task.completed}/{task.total}"),
-)
+DEFAULT_PALETTE = {
+    "primary": "cyan",
+    "secondary": "blue",
+    "accent": "magenta",
+    "muted": "bright_black",
+    "info": "#D0D9D4",
+    "success": "green1",
+    "warning": "gold1",
+    "error": "red1",
+    "panel": "cyan",
+    "panel_border": "cyan",
+    "panel_title": "cyan",
+    "panel_subtitle": "bright_black",
+    "section": "cyan",
+    "step": "bright_black",
+    "hr": "grey37",
+}
 ```
 
-Você pode adicionar/remover colunas aqui.
+### Funções de criação
 
-### Renderização de saída (syntax highlight)
+- `theme_from_palette(palette)` — cria `UITheme` a partir de um dicionário de cores.
+- `theme_from_config(config)` — converte o dicionário vindo do `.seshat` em `UITheme`.
+- `default_theme()` — retorna o tema padrão.
 
-`render_tool_output()` detecta blocos de código no formato `linha | código`
-e renderiza com `rich.syntax.Syntax`.
+## Configuração via `.seshat`
 
-```py
-syntax = Syntax(
-    "\n".join(code_lines),
-    language,
-    line_numbers=True,
-    start_line=first_line_no or 1,
-    word_wrap=False,
-)
+Você pode customizar o tema e ícones diretamente no arquivo `.seshat`:
+
+```yaml
+ui:
+  force_rich: false  # força Rich mesmo em non-TTY
+  theme:
+    primary: "#00c2ff"
+    success: "#00c853"
+    warning: "#ffab00"
+    error: "#ff5252"
+    panel_border: "#00c2ff"
+  icons:
+    info: "ℹ️"
+    success: "✅"
+    warning: "⚠️"
+    error: "❌"
 ```
 
-Use esse trecho para mudar tema/cores do syntax highlighting.
+As funções `apply_configured_theme()` e `apply_configured_icons()` são chamadas automaticamente ao carregar a configuração.
 
-## Visualizando alterações
+## Customização programática
 
-Use o preview local:
-
-```bash
-python scripts/ui_preview.py
-```
-
-Esse script mostra exemplos de:
-
-- Título e seções
-- Tabelas
-- Progress/spinner
-- Saída formatada de tool (ruff/mypy)
-
-## Tema centralizado (UITheme)
-
-Agora existe um tema padrão. Você pode criar e aplicar assim:
+### Aplicar tema customizado
 
 ```py
 from rich.style import Style
 from seshat import ui
 
 custom = ui.UITheme(
-    title=Style.parse("green"),
+    title=Style.parse("green bold"),
+    subtitle=Style.parse("bright_black"),
+    panel=Style.parse("green"),
+    panel_border=Style.parse("green"),
+    panel_title=Style.parse("green bold"),
+    panel_subtitle=Style.parse("bright_black italic"),
     section=Style.parse("green bold"),
     info=Style.parse("cyan"),
     step=Style.parse("bright_black"),
-    success=Style.parse("green"),
-    warning=Style.parse("yellow"),
-    error=Style.parse("red"),
+    success=Style.parse("green bold"),
+    warning=Style.parse("yellow bold"),
+    error=Style.parse("red bold"),
     hr=Style.parse("bright_black"),
+    muted=Style.parse("bright_black"),
+    accent=Style.parse("magenta"),
 )
 
 ui.apply_theme(custom)
 ```
 
-Você ainda pode ajustar pontualmente via `ui.style["key"] = Style.parse(...)`.
+### Aplicar tema a partir de paleta
 
-## Paleta de cores (UIColor)
+```py
+from seshat import ui
+from seshat.theme import theme_from_palette
 
-Se quiser centralizar uma paleta (nomes, hex, ANSI), use `UIColor`:
+theme = theme_from_palette({
+    "primary": "#00c2ff",
+    "success": "#00c853",
+    "warning": "#ffab00",
+    "error": "#ff5252",
+    "panel_border": "#00c2ff",
+    "panel_title": "#00c2ff",
+})
+
+ui.apply_theme(theme)
+```
+
+### Sobrescrever ícones
 
 ```py
 from seshat import ui
 
-palette = ui.UIColor(
-    primary="#00c2ff",
-    secondary="#9aa0a6",
-    accent="magenta",
-    success="#00c853",
-    warning="#ffab00",
-    error="#ff5252",
-    panel_border="#00c2ff",
-    panel_title="#00c2ff",
-)
-
-ui.apply_theme(ui.theme_from_palette(palette))
+ui.apply_icons({
+    "info": "ℹ️",
+    "success": "✅",
+    "warning": "⚠️",
+    "error": "❌",
+})
 ```
+
+Ou pontualmente:
+
+```py
+ui.icons["info"] = "→"
+```
+
+### Sobrescrever estilos individuais
+
+```py
+from rich.style import Style
+from seshat import ui
+
+ui.style["info"] = Style.parse("bright_cyan")
+```
+
+## Dicionários globais
+
+A UI expõe dois dicionários mutáveis:
+
+- `ui.style` — mapa `str → Style` com todos os estilos ativos.
+- `ui.icons` — mapa `str → str` com todos os ícones ativos.
+
+Chaves disponíveis em `ui.style`:
+
+| Chave | Uso |
+|-------|-----|
+| `title` | Título principal (Panel) |
+| `subtitle` | Subtítulo |
+| `panel` | Cor do painel |
+| `panel_border` | Borda do painel |
+| `panel_title` | Título do painel |
+| `panel_subtitle` | Subtítulo do painel |
+| `section` | Cabeçalhos de seção |
+| `info` | Mensagens informativas |
+| `step` | Passos de execução |
+| `success` | Mensagens de sucesso |
+| `warning` | Avisos |
+| `error` | Erros |
+| `hr` | Linhas horizontais |
+| `muted` | Texto secundário |
+| `accent` | Destaque |
+
+Chaves disponíveis em `ui.icons`:
+
+| Chave | Padrão | Uso |
+|-------|--------|-----|
+| `info` | ⮑ | Informações |
+| `warning` | ⮑ | Avisos |
+| `error` | ⮑ | Erros |
+| `success` | ⮑ | Sucesso |
+| `step` | ⮑ | Passos |
+| `confirm` | ⮑️ | Confirmação |
+| `search` | 🔍 | Busca |
+| `loading` | 🔄 | Carregamento |
+| `package` | 📦 | Pacote |
+| `tools` | 🔧 | Ferramentas |
+| `trash` | 🗑️ | Deleção |
+| `ai` | 🤖 | IA |
+| `bolt` | ⚡ | Ação rápida |
+| `brain` | 🧠 | Análise |
+| `sparkle` | ✨ | Destaque |
+| `bullet` | • | Item de lista |
+
+## `force_rich`
+
+Por padrão, o Seshat usa Rich apenas quando detecta um terminal TTY. Para forçar o uso do Rich (útil em CI/CD ou pipes):
+
+```yaml
+# .seshat
+ui:
+  force_rich: true
+```
+
+Ou via variável de ambiente:
+
+```bash
+SESHAT_FORCE_COLOR=1 seshat commit
+```
+
+Variáveis reconhecidas: `FORCE_COLOR`, `CLICOLOR_FORCE`, `SESHAT_FORCE_COLOR`.
+
+## Visualizando alterações
+
+Use os scripts de preview local:
+
+```bash
+# Preview completo (título, seções, tabelas, progress, tool output)
+python scripts/ui_preview.py
+
+# Preview apenas dos componentes de UI
+python scripts/ui_only_preview.py
+```
+
+## Saída formatada de ferramentas (`ToolOutputBlock`)
+
+A saída de ferramentas (ruff, eslint, mypy, etc.) agora usa tipos estruturados:
+
+```py
+@dataclass
+class ToolOutputBlock:
+    text: str
+    status: Optional[ToolStatus] = None  # "pass" | "fail" | "warn" | "skip"
+```
+
+O `ToolingRunner.format_results()` retorna `list[ToolOutputBlock]`, e a UI renderiza cada bloco com syntax highlighting e status visual.
