@@ -9,7 +9,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Adicionado
 
-- **Tema Configurável (UITheme)**: novo módulo `seshat/theme.py` centraliza estilos, paleta de cores e ícones da UI.
+- **Ícones Distintos por Tipo**: cada tipo de mensagem agora tem ícone único e reconhecível:
+  - `ℹ` (info), `⚠` (warning), `✖` (error), `✔` (success), `›` (step)
+- **12 Novos Ícones**: `commit` (●), `file` (📄), `folder` (📁), `clock` (⏱), `check` (✓), `cross` (✗), `arrow` (→), `git` (⎇), `lock` (🔒), `config` (⚙)
+- **Novos Componentes de UI**:
+  - `ui.summary()` — painel de resumo com key-value pairs (substitui title+table para configs)
+  - `ui.result_banner()` — banner de resultado com stats e status colorido (success/warning/error)
+  - `ui.file_list()` — lista de arquivos em painel com contagem e suporte a numeração
+  - `ui.kv()` — display de par chave-valor formatado
+  - `ui.badge()` — tag/badge inline estilizado
+  - `ui.blank()` — espaçamento visual consistente
+- **Estilo `highlight`**: novo estilo no tema para destaques especiais
+- **Paleta Tokyo Night**: cores hex mais sofisticadas para melhor consistência visual
+- **Tema Configurável (UITheme)**: módulo `seshat/theme.py` centraliza estilos, paleta de cores e ícones da UI.
   - `UITheme` (dataclass) com estilos Rich para todos os componentes visuais.
   - `UIIcons` (dataclass) com ícones configuráveis para toda a interface.
   - `DEFAULT_PALETTE` com paleta de cores padrão.
@@ -21,11 +33,18 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
   - `icons` (dict) — sobrescreve ícones individuais.
 - **Tipos Estruturados para Tooling**: novo `ToolOutputBlock` (dataclass) com status tipado (`ToolStatus`) para saída formatada de ferramentas.
 - **Scripts de Preview**: `scripts/ui_preview.py` e `scripts/ui_only_preview.py` para visualização local da UI.
+- **14 Novos Testes de UI**: cobertura para `blank()`, `kv()`, `badge()`, `summary()`, `result_banner()`, `file_list()`, distinção de ícones e novos ícones.
 
 ### Alterado
 
+- **CLI commit**: usa `ui.summary()` com ícone ● para exibir provider, language, project, checks, date em painel unificado.
+- **CLI config**: usa `ui.summary()` com ícone ⚙ para exibir configuração atual.
+- **CLI init**: usa `ui.summary()` para mostrar resultado da geração.
+- **CLI fix**: usa `ui.summary()` com ícone 🔧 para mostrar projeto e check type.
+- **Flow**: usa `ui.summary()`, `ui.file_list()` e `ui.result_banner()` para interface mais descritiva.
+- Mensagens com indentação (`  ℹ`, `  ✔`, `  ⚠`, `  ✖`) para melhor hierarquia visual.
+- Tabelas com `box.SIMPLE_HEAD` e padding `(0, 2)` para visual mais limpo.
 - Refatorada toda a UI para usar tema centralizado (`seshat/theme.py`) em vez de estilos inline.
-- Ícones padronizados para `⮑` em toda a interface (info, warning, error, success, step).
 - Estilo das caixas (Panel) alterado para `box.ROUNDED`.
 - `ToolingRunner.format_results()` agora retorna `list[ToolOutputBlock]` em vez de string.
 - Funções `apply_configured_theme()` e `apply_configured_icons()` aplicam configuração do `.seshat` automaticamente.
