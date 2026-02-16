@@ -35,6 +35,9 @@ from rich.text import Text
 from rich.padding import Padding
 
 
+_FORCE_RICH: bool | None = None
+
+
 # ─── Color detection ──────────────────────────────────────────────
 
 
@@ -46,11 +49,18 @@ def _force_color() -> bool:
 
 
 def _use_rich() -> bool:
+    if _FORCE_RICH is not None:
+        return _FORCE_RICH
     return sys.stdout.isatty() or _force_color()
 
 
 def is_tty() -> bool:
     return _use_rich()
+
+
+def set_force_rich(value: bool | None) -> None:
+    global _FORCE_RICH
+    _FORCE_RICH = value
 
 
 # ─── Console singletons ──────────────────────────────────────────
