@@ -9,7 +9,7 @@ import yaml
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Protocol, runtime_checkable
+from typing import Literal, Optional, Protocol, runtime_checkable
 
 
 @dataclass
@@ -36,6 +36,16 @@ class ToolResult:
     blocking: bool = True
     skipped: bool = False
     skip_reason: str = ""
+
+
+ToolStatus = Literal["success", "warning", "error", "skipped"]
+
+
+@dataclass
+class ToolOutputBlock:
+    """Formatted tool output with structured status."""
+    text: str
+    status: Optional[ToolStatus] = None
 
 
 @dataclass
