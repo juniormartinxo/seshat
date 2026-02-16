@@ -105,7 +105,7 @@ class TestFormatReviewForDisplay:
         result = CodeReviewResult(has_issues=False)
         output = format_review_for_display(result)
         
-        assert "✅" in output
+        assert "⮑" in output
         assert "No issues" in output
     
     def test_format_with_issues(self) -> None:
@@ -124,7 +124,7 @@ class TestFormatReviewForDisplay:
         )
         output = format_review_for_display(result, verbose=True)
         
-        assert "⚠️" in output
+        assert "⮑️" in output
         assert "Long function" in output
         assert "💡" in output  # Suggestion icon
         assert "Split into smaller" in output
