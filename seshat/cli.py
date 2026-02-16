@@ -131,25 +131,23 @@ def commit(
         if not date and config.get("DEFAULT_DATE"):
             date = config["DEFAULT_DATE"]
 
-        ui.title(f"Seshat Commit · {provider_name} · {language}")
-        
-        # Show .seshat config notification if loaded
-        if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
-            ui.info("Configurações carregadas do arquivo .seshat", icon="")
-            details = []
-            if seshat_config.project_type:
-                details.append(f"projeto: {seshat_config.project_type}")
-            if seshat_config.checks:
-                checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
-                if checks_list:
-                    details.append(f"checks: {', '.join(checks_list)}")
-            if seshat_config.code_review.get("enabled"):
-                details.append("code_review: ativo")
-            if details:
-                if ui.is_tty():
-                    ui.table("Configuração carregada", ["Detalhes"], [[" | ".join(details)]])
-                else:
-                    ui.step(" | ".join(details), icon=" ")
+        # Build summary for the commit panel
+        summary_items: dict[str, str] = {
+            "Provider": provider_name,
+            "Language": language,
+        }
+        if seshat_config.project_type:
+            summary_items["Project"] = seshat_config.project_type
+        if seshat_config.checks:
+            checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
+            if checks_list:
+                summary_items["Checks"] = ", ".join(checks_list)
+        if seshat_config.code_review.get("enabled"):
+            summary_items["Code Review"] = "ativo"
+        if date:
+            summary_items["Date"] = date
+
+        ui.summary("Seshat Commit", summary_items, icon=ui.icons["commit"])
 
         with ui.status("Gerando mensagem de commit"):
             commit_message, review_result = commit_with_ai(
@@ -308,43 +306,35 @@ def config(
             judge_model_value = current_config.get("JUDGE_MODEL") or ("not set" if language == "ENG" else "não configurado")
             
             if language == "ENG":
-                rows = [
-                    ["API Key", str(masked_key)],
-                    ["Provider", str(provider_value)],
-                    ["Model", str(model_value)],
-                    ["Judge API Key", str(masked_judge_key)],
-                    ["Judge Provider", str(judge_provider_value)],
-                    ["Judge Model", str(judge_model_value)],
-                    ["Maximum diff limit", str(current_config.get("MAX_DIFF_SIZE"))],
-                    ["Warning diff limit", str(current_config.get("WARN_DIFF_SIZE"))],
-                    ["Commit language", str(current_config.get("COMMIT_LANGUAGE"))],
-                    ["Default date", str(current_config.get("DEFAULT_DATE") or "not set")],
-                ]
-                if ui.is_tty():
-                    ui.table("Current configuration", ["Key", "Value"], rows)
-                else:
-                    ui.echo("Current configuration:")
-                    for key, value in rows:
-                        ui.echo(f"{key}: {value}")
+                config_title = "Current Configuration"
+                items = {
+                    "API Key": str(masked_key),
+                    "Provider": str(provider_value),
+                    "Model": str(model_value),
+                    "Judge API Key": str(masked_judge_key),
+                    "Judge Provider": str(judge_provider_value),
+                    "Judge Model": str(judge_model_value),
+                    "Max diff limit": str(current_config.get("MAX_DIFF_SIZE")),
+                    "Warn diff limit": str(current_config.get("WARN_DIFF_SIZE")),
+                    "Commit language": str(current_config.get("COMMIT_LANGUAGE")),
+                    "Default date": str(current_config.get("DEFAULT_DATE") or "not set"),
+                }
             else:
-                rows = [
-                    ["API Key", str(masked_key)],
-                    ["Provider", str(provider_value)],
-                    ["Model", str(model_value)],
-                    ["Judge API Key", str(masked_judge_key)],
-                    ["Judge Provider", str(judge_provider_value)],
-                    ["Judge Model", str(judge_model_value)],
-                    ["Limite máximo do diff", str(current_config.get("MAX_DIFF_SIZE"))],
-                    ["Limite de aviso do diff", str(current_config.get("WARN_DIFF_SIZE"))],
-                    ["Linguagem dos commits", str(current_config.get("COMMIT_LANGUAGE"))],
-                    ["Data padrão", str(current_config.get("DEFAULT_DATE") or "não configurada")],
-                ]
-                if ui.is_tty():
-                    ui.table("Configuração atual", ["Chave", "Valor"], rows)
-                else:
-                    ui.echo("Configuração atual:")
-                    for key, value in rows:
-                        ui.echo(f"{key}: {value}")
+                config_title = "Configuração Atual"
+                items = {
+                    "API Key": str(masked_key),
+                    "Provider": str(provider_value),
+                    "Model": str(model_value),
+                    "Judge API Key": str(masked_judge_key),
+                    "Judge Provider": str(judge_provider_value),
+                    "Judge Model": str(judge_model_value),
+                    "Limite máximo diff": str(current_config.get("MAX_DIFF_SIZE")),
+                    "Limite aviso diff": str(current_config.get("WARN_DIFF_SIZE")),
+                    "Linguagem commits": str(current_config.get("COMMIT_LANGUAGE")),
+                    "Data padrão": str(current_config.get("DEFAULT_DATE") or "não configurada"),
+                }
+
+            ui.summary(config_title, items, icon=ui.icons["config"])
 
 
     except Exception as e:
@@ -549,9 +539,15 @@ def init(
             ui.info("Edite-o para atender às necessidades do seu projeto.")
         
         # Show summary
-        ui.hr()
-        ui.info("Configuração gerada:")
-        ui.echo(f"\n{content}")
+        ui.summary(
+            "Configuração gerada",
+            {
+                "Projeto": project_type or "auto",
+                "Ferramentas": ", ".join(discovered_tools) if discovered_tools else "nenhuma",
+                "Arquivo": str(seshat_file),
+            },
+            icon=ui.icons["config"],
+        )
         
     except Exception as e:
         ui.error(f"Erro ao criar arquivo: {e}")
@@ -590,15 +586,17 @@ def fix(
         from .tooling.runner import ToolingRunner
         from .core import get_staged_files
         
-        ui.title("Seshat Fix")
-        
         runner = ToolingRunner()
         project_type = runner.detect_project_type()
-        
-        if not project_type:
-            ui.warning("Tipo de projeto não detectado. Executando em modo genérico.")
-        else:
-            ui.info(f"Projeto detectado: {project_type}")
+
+        ui.summary(
+            "Seshat Fix",
+            {
+                "Projeto": project_type or "genérico",
+                "Check": check,
+            },
+            icon=ui.icons["tools"],
+        )
             
         # Determine files to check
         files_list = None
