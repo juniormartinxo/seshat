@@ -145,7 +145,10 @@ def flow(
                 alignments=["left", "center"],
             )
         else:
-            ui.info(f"Processando {len(files)} arquivos", icon="🔄")
+            ui.info(
+                f"Processando {len(files)} arquivos",
+                icon=ui.icons["loading"],
+            )
         
         if not yes:
             rows = [[f] for f in files]
@@ -154,8 +157,8 @@ def flow(
             else:
                 ui.section("Arquivos a serem processados")
                 for f in files:
-                    ui.step(f, icon="•")
-            if not ui.confirm("\n⮑️ Deseja prosseguir?"):
+                    ui.step(f, icon=ui.icons["bullet"])
+            if not ui.confirm(f"\n{ui.icons['confirm']} Deseja prosseguir?"):
                 return
 
         success_count = 0
