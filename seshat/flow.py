@@ -113,52 +113,33 @@ def flow(
         if count > 0:
             files = files[:count]
             
-        # Prepare content for main panel
-        panel_content = ""
-        if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
-            details = []
-            if seshat_config.project_type:
-                details.append(f"projeto: {seshat_config.project_type}")
-            if seshat_config.checks:
-                checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
-                if checks_list:
-                    details.append(f"checks: {', '.join(checks_list)}")
-            if seshat_config.code_review.get("enabled"):
-                details.append("code_review: ativo")
-            details.append(f"tty: {'on' if ui.is_tty() else 'off'}")
-            if ui_force_rich is not None:
-                details.append(f"force_rich: {'on' if ui_force_rich else 'off'}")
-            
-            if details:
-                panel_content = "Configurações carregadas do arquivo .seshat\n\n" + " | ".join(details)
-        
-        ui.panel(
-            f"Seshat Flow · {service.provider} · {service.language}",
-            content=panel_content
+        # Build summary items for the main panel
+        summary_items: dict[str, str] = {
+            "Provider": service.provider,
+            "Language": service.language,
+            "Files": str(len(files)),
+        }
+
+        if seshat_config.project_type:
+            summary_items["Project"] = seshat_config.project_type
+        if seshat_config.checks:
+            checks_list = [k for k, v in seshat_config.checks.items() if v.get("enabled", True)]
+            if checks_list:
+                summary_items["Checks"] = ", ".join(checks_list)
+        if seshat_config.code_review.get("enabled"):
+            summary_items["Code Review"] = "ativo"
+        if date:
+            summary_items["Date"] = date
+
+        ui.summary(
+            "Seshat Flow",
+            summary_items,
+            icon=ui.icons["git"],
         )
         
-        if ui.is_tty():
-            ui.table(
-                "Resumo",
-                ["Campo", "Valor"],
-                [["Arquivos", str(len(files))]],
-                alignments=["left", "center"],
-            )
-        else:
-            ui.info(
-                f"Processando {len(files)} arquivos",
-                icon=ui.icons["loading"],
-            )
-        
         if not yes:
-            rows = [[f] for f in files]
-            if ui.is_tty():
-                ui.table("Arquivos a serem processados", ["Arquivo"], rows)
-            else:
-                ui.section("Arquivos a serem processados")
-                for f in files:
-                    ui.step(f, icon=ui.icons["bullet"])
-            if not ui.confirm(f"\n{ui.icons['confirm']} Deseja prosseguir?"):
+            ui.file_list("Arquivos a serem processados", files)
+            if not ui.confirm("Deseja prosseguir?"):
                 return
 
         success_count = 0
@@ -203,22 +184,23 @@ def flow(
                     ui.error(f"Falha: {result.message}")
                     fail_count += 1
 
-        ui.hr()
-        if ui.is_tty():
-            ui.table(
-                "Resultado",
-                ["Campo", "Valor"],
-                [
-                    ["Sucesso", str(success_count)],
-                    ["Falhas", str(fail_count)],
-                    ["Pulados", str(skipped_count)],
-                ],
-                alignments=["left", "center"],
-            )
+        # Determine overall status
+        if fail_count > 0:
+            banner_status: Literal["success", "warning", "error"] = "error"
+        elif skipped_count > 0:
+            banner_status = "warning"
         else:
-            ui.info(
-                f"Sucesso: {success_count} | Falhas: {fail_count} | Pulados: {skipped_count}"
-            )
+            banner_status = "success"
+
+        ui.result_banner(
+            "Resultado",
+            {
+                f"{ui.icons['success']} Sucesso": str(success_count),
+                f"{ui.icons['error']} Falhas": str(fail_count),
+                f"{ui.icons['warning']} Pulados": str(skipped_count),
+            },
+            status_type=banner_status,
+        )
 
     except Exception as e:
         ui.error(str(e))
