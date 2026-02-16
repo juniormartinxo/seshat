@@ -65,8 +65,12 @@ def _fake_generation(config: dict[str, str]) -> str:
 
 def _fake_tool_output() -> None:
     ui.section("Verificações")
-    ui.step("Executando verificações configuradas no .seshat", icon="⮑", fg="cyan")
-    output = """⮑ ruff (lint)
+    ui.step(
+        "Executando verificações configuradas no .seshat",
+        icon=ui.icons["step"],
+        fg="cyan",
+    )
+    output = """ruff (lint)
 F401 [*] `typing.Tuple` imported but unused
  --> seshat/cli.py:7:50
   |
@@ -79,13 +83,13 @@ F401 [*] `typing.Tuple` imported but unused
   |
 help: Remove unused import: `typing.Tuple`
 """
-    ui.render_tool_output(output)
+    ui.render_tool_output(output, status="warning")
 
 
 def _fake_messages() -> None:
     ui.section("Mensagens")
     ui.info("Informação relevante")
-    ui.step("Etapa intermediária", icon="•", fg="bright_black")
+    ui.step("Etapa intermediária", icon=ui.icons["bullet"], fg="bright_black")
     ui.step("Etapa com destaque", icon="→", fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
@@ -106,20 +110,20 @@ def _fake_apply(commit_msg: str) -> None:
 
 def main() -> None:
     try:
-        palette = ui.UIColor(
-            primary="#00c2ff",
-            secondary="#9aa0a6",
-            accent="magenta",
-            info="#5eafff",
-            success="#00c853",
-            warning="#ffab00",
-            error="#ff5252",
-            panel_border="#00c2ff",
-            panel_title="#00c2ff",
-            panel_subtitle="#9aa0a6",
-            section="#00c2ff",
-            hr="#555555",
-        )
+        palette = {
+            "primary": "#00c2ff",
+            "secondary": "#9aa0a6",
+            "accent": "magenta",
+            "info": "#5eafff",
+            "success": "#00c853",
+            "warning": "#ffab00",
+            "error": "#ff5252",
+            "panel_border": "#00c2ff",
+            "panel_title": "#00c2ff",
+            "panel_subtitle": "#9aa0a6",
+            "section": "#00c2ff",
+            "hr": "#555555",
+        }
         ui.apply_theme(ui.theme_from_palette(palette))
 
         ui.panel(
