@@ -367,7 +367,7 @@ def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
         text_style = style.get(fg, Style.parse(fg))
         _active_console().print(
             Text.assemble(
-                (f" {icon}  ", Style(color="grey50")),
+                (f"{icon} ", Style(color="yellow")),
                 (text, text_style),
             )
         )
