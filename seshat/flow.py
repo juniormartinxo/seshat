@@ -52,6 +52,11 @@ def flow(
     try:
         # Carrega configuração
         seshat_config = SeshatConfig.load(path)
+        ui_force_rich = None
+        if isinstance(seshat_config.ui, dict):
+            ui_force_rich = seshat_config.ui.get("force_rich")
+        if ui_force_rich is not None:
+            ui.set_force_rich(bool(ui_force_rich))
         config = load_config()
         config = apply_project_overrides(config, seshat_config.commit)
         if provider:
@@ -120,6 +125,9 @@ def flow(
                     details.append(f"checks: {', '.join(checks_list)}")
             if seshat_config.code_review.get("enabled"):
                 details.append("code_review: ativo")
+            details.append(f"tty: {'on' if ui.is_tty() else 'off'}")
+            if ui_force_rich is not None:
+                details.append(f"force_rich: {'on' if ui_force_rich else 'off'}")
             
             if details:
                 panel_content = "Configurações carregadas do arquivo .seshat\n\n" + " | ".join(details)
