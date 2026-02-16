@@ -62,7 +62,7 @@ Se outro agente estiver processando, o arquivo é **pulado**. Locks expirados (T
 
 Gera automaticamente um `.seshat` baseado no tipo de projeto e ferramentas detectadas.
 
-O template gerado já inclui comentários para `commit.no_ai_extensions` e `commit.no_ai_paths`.
+O template gerado já inclui comentários para `commit.no_ai_extensions`, `commit.no_ai_paths` e a seção `ui` (tema e ícones).
 
 ### Flags
 
