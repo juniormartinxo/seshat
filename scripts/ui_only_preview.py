@@ -21,7 +21,7 @@ def main() -> None:
 
     ui.section("Mensagens")
     ui.info("Informação relevante")
-    ui.step("Etapa intermediária", icon="•", fg="bright_black")
+    ui.step("Etapa intermediária", icon=ui.icons["bullet"], fg="bright_black")
     ui.step("Etapa com destaque", icon="→", fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
@@ -46,7 +46,7 @@ def main() -> None:
         pass
 
     ui.section("Output formatado")
-    output = """⮑ ruff (lint)
+    output = """ruff (lint)
 F401 [*] `typing.Tuple` imported but unused
  --> seshat/cli.py:7:50
   |
@@ -59,7 +59,7 @@ F401 [*] `typing.Tuple` imported but unused
   |
 help: Remove unused import: `typing.Tuple`
 """
-    ui.render_tool_output(output)
+    ui.render_tool_output(output, status="warning")
 
     ui.hr()
     ui.success("Preview completo!")
