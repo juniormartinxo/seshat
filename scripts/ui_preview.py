@@ -65,8 +65,8 @@ def _fake_generation(config: dict[str, str]) -> str:
 
 def _fake_tool_output() -> None:
     ui.section("Verificações")
-    ui.step("Executando verificações configuradas no .seshat", icon="↳", fg="cyan")
-    output = """❌ ruff (lint)
+    ui.step("Executando verificações configuradas no .seshat", icon="⮑", fg="cyan")
+    output = """⮑ ruff (lint)
 F401 [*] `typing.Tuple` imported but unused
  --> seshat/cli.py:7:50
   |
