@@ -10,11 +10,12 @@ from pathlib import Path
 from typing import Optional, Type
 
 from .base import (
+    BaseLanguageStrategy,
     ToolCommand,
+    ToolOutputBlock,
     ToolResult,
     ToolingConfig,
     SeshatConfig,
-    BaseLanguageStrategy,
 )
 from .typescript import TypeScriptStrategy
 from .python import PythonStrategy
@@ -299,19 +300,30 @@ class ToolingRunner:
             for r in results
         )
     
-    def format_results(self, results: list[ToolResult], verbose: bool = False) -> list[str]:
+    def format_results(
+        self,
+        results: list[ToolResult],
+        verbose: bool = False,
+    ) -> list[ToolOutputBlock]:
         """Format results for display."""
-        blocks: list[str] = []
+        blocks: list[ToolOutputBlock] = []
 
         for result in results:
             if result.skipped:
                 blocks.append(
-                    f"⮑ {result.tool} ({result.check_type}) - {result.skip_reason}"
+                    ToolOutputBlock(
+                        text=(
+                            f"{result.tool} ({result.check_type}) - {result.skip_reason}"
+                        ),
+                        status="skipped",
+                    )
                 )
                 continue
 
-            status = "⮑" if result.success else ("⮑️" if not result.blocking else "⮑")
-            header = f"{status} {result.tool} ({result.check_type})"
+            status = "success" if result.success else (
+                "warning" if not result.blocking else "error"
+            )
+            header = f"{result.tool} ({result.check_type})"
 
             if verbose or not result.success:
                 if result.output:
@@ -319,9 +331,9 @@ class ToolingRunner:
                     if len(output) > 500:
                         output = output[:500] + "\n... (truncated)"
                     block = "\n".join([header] + output.split("\n"))
-                    blocks.append(block)
+                    blocks.append(ToolOutputBlock(text=block, status=status))
                     continue
 
-            blocks.append(header)
+            blocks.append(ToolOutputBlock(text=header, status=status))
 
         return blocks
