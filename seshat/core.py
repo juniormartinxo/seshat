@@ -496,7 +496,7 @@ def commit_with_ai(
             ]
             
             if enabled_checks:
-                ui.step("\nExecutando verificações configuradas no .seshat", icon="↳", fg="cyan")
+                ui.step("Executando verificações configuradas no .seshat", icon="↳", fg="cyan")
                 
                 runner = ToolingRunner()
                 files = paths or get_staged_files()
