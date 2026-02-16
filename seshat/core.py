@@ -723,7 +723,7 @@ def commit_with_ai(
         commit_msg = raw_response
 
         if verbose:
-        ui.echo(f"\n{ui.icons['ai']} AI-generated message:")
+            ui.echo(f"\n{ui.icons['ai']} AI-generated message:")
 
         commit_msg = (commit_msg or "").strip()
         commit_msg = normalize_commit_subject_case(commit_msg)
