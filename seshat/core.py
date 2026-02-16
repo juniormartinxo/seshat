@@ -610,8 +610,9 @@ def commit_with_ai(
                 stop_thinking_animation(animation)
         
         # Display review results
-        # Display review results
-        ui.display_code_review(format_review_for_display(review_result, verbose))
+        # Get list of files being reviewed from paths or staged files
+        reviewed_files = paths or get_staged_files()
+        ui.display_code_review(format_review_for_display(review_result, verbose), files=reviewed_files)
         
         # Log Review Results if issues found
         if review_result.has_issues:
