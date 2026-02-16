@@ -155,7 +155,7 @@ def flow(
                 ui.section("Arquivos a serem processados")
                 for f in files:
                     ui.step(f, icon="•")
-            if not ui.confirm("\n⚠️ Deseja prosseguir?"):
+            if not ui.confirm("\n⮑️ Deseja prosseguir?"):
                 return
 
         success_count = 0
