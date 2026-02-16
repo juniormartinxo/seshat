@@ -126,6 +126,16 @@ icons: dict[str, str] = {
     "brain": _default_icons.brain,
     "sparkle": _default_icons.sparkle,
     "bullet": _default_icons.bullet,
+    "commit": _default_icons.commit,
+    "file": _default_icons.file,
+    "folder": _default_icons.folder,
+    "clock": _default_icons.clock,
+    "check": _default_icons.check,
+    "cross": _default_icons.cross,
+    "arrow": _default_icons.arrow,
+    "git": _default_icons.git,
+    "lock": _default_icons.lock,
+    "config": _default_icons.config,
 }
 
 style: dict[str, Style] = {
@@ -144,6 +154,7 @@ style: dict[str, Style] = {
     "hr": _default_theme.hr,
     "muted": _default_theme.muted,
     "accent": _default_theme.accent,
+    "highlight": _default_theme.highlight,
 }
 
 
@@ -163,6 +174,7 @@ def apply_theme(theme: UITheme) -> None:
             "warning": theme.warning,
             "error": theme.error,
             "hr": theme.hr,
+            "highlight": theme.highlight,
         }
     )
 
@@ -202,6 +214,11 @@ def hr(char: str = "─") -> None:
     echo(char * 80)
 
 
+def blank() -> None:
+    """Print a blank line for visual spacing."""
+    _active_console().print()
+
+
 # ─── Title / Panel ────────────────────────────────────────────────
 
 
@@ -215,12 +232,9 @@ def panel(
     content: str | RenderableType = "",
 ) -> None:
     if _use_rich():
-        resolved_panel_raw = panel_style or style.get("panel", "cyan")
-        resolved_panel: Style | str = (
-            resolved_panel_raw if resolved_panel_raw is not None else "cyan"
-        )
+        resolved_panel = panel_style or style.get("panel", Style())
         if isinstance(resolved_panel, str):
-            resolved_panel = Style.parse(resolved_panel)
+            resolved_panel = Style.parse(resolved_panel) if resolved_panel else Style()
 
         border: Style | str = border_style or style.get("panel_border", resolved_panel)
         t_style: Style | str | None = title_style or style.get("panel_title")
@@ -327,14 +341,13 @@ def section(text: str) -> None:
 # ─── Messages ─────────────────────────────────────────────────────
 
 
-
 def step(text: str, icon: str | None = None, fg: str = "bright_black") -> None:
     icon = icons["step"] if icon is None else icon
     if _use_rich():
         text_style = style.get(fg, Style.parse(fg))
         _active_console().print(
             Text.assemble(
-                (f"{icon} ", Style(color=fg)),
+                (f"  {icon} ", Style(color=fg)),
                 (text, text_style),
             )
         )
@@ -347,7 +360,7 @@ def info(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon} ", style["info"]),
+                (f"  {icon} ", style["info"]),
                 (text, style["info"]),
             )
         )
@@ -360,7 +373,7 @@ def success(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon} ", style["success"]),
+                (f"  {icon} ", style["success"]),
                 (text, style["success"]),
             )
         )
@@ -373,7 +386,7 @@ def warning(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon} ", style["warning"]),
+                (f"  {icon} ", style["warning"]),
                 (text, style["warning"]),
             )
         )
@@ -386,7 +399,7 @@ def error(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _console_err().print(
             Text.assemble(
-                (f"{icon} ", style["error"]),
+                (f"  {icon} ", style["error"]),
                 (text, style["error"]),
             )
         )
@@ -394,12 +407,44 @@ def error(text: str, icon: str | None = None) -> None:
     echo(f"{icon} {text}", err=True)
 
 
+# ─── Key-Value display ────────────────────────────────────────────
+
+
+def kv(key: str, value: str, *, key_style: str | Style | None = None, value_style: str | Style | None = None) -> None:
+    """Display a key-value pair with consistent formatting."""
+    k_style = key_style or style.get("muted", Style(color="bright_black"))
+    v_style = value_style or style.get("info", Style(color="white"))
+    if isinstance(k_style, str):
+        k_style = Style.parse(k_style)
+    if isinstance(v_style, str):
+        v_style = Style.parse(v_style)
+
+    if _use_rich():
+        _active_console().print(
+            Text.assemble(
+                ("  ", Style()),
+                (f"{key}: ", k_style),
+                (value, v_style),
+            )
+        )
+        return
+    echo(f"  {key}: {value}")
+
+
+def badge(text: str, badge_style: str | Style | None = None) -> Text:
+    """Create a styled badge/tag Text object (for inline use)."""
+    s = badge_style or style.get("accent", Style(color="magenta"))
+    if isinstance(s, str):
+        s = Style.parse(s)
+    return Text(f" {text} ", style=s)
+
+
 # ─── Interactive ──────────────────────────────────────────────────
 
 
 def confirm(message: str, default: bool = False) -> bool:
     if _use_rich():
-        return Confirm.ask(f" {icons['confirm']} {message}", default=default)
+        return Confirm.ask(f"  {icons['confirm']} {message}", default=default)
     return typer.confirm(message, default=default)
 
 
@@ -440,12 +485,12 @@ def prompt(
         if _use_rich():
             if default is None:
                 return Prompt.ask(
-                    f" {message}",
+                    f"  {message}",
                     show_default=show_default,
                     choices=list(choices),
                 )
             return Prompt.ask(
-                f" {message}",
+                f"  {message}",
                 default=default,
                 show_default=show_default,
                 choices=list(choices),
@@ -476,9 +521,9 @@ class Status:
     def __enter__(self) -> "Status":
         if _use_rich():
             self._status = _active_console().status(
-                Text(f" {self.message}", style=Style(color="cyan")),
+                Text(f" {self.message}", style=style.get("info", Style(color="cyan"))),
                 spinner="dots",
-                spinner_style=Style(color="cyan"),
+                spinner_style=style.get("info", Style(color="cyan")),
             )
             self._status.__enter__()
         else:
@@ -492,7 +537,7 @@ class Status:
     def update(self, message: str) -> None:
         if self._status and hasattr(self._status, "update"):
             self._status.update(
-                Text(f" {message}", style=Style(color="cyan"))
+                Text(f" {message}", style=style.get("info", Style(color="cyan")))
             )
 
 
@@ -517,14 +562,15 @@ class ProgressUI:
     def __enter__(self) -> "ProgressUI":
         if _use_rich():
             global _ACTIVE_PROGRESS
+            info_style = style.get("info", Style(color="cyan"))
             self._progress = Progress(
-                SpinnerColumn(style=Style(color="cyan")),
-                TextColumn("[bold cyan]{task.description}[/]"),
+                SpinnerColumn(style=info_style),
+                TextColumn("[bold]{task.description}[/]"),
                 BarColumn(
                     bar_width=30,
-                    style=Style(color="grey37"),
-                    complete_style=Style(color="cyan"),
-                    finished_style=Style(color="green1"),
+                    style=style.get("hr", Style(color="grey37")),
+                    complete_style=info_style,
+                    finished_style=style.get("success", Style(color="green1")),
                 ),
                 TaskProgressColumn(),
                 TextColumn("[bright_black]{task.completed}/{task.total}[/]"),
@@ -579,25 +625,173 @@ def table(
     if _use_rich():
         tbl = Table(
             title=title_text,
-            title_style=Style(color="cyan", bold=True),
-            box=box.MINIMAL_HEAVY_HEAD,
-            border_style=Style(color="grey37"),
-            header_style=Style(color="cyan", bold=True),
+            title_style=style.get("panel_title", Style(color="cyan", bold=True)),
+            box=box.SIMPLE_HEAD,
+            border_style=style.get("hr", Style(color="grey37")),
+            header_style=style.get("section", Style(color="cyan", bold=True)),
             show_header=True,
-            padding=(0, 1),
+            padding=(0, 2),
             expand=False,
         )
         for idx, col in enumerate(columns):
             align = alignments[idx] if alignments and idx < len(alignments) else "default"
-            tbl.add_column(col, justify=align, style=Style(color="white"))
+            tbl.add_column(col, justify=align, style=style.get("info", Style(color="white")))
         for row in rows:
             tbl.add_row(*[str(cell) for cell in row])
         _active_console().print()
-        _active_console().print(Padding(tbl, (0, 1)))
+        _active_console().print(Padding(tbl, (0, 2)))
         return
     echo(title_text)
     for row in rows:
         echo(" - " + " | ".join(str(cell) for cell in row))
+
+
+# ─── Summary panel ────────────────────────────────────────────────
+
+
+def summary(
+    title_text: str,
+    items: dict[str, str],
+    *,
+    icon: str | None = None,
+    border_style: str | Style | None = None,
+) -> None:
+    """Display a summary panel with key-value pairs.
+
+    Useful for showing configuration, results, or status at a glance.
+    """
+    if not _use_rich():
+        echo(f"\n{title_text}")
+        for k, v in items.items():
+            echo(f"  {k}: {v}")
+        return
+
+    icon_str = icon or icons.get("info", "ℹ")
+    b_style = border_style or style.get("panel_border", Style(color="grey37"))
+    if isinstance(b_style, str):
+        b_style = Style.parse(b_style)
+
+    parts: list[Text] = []
+    for k, v in items.items():
+        parts.append(
+            Text.assemble(
+                (f"  {k}  ", style.get("muted", Style(color="bright_black"))),
+                (v, style.get("info", Style(color="white"))),
+            )
+        )
+
+    body = Group(*parts) if parts else Text("")
+
+    p = Panel(
+        body,
+        border_style=b_style,
+        box=box.ROUNDED,
+        title=Text(f" {icon_str} {title_text} ", style=style.get("panel_title", Style(color="cyan", bold=True))),
+        title_align="left",
+        padding=(1, 2),
+        expand=True,
+    )
+    _active_console().print()
+    _active_console().print(p)
+
+
+# ─── Result banner ────────────────────────────────────────────────
+
+
+def result_banner(
+    title_text: str,
+    stats: dict[str, str | int],
+    *,
+    status_type: Literal["success", "warning", "error"] = "success",
+) -> None:
+    """Display a result banner with stats — ideal for end-of-flow summaries."""
+    if not _use_rich():
+        echo(f"\n{title_text}")
+        for k, v in stats.items():
+            echo(f"  {k}: {v}")
+        return
+
+    status_icon = {
+        "success": icons.get("success", "✔"),
+        "warning": icons.get("warning", "⚠"),
+        "error": icons.get("error", "✖"),
+    }.get(status_type, icons.get("success", "✔"))
+
+    status_style = style.get(status_type, Style(color="green"))
+    border = style.get("panel_border", Style(color="grey37"))
+
+    parts: list[Text] = []
+    for k, v in stats.items():
+        parts.append(
+            Text.assemble(
+                (f"  {k}  ", style.get("muted", Style(color="bright_black"))),
+                (str(v), status_style),
+            )
+        )
+
+    body = Group(*parts) if parts else Text("")
+
+    p = Panel(
+        body,
+        border_style=border,
+        box=box.ROUNDED,
+        title=Text(f" {status_icon} {title_text} ", style=status_style),
+        title_align="left",
+        padding=(1, 1),
+        expand=True,
+    )
+    _active_console().print()
+    _active_console().print(p)
+
+
+# ─── File list ────────────────────────────────────────────────────
+
+
+def file_list(
+    title_text: str,
+    files: Sequence[str],
+    *,
+    icon: str | None = None,
+    numbered: bool = False,
+) -> None:
+    """Display a list of files with consistent formatting."""
+    if not _use_rich():
+        echo(f"\n{title_text}")
+        for i, f in enumerate(files, 1):
+            prefix = f"{i}." if numbered else "-"
+            echo(f"  {prefix} {f}")
+        return
+
+    file_icon = icon or icons.get("file", "📄")
+    muted = style.get("muted", Style(color="bright_black"))
+    info_s = style.get("info", Style(color="white"))
+
+    parts: list[Text] = []
+    for i, f in enumerate(files, 1):
+        prefix = f"  {i:>3}. " if numbered else f"  {file_icon} "
+        parts.append(
+            Text.assemble(
+                (prefix, muted),
+                (f, info_s),
+            )
+        )
+
+    body = Group(*parts) if parts else Text("  (empty)")
+
+    p = Panel(
+        body,
+        border_style=style.get("panel_border", Style(color="grey37")),
+        box=box.ROUNDED,
+        title=Text(
+            f" {icons.get('folder', '📁')} {title_text} ({len(files)}) ",
+            style=style.get("panel_title", Style(color="cyan", bold=True)),
+        ),
+        title_align="left",
+        padding=(1, 1),
+        expand=True,
+    )
+    _active_console().print()
+    _active_console().print(p)
 
 
 # ─── Code / Tool output ──────────────────────────────────────────
@@ -617,7 +811,7 @@ def _build_tool_panel_title(
 ) -> Text | None:
     if not header_style:
         return None
-    return Text(f"{icons['step']} {first_line} ", style=header_style)
+    return Text(f" {icons['step']} {first_line} ", style=header_style)
 
 
 def _line_style(line: str, status: str | None) -> Style | None:
@@ -683,24 +877,22 @@ def render_tool_output(
                 line_numbers=True,
                 start_line=first_line_no or 1,
                 word_wrap=False,
-                padding=(0, 0), # No padding inside syntax, panel handles it
+                padding=(0, 0),
             )
             renderables.append(syntax)
             continue
 
         text_style = _line_style(line, status)
         
-        # Add indentation to match panel padding visual
         renderables.append(Text(f"{line}", style=text_style) if text_style else Text(line))
         i += 1
     
     if renderables:
-        # Wrap in Panel with background for "block" effect
         p = Panel(
             Group(*renderables),
             box=box.SIMPLE,
             border_style=border_style,
-            style="", # Background color for the block
+            style="",
             title=_build_tool_panel_title(first_line, header_style),
             title_align="left",
             padding=(1, 2),
@@ -711,18 +903,16 @@ def render_tool_output(
 
 def display_code_review(text: str) -> None:
     if _use_rich():
-        # Remove extra format text if needed, or render as is
-        # We strip the iconized "Code review" header from the text if present
-        # because the Panel title already says it.
         clean_text = text
         if clean_text.strip().startswith(f"{icons['info']} Code review:"):
             clean_text = clean_text.split("\n", 1)[-1].strip()
 
         p = Panel(
             Text(clean_text),
-            box=box.SIMPLE,
-            border_style=style["warning"],
-            title="[bold gold1]Code Review[/]",
+            box=box.ROUNDED,
+            border_style=style.get("warning", Style(color="gold1")),
+            title=Text(f" {icons['brain']} Code Review ", style=style.get("warning", Style(color="gold1", bold=True))),
+            title_align="left",
             padding=(1, 2),
             expand=True,
         )
@@ -738,6 +928,7 @@ __all__ = [
     "is_tty",
     "echo",
     "hr",
+    "blank",
     "panel",
     "title",
     "section",
@@ -746,12 +937,17 @@ __all__ = [
     "success",
     "warning",
     "error",
+    "kv",
+    "badge",
     "confirm",
     "prompt",
     "status",
     "spinner",
     "progress",
     "table",
+    "summary",
+    "result_banner",
+    "file_list",
     "render_tool_output",
     "display_code_review",
     "style",
