@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, ANY
 import pytest
 from seshat import ui
 
@@ -231,7 +231,6 @@ def test_table_rich(mock_rich_console, monkeypatch):
 
     ui.table("Title", columns, rows)
 
-    from unittest.mock import ANY
     mock_table_class.assert_called_with(
         title="Title",
         title_style=ANY,
@@ -239,7 +238,7 @@ def test_table_rich(mock_rich_console, monkeypatch):
         border_style=ANY,
         header_style=ANY,
         show_header=True,
-        padding=(0, 1),
+        padding=(0, 2),
         expand=False,
     )
     mock_console_instance.print.assert_called()
@@ -257,3 +256,177 @@ def test_table_no_rich(mock_rich_console, monkeypatch):
     ui.table("Title", columns, rows)
 
     assert mock_console_instance.print.call_count == 2
+
+
+# ─── New component tests ─────────────────────────────────────────
+
+
+def test_blank(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.blank()
+
+    mock_console_instance.print.assert_called_once_with()
+
+
+def test_kv_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.kv("Provider", "openai")
+
+    mock_console_instance.print.assert_called_once()
+    # Verify it was called with a Text object
+    call_args = mock_console_instance.print.call_args
+    assert call_args is not None
+
+
+def test_kv_no_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.kv("Provider", "openai")
+
+    mock_console_instance.print.assert_called_with("  Provider: openai")
+
+
+def test_badge():
+    result = ui.badge("test")
+    assert "test" in result.plain
+
+
+def test_summary_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(ui, "Panel", MagicMock())
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.summary("Test Summary", {"Key1": "Val1", "Key2": "Val2"})
+
+    ui.Panel.assert_called_once()
+    assert mock_console_instance.print.call_count == 2  # blank + panel
+
+
+def test_summary_no_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.summary("Test Summary", {"Key1": "Val1", "Key2": "Val2"})
+
+    # title + 2 kv lines = 3 prints
+    assert mock_console_instance.print.call_count == 3
+
+
+def test_result_banner_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(ui, "Panel", MagicMock())
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.result_banner(
+        "Results",
+        {"Success": "5", "Failures": "0"},
+        status_type="success",
+    )
+
+    ui.Panel.assert_called_once()
+    assert mock_console_instance.print.call_count == 2
+
+
+def test_result_banner_no_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.result_banner(
+        "Results",
+        {"Success": "5", "Failures": "0"},
+        status_type="error",
+    )
+
+    # title + 2 stat lines = 3 prints
+    assert mock_console_instance.print.call_count == 3
+
+
+def test_file_list_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.setattr(ui, "Panel", MagicMock())
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.file_list("Files", ["a.py", "b.py", "c.py"])
+
+    ui.Panel.assert_called_once()
+    assert mock_console_instance.print.call_count == 2
+
+
+def test_file_list_no_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.file_list("Files", ["a.py", "b.py"])
+
+    # title + 2 file lines = 3 prints
+    assert mock_console_instance.print.call_count == 3
+
+
+def test_file_list_numbered_no_rich(mock_rich_console, monkeypatch):
+    mock_console_class, mock_console_instance = mock_rich_console
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    ui.set_force_rich(None)
+    ui._CONSOLE = None
+
+    ui.file_list("Files", ["a.py", "b.py"], numbered=True)
+
+    # title + 2 file lines = 3 prints
+    assert mock_console_instance.print.call_count == 3
+    # Check that numbered format is used
+    calls = [str(c) for c in mock_console_instance.print.call_args_list]
+    assert any("1." in c for c in calls)
+
+
+# ─── Icons distinctness test ─────────────────────────────────────
+
+
+def test_icons_are_distinct():
+    """Each message type should have a distinct icon."""
+    message_icons = [
+        ui.icons["info"],
+        ui.icons["warning"],
+        ui.icons["error"],
+        ui.icons["success"],
+    ]
+    assert len(set(message_icons)) == len(message_icons), (
+        f"Message icons should be distinct, got: {message_icons}"
+    )
+
+
+def test_icons_have_new_entries():
+    """New icons should be available."""
+    new_icons = ["commit", "file", "folder", "clock", "check", "cross", "arrow", "git", "lock", "config"]
+    for icon_name in new_icons:
+        assert icon_name in ui.icons, f"Missing icon: {icon_name}"
+        assert ui.icons[icon_name], f"Empty icon: {icon_name}"
+
+
+# ─── Theme highlight test ────────────────────────────────────────
+
+
+def test_style_has_highlight():
+    """The style dict should include the highlight key."""
+    assert "highlight" in ui.style
