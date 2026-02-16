@@ -360,7 +360,7 @@ def info(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"  {icon} ", style["info"]),
+                (f"{icon} ", style["info"]),
                 (text, style["info"]),
             )
         )
@@ -373,7 +373,7 @@ def success(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"  {icon} ", style["success"]),
+                (f"{icon} ", style["success"]),
                 (text, style["success"]),
             )
         )
@@ -386,7 +386,7 @@ def warning(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"  {icon} ", style["warning"]),
+                (f"{icon} ", style["warning"]),
                 (text, style["warning"]),
             )
         )
@@ -399,7 +399,7 @@ def error(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _console_err().print(
             Text.assemble(
-                (f"  {icon} ", style["error"]),
+                (f"{icon} ", style["error"]),
                 (text, style["error"]),
             )
         )
