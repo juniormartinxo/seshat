@@ -16,16 +16,63 @@ from seshat import ui  # noqa: E402
 
 
 def main() -> None:
-    ui.title("Seshat — UI Only", "Demonstração visual sem interação")
-    ui.hr()
+    ui.panel("Seshat — UI Only", "Demonstração visual sem interação")
 
     ui.section("Mensagens")
     ui.info("Informação relevante")
     ui.step("Etapa intermediária", icon=ui.icons["bullet"], fg="bright_black")
-    ui.step("Etapa com destaque", icon="→", fg="cyan")
+    ui.step("Etapa com destaque", icon=ui.icons["arrow"], fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
     ui.error("Falha simulada")
+
+    ui.section("Key-Value")
+    ui.kv("Provider", "openai")
+    ui.kv("Model", "gpt-4.1")
+    ui.kv("Language", "PT-BR")
+
+    ui.section("Summary Panel")
+    ui.summary(
+        "Seshat Commit",
+        {
+            "Provider": "openai",
+            "Model": "gpt-4.1",
+            "Language": "PT-BR",
+            "Project": "python",
+            "Checks": "lint, test",
+        },
+        icon=ui.icons["commit"],
+    )
+
+    ui.section("Result Banners")
+    ui.result_banner(
+        "Resultado — Sucesso",
+        {
+            f"{ui.icons['success']} Sucesso": "5",
+            f"{ui.icons['error']} Falhas": "0",
+            f"{ui.icons['warning']} Pulados": "1",
+        },
+        status_type="success",
+    )
+    ui.result_banner(
+        "Resultado — Com Falhas",
+        {
+            f"{ui.icons['success']} Sucesso": "3",
+            f"{ui.icons['error']} Falhas": "2",
+        },
+        status_type="error",
+    )
+
+    ui.section("File List")
+    ui.file_list(
+        "Arquivos modificados",
+        ["seshat/ui.py", "seshat/theme.py", "seshat/flow.py", "seshat/cli.py"],
+    )
+    ui.file_list(
+        "Arquivos numerados",
+        ["seshat/core.py", "seshat/providers.py"],
+        numbered=True,
+    )
 
     ui.section("Tabela")
     ui.table(
