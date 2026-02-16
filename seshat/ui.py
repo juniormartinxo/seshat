@@ -256,7 +256,7 @@ def panel(
             body,
             style=resolved_panel,
             border_style=border,
-            box=box.SIMPLE,
+            box=box.ROUNDED,
             expand=True,
             padding=(1, 2),
             title=Text(f" {title} ", style=t_style) if t_style else title,
