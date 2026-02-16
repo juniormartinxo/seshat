@@ -30,7 +30,7 @@ def _has_security_issues(result: CodeReviewResult) -> bool:
 
 
 def _prompt_blocking_bug_action() -> str:
-    ui.section("⮑️  BUG encontrado no code review")
+    ui.section(f"{ui.icons['confirm']}  BUG encontrado no code review")
     ui.echo("Escolha o que deseja fazer:")
     ui.echo("  1. Continuar o commit (falso positivo)")
     ui.echo("  2. Parar e não commitar para investigar")
@@ -155,7 +155,7 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
             ui.panel(
                 "Maximum Limit Reached",
                 content=(
-                    "🤖 Maximum recommended character limit for a single commit reached!\n"
+                    f"{ui.icons['ai']} Maximum recommended character limit for a single commit reached!\n"
                     f"Maximum allowed characters: {MAX_SIZE}\n"
                     f"Number of characters in diff: {diff_size}\n\n"
                     "Please consider:\n"
@@ -171,7 +171,7 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
             ui.panel(
                 "Limite Máximo Atingido",
                 content=(
-                    "🤖 Limite máximo de caracteres aconselhável para um único commit atingido!\n"
+                    f"{ui.icons['ai']} Limite máximo de caracteres aconselhável para um único commit atingido!\n"
                     f"Máximo de caracteres permitido: {MAX_SIZE}\n"
                     f"Número de caracteres no diff: {diff_size}\n\n"
                     "Por favor, considere:\n"
@@ -184,7 +184,7 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
                 panel_style="gold1",
             )
         if not skip_confirmation and not ui.confirm("📢 Deseja continuar?"):
-            ui.error("Commit cancelado!", icon="⮑")
+            ui.error("Commit cancelado!")
             sys.exit(0)
 
     elif diff_size > WARN_SIZE:
@@ -194,7 +194,7 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
                 f"Warning limit: {WARN_SIZE} characters\n"
                 f"Current size: {diff_size} characters\n"
                 "Consider making smaller commits for better traceability.\n",
-                icon="⮑️",
+                icon=ui.icons["confirm"],
             )
         else:
             ui.warning(
@@ -202,7 +202,7 @@ def validate_diff_size(diff: str, skip_confirmation: bool = False) -> bool:
                 f"Limite de aviso: {WARN_SIZE} caracteres\n"
                 f"Tamanho atual: {diff_size} caracteres\n"
                 "Considere fazer commits menores para melhor rastreabilidade.\n",
-                icon="⮑️",
+                icon=ui.icons["confirm"],
             )
 
     return True
@@ -376,13 +376,19 @@ def run_pre_commit_checks(
         Tuple of (success, results)
     """
     runner = ToolingRunner()
+    ui.apply_configured_theme(runner.seshat_config.ui)
+    ui.apply_configured_icons(runner.seshat_config.ui)
     project_type = runner.detect_project_type()
     
     if not project_type:
         ui.warning("Tipo de projeto não detectado. Pulando verificações.")
         return True, []
     
-    ui.step(f"Executando verificações ({check_type})", icon="🔍", fg="cyan")
+    ui.step(
+        f"Executando verificações ({check_type})",
+        icon=ui.icons["search"],
+        fg="cyan",
+    )
     
     # Get staged files if no paths provided
     files = paths or get_staged_files()
@@ -395,7 +401,7 @@ def run_pre_commit_checks(
     # Display results
     blocks = runner.format_results(results, verbose)
     for block in blocks:
-        ui.render_tool_output(block)
+        ui.render_tool_output(block.text, status=block.status)
     
     has_blocking_failures = runner.has_blocking_failures(results)
     
@@ -443,8 +449,11 @@ def commit_with_ai(
     if is_deletion_only_commit(paths):
         deleted_files = get_deleted_staged_files(paths)
         commit_msg = generate_deletion_commit_message(deleted_files)
-        ui.info(f"Commit de deleção detectado ({len(deleted_files)} arquivo(s))", icon="🗑️")
-        ui.info(f"Mensagem automática: {commit_msg}", icon="⮑")
+        ui.info(
+            f"Commit de deleção detectado ({len(deleted_files)} arquivo(s))",
+            icon=ui.icons["trash"],
+        )
+        ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
     # Fast path: if commit is only markdown docs, skip AI and generate automatic message
@@ -453,9 +462,9 @@ def commit_with_ai(
         commit_msg = generate_markdown_commit_message(markdown_files)
         ui.info(
             f"Commit de documentação detectado ({len(markdown_files)} arquivo(s))",
-            icon="⮑",
+            icon=ui.icons["info"],
         )
-        ui.info(f"Mensagem automática: {commit_msg}", icon="⮑")
+        ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
     # Configurable no-AI bypass for selected file types/paths
@@ -468,9 +477,9 @@ def commit_with_ai(
             commit_msg = generate_markdown_commit_message(staged_files)
             ui.info(
                 f"Commit sem IA detectado ({len(staged_files)} arquivo(s))",
-                icon="⚡",
+            icon=ui.icons["bolt"],
             )
-            ui.info(f"Mensagem automática: {commit_msg}", icon="⮑")
+            ui.info(f"Mensagem automática: {commit_msg}")
             return commit_msg, None
     
     # Check if code_review is enabled via .seshat (if not explicitly set via CLI)
@@ -496,7 +505,11 @@ def commit_with_ai(
             ]
             
             if enabled_checks:
-                ui.step("Executando verificações configuradas no .seshat", icon="⮑", fg="cyan")
+        ui.step(
+            "Executando verificações configuradas no .seshat",
+            icon=f"\n{ui.icons['step']}",
+            fg="cyan",
+        )
                 
                 runner = ToolingRunner()
                 files = paths or get_staged_files()
@@ -514,7 +527,7 @@ def commit_with_ai(
                 if all_results:
                     blocks = runner.format_results(all_results, verbose)
                     for block in blocks:
-                        ui.render_tool_output(block)
+                        ui.render_tool_output(block.text, status=block.status)
                     
                     has_blocking_failures = runner.has_blocking_failures(all_results)
                     if has_blocking_failures:
@@ -551,7 +564,11 @@ def commit_with_ai(
     
     # Step 1: Run code review first (if enabled)
     if code_review:
-        ui.step(f"IA: executando code review ({provider_name})", icon="\n🤖", fg="cyan")
+        ui.step(
+            f"IA: executando code review ({provider_name})",
+            icon=f"\n{ui.icons['ai']}",
+            fg="cyan",
+        )
         
         # Load custom prompt if configured
         custom_prompt_path = seshat_config.code_review.get("prompt")
@@ -569,7 +586,7 @@ def commit_with_ai(
         )
         
         if not filtered_diff.strip():
-            ui.info("Nenhum arquivo de código para revisar (extensões não correspondentes).", icon="⮑")
+            ui.info("Nenhum arquivo de código para revisar (extensões não correspondentes).")
             review_result = CodeReviewResult(has_issues=False, summary="Nenhum arquivo de código para revisar.")
         else:
             if verbose:
@@ -599,9 +616,11 @@ def commit_with_ai(
                     created_logs = save_review_to_log(review_result, log_dir, provider_name)
                     if created_logs:
                         if verbose:
-                            ui.info(f"Logs de review salvos: {len(created_logs)} arquivos", icon="⮑")
+                            ui.info(
+                                f"Logs de review salvos: {len(created_logs)} arquivos"
+                            )
                         else:
-                             ui.info(f"Logs salvos em {log_dir}", icon="⮑")
+                             ui.info(f"Logs salvos em {log_dir}")
                 except Exception as e:
                     ui.error(f"Erro ao salvar logs de review ({type(e).__name__}): {e}")
             else:
@@ -628,7 +647,7 @@ def commit_with_ai(
                     judge_api_key = os.getenv("JUDGE_API_KEY")
                     ui.step(
                         f"IA: JUDGE ({judge_provider})",
-                        icon="🧠",
+                        icon=ui.icons["brain"],
                         fg="cyan",
                     )
                     review_result = _run_judge_review(
@@ -671,7 +690,9 @@ def commit_with_ai(
         # Warn but allow if there are warnings
         if review_result.has_issues and not skip_issue_confirmation:
             if not skip_confirmation:
-                if not ui.confirm("\n⮑️  Code review encontrou issues. Deseja continuar com o commit?"):
+                if not ui.confirm(
+                    f"\n{ui.icons['confirm']}  Code review encontrou issues. Deseja continuar com o commit?"
+                ):
                     raise ValueError("Commit cancelado pelo usuário após code review.")
             else:
                 ui.warning("Code review encontrou issues, mas continuando (--yes flag).")
@@ -679,7 +700,7 @@ def commit_with_ai(
     # Step 2: Generate commit message
     ui.step(
         f"IA: gerando mensagem de commit ({commit_provider_name})",
-        icon="\n\n🤖",
+        icon=f"\n\n{ui.icons['ai']}",
         fg="magenta",
     )
 
@@ -702,7 +723,7 @@ def commit_with_ai(
         commit_msg = raw_response
 
         if verbose:
-            ui.echo("\n🤖 AI-generated message:")
+        ui.echo(f"\n{ui.icons['ai']} AI-generated message:")
 
         commit_msg = (commit_msg or "").strip()
         commit_msg = normalize_commit_subject_case(commit_msg)
