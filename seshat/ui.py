@@ -375,11 +375,11 @@ def step(text: str, icon: str = "•", fg: str = "bright_black") -> None:
     echo(f"{icon} {text}")
 
 
-def success(text: str, icon: str = "✓") -> None:
+def success(text: str, icon: str = "⮑") -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f" {icon}  ", _ICON_STYLES.get("success", Style())),
+                (f"{icon}  ", _ICON_STYLES.get("success", Style())),
                 (text, style["success"]),
             )
         )
@@ -387,7 +387,7 @@ def success(text: str, icon: str = "✓") -> None:
     echo(f"{icon} {text}")
 
 
-def warning(text: str, icon: str = "⚠") -> None:
+def warning(text: str, icon: str = "⮑") -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
@@ -399,11 +399,11 @@ def warning(text: str, icon: str = "⚠") -> None:
     echo(f"{icon} {text}")
 
 
-def error(text: str, icon: str = "✗") -> None:
+def error(text: str, icon: str = "⮑") -> None:
     if _use_rich():
         _console_err().print(
             Text.assemble(
-                (f" {icon}  ", _ICON_STYLES.get("error", Style())),
+                (f"{icon} ", _ICON_STYLES.get("error", Style())),
                 (text, style["error"]),
             )
         )
@@ -597,7 +597,7 @@ def table(
         tbl = Table(
             title=title_text,
             title_style=Style(color="cyan", bold=True),
-            box=box.ROUNDED,
+            box=box.SIMPLE,
             border_style=Style(color="grey37"),
             header_style=Style(color="cyan", bold=True),
             show_header=True,
@@ -638,13 +638,13 @@ def render_tool_output(output: str, language: str = "python") -> None:
     border_style: Style | str = style["panel_border"] # Default Cyan
 
     # Detect status from common prefixes
-    if first_line.startswith("❌"):
+    if first_line.startswith("⮑"):
         header_style = style["error"] # Red
         border_style = "gold1" # Override to yellow/gold as requested by user image
-    elif first_line.startswith("⚠"):
+    elif first_line.startswith("⮑"):
         header_style = style["warning"] # Gold
         border_style = style["warning"]
-    elif first_line.startswith("✅"):
+    elif first_line.startswith("⮑"):
         header_style = style["success"] # Green
         border_style = style["success"]
     
@@ -654,9 +654,9 @@ def render_tool_output(output: str, language: str = "python") -> None:
     # Wait, the user said "O conteúdo do box amarelo deveria estar em um bloco igual ao da segunda imagem".
     # And pointed to mypy error.
     # If I use Red for errors, it might conflict with "box amarelo".
-    # But semantically Red is better for ❌. 
+    # But semantically Red is better for ⮑. 
     # I will use the detected color (Red for error). The user likely meant "boxed style", not necessarily yellow.
-    # Actually, in step 269 image, the box IS yellow/gold even though it has ❌.
+    # Actually, in step 269 image, the box IS yellow/gold even though it has ⮑.
     # Okay, I will force Yellow/Gold for this "Problem" look if it's an issue list.
     
     # Let's rely on the style["error"] which is Red1.
@@ -708,11 +708,11 @@ def render_tool_output(output: str, language: str = "python") -> None:
         # Colorize known prefixes
         stripped = line.strip()
         text_style = None
-        if stripped.startswith("❌"):
+        if stripped.startswith("⮑"):
             text_style = style["error"]
-        elif stripped.startswith("✅"):
+        elif stripped.startswith("⮑"):
             text_style = style["success"]
-        elif stripped.startswith("⚠"):
+        elif stripped.startswith("⮑"):
             text_style = style["warning"]
         elif "error:" in line:
             text_style = style["error"]
@@ -731,10 +731,10 @@ def render_tool_output(output: str, language: str = "python") -> None:
         # Wrap in Panel with background for "block" effect
         p = Panel(
             Group(*renderables),
-            box=box.ROUNDED,
+            box=box.SIMPLE,
             border_style=border_style,
-            style="on grey11", # Background color for the block
-            title=Text(f" {first_line} ", style=header_style) if header_style else None,
+            style="", # Background color for the block
+            title=Text(f"{first_line} ", style=header_style) if header_style else None,
             title_align="left",
             padding=(1, 2),
             expand=True
@@ -745,15 +745,15 @@ def render_tool_output(output: str, language: str = "python") -> None:
 def display_code_review(text: str) -> None:
     if _use_rich():
         # Remove extra format text if needed, or render as is
-        # We strip the "📝 Code review: ..." header from the text if present
+        # We strip the "⮑ Code review: ..." header from the text if present
         # because the Panel title already says it.
         clean_text = text
-        if clean_text.strip().startswith("📝 Code review:"):
+        if clean_text.strip().startswith("⮑ Code review:"):
             clean_text = clean_text.split("\n", 1)[-1].strip()
 
         p = Panel(
             Text(clean_text),
-            box=box.ROUNDED,
+            box=box.SIMPLE,
             border_style=style["warning"],
             title="[bold gold1]Code Review[/]",
             padding=(1, 2),
