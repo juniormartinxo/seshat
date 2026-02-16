@@ -607,15 +607,9 @@ _CODE_LINE_RE = re.compile(r"^\s*(\d+)\s*\|\s?(.*)$")
 
 
 def _status_styles(status: str | None) -> tuple[Style | None, Style | str]:
-    if status == "error":
-        return style["error"], "gold1"
-    if status == "warning":
-        return style["warning"], style["warning"]
-    if status == "success":
-        return style["success"], style["success"]
-    if status == "skipped":
-        return style["info"], style["info"]
-    return None, style["panel_border"]
+    if status is None:
+        return None, style["panel_border"]
+    return style["info"], style["panel_border"]
 
 
 def _build_tool_panel_title(
@@ -628,12 +622,8 @@ def _build_tool_panel_title(
 
 
 def _line_style(line: str, status: str | None) -> Style | None:
-    if status == "error":
-        return style["error"]
-    if status == "success":
-        return style["success"]
-    if status == "warning":
-        return style["warning"]
+    if status is not None:
+        return style["info"]
     if "error:" in line:
         return style["error"]
     if "warning:" in line:
