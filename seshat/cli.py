@@ -476,6 +476,10 @@ def init(
     
     lines.extend([
         "",
+        "# UI",
+        "ui:",
+        "  force_rich: false",
+        "",
         "# Custom commands (uncomment and modify as needed)",
         "# commands:",
     ])
