@@ -14,14 +14,16 @@ from rich.style import Style
 
 @dataclass(frozen=True)
 class UIIcons:
-    info: str = "⮑"
-    warning: str = "⮑"
-    error: str = "⮑"
-    success: str = "⮑"
-    step: str = "⮑"
-    confirm: str = "⮑️"
+    """Ícones padrão — cada tipo de mensagem tem um ícone distinto e descritivo."""
+
+    info: str = "ℹ"
+    warning: str = "⚠"
+    error: str = "✖"
+    success: str = "✔"
+    step: str = "›"
+    confirm: str = "?"
     search: str = "🔍"
-    loading: str = "🔄"
+    loading: str = "⟳"
     package: str = "📦"
     tools: str = "🔧"
     trash: str = "🗑️"
@@ -30,24 +32,35 @@ class UIIcons:
     brain: str = "🧠"
     sparkle: str = "✨"
     bullet: str = "•"
+    commit: str = "●"
+    file: str = "📄"
+    folder: str = "📁"
+    clock: str = "⏱"
+    check: str = "✓"
+    cross: str = "✗"
+    arrow: str = "→"
+    git: str = "⎇"
+    lock: str = "🔒"
+    config: str = "⚙"
 
 
 DEFAULT_PALETTE: dict[str, str] = {
-    "primary": "cyan",
-    "secondary": "blue",
-    "accent": "magenta",
+    "primary": "#00c2ff",
+    "secondary": "#7aa2f7",
+    "accent": "#bb9af7",
     "muted": "bright_black",
-    "info": "#D0D9D4",
-    "success": "green1",
-    "warning": "gold1",
-    "error": "red1",
-    "panel": "cyan",
-    "panel_border": "cyan",
-    "panel_title": "cyan",
-    "panel_subtitle": "bright_black",
-    "section": "cyan",
-    "step": "bright_black",
-    "hr": "grey37",
+    "info": "#7dcfff",
+    "success": "#9ece6a",
+    "warning": "#e0af68",
+    "error": "#f7768e",
+    "panel": "",
+    "panel_border": "#3b4261",
+    "panel_title": "#00c2ff",
+    "panel_subtitle": "#565f89",
+    "section": "#00c2ff",
+    "step": "#565f89",
+    "hr": "#3b4261",
+    "highlight": "#ff9e64",
 }
 
 
@@ -68,6 +81,7 @@ class UITheme:
     hr: Style
     muted: Style
     accent: Style
+    highlight: Style
 
 
 def _normalize_palette(overrides: Mapping[str, str]) -> dict[str, str]:
@@ -80,7 +94,7 @@ def theme_from_palette(palette: Mapping[str, str]) -> UITheme:
     return UITheme(
         title=Style.parse(f"{palette['primary']} bold"),
         subtitle=Style.parse(palette["panel_subtitle"]),
-        panel=Style.parse(palette["panel"]),
+        panel=Style.parse(palette["panel"]) if palette.get("panel") else Style(),
         panel_border=Style.parse(palette["panel_border"]),
         panel_title=Style.parse(f"{palette['panel_title']} bold"),
         panel_subtitle=Style.parse(f"{palette['panel_subtitle']} italic"),
@@ -93,6 +107,7 @@ def theme_from_palette(palette: Mapping[str, str]) -> UITheme:
         hr=Style.parse(palette["hr"]),
         muted=Style.parse(palette["muted"]),
         accent=Style.parse(palette["accent"]),
+        highlight=Style.parse(f"{palette.get('highlight', palette['accent'])} bold"),
     )
 
 
