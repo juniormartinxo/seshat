@@ -111,7 +111,7 @@ EXAMPLE_PROMPT_HEADER = """<!--
 ╠════════════════════════════════════════════════════════════════════════╣
 ║ Este arquivo foi gerado automaticamente pelo 'seshat init'.           ║
 ║                                                                        ║
-║ ⮑️  IMPORTANTE: Este é apenas um EXEMPLO!                              ║
+║ {ui.icons['confirm']}  IMPORTANTE: Este é apenas um EXEMPLO!                              ║
 ║                                                                        ║
 ║ Edite este arquivo para atender às necessidades do seu projeto:       ║
 ║ - Ajuste o foco de análise para sua stack                             ║
@@ -430,18 +430,18 @@ def parse_code_review_response(response: str) -> tuple[str, CodeReviewResult]:
 def format_review_for_display(result: CodeReviewResult, verbose: bool = False) -> str:
     """Format code review result for terminal display."""
     if not result.has_issues:
-        return "⮑ Code review: No issues found."
+        return f"{ui.icons['info']} Code review: No issues found."
     
-    lines = [f"⮑ Code review: {result.summary}"]
+    lines = [f"{ui.icons['info']} Code review: {result.summary}"]
     
     severity_icons = {
-        "info": "⮑️",
-        "warning": "⮑️",
-        "error": "⮑",
+        "info": ui.icons["info"],
+        "warning": ui.icons["warning"],
+        "error": ui.icons["error"],
     }
     
     for issue in result.issues:
-        icon = severity_icons.get(issue.severity, "•")
+        icon = severity_icons.get(issue.severity, ui.icons["bullet"])
         lines.append(f"{icon} [{issue.type}] {issue.description}")
         if verbose and issue.suggestion:
             lines.append(f"      💡 {issue.suggestion}")
