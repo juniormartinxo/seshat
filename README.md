@@ -40,6 +40,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 * 📝 **Commits Automáticos para Docs (NOVO!):** Commits contendo apenas arquivos Markdown geram mensagem automática sem IA.
 * 🚫 **Bypass configurável de IA (NOVO!):** `commit.no_ai_extensions` e `commit.no_ai_paths` permitem commits automáticos para tipos de arquivo específicos.
+* 🎨 **Tema Configurável (NOVO!):** Paleta de cores, estilos e ícones centralizados em `seshat/theme.py`, customizáveis via `.seshat`.
 
 ## 📚 Documentação detalhada
 
@@ -47,6 +48,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 - `docs/cli.md` — comandos, flags e comportamento real de `commit`, `flow`, `init` e `fix` (UI Typer + Rich com fallback non-TTY).
 - `docs/seshat-examples.md` — variações de `.seshat` para cenários comuns.
 - `docs/tooling-architecture.md` — arquitetura interna do sistema de tooling.
+- `docs/ui-customization.md` — customização de cores, ícones e tema da UI.
 
 ## 🚀 Instalação
 
@@ -572,6 +574,15 @@ commit:
   # model: gpt-4-turbo-preview
   # no_ai_extensions: [".md", ".mdx"]
   # no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
+
+# UI customization (optional)
+# ui:
+#   force_rich: false  # force Rich output even in non-TTY
+#   theme:
+#     primary: "cyan"
+#     success: "green1"
+#     warning: "gold1"
+#     error: "red1"
 
 checks:
   lint:
