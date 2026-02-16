@@ -551,7 +551,7 @@ def commit_with_ai(
     
     # Step 1: Run code review first (if enabled)
     if code_review:
-        ui.step(f"IA: executando code review ({provider_name})", icon="🤖", fg="cyan")
+        ui.step(f"IA: executando code review ({provider_name})", icon="\n🤖", fg="cyan")
         
         # Load custom prompt if configured
         custom_prompt_path = seshat_config.code_review.get("prompt")
@@ -702,7 +702,7 @@ def commit_with_ai(
         commit_msg = raw_response
 
         if verbose:
-            ui.echo("🤖 AI-generated message:")
+            ui.echo("\n🤖 AI-generated message:")
 
         commit_msg = (commit_msg or "").strip()
         commit_msg = normalize_commit_subject_case(commit_msg)
