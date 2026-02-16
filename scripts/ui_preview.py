@@ -90,10 +90,79 @@ def _fake_messages() -> None:
     ui.section("Mensagens")
     ui.info("Informação relevante")
     ui.step("Etapa intermediária", icon=ui.icons["bullet"], fg="bright_black")
-    ui.step("Etapa com destaque", icon="→", fg="cyan")
+    ui.step("Etapa com destaque", icon=ui.icons["arrow"], fg="cyan")
     ui.success("Tudo certo")
     ui.warning("Algo para revisar")
     ui.error("Falha simulada")
+
+
+def _fake_kv_display() -> None:
+    ui.section("Key-Value Display")
+    ui.kv("Provider", "openai")
+    ui.kv("Model", "gpt-4.1")
+    ui.kv("Language", "PT-BR")
+    ui.kv("Status", "ativo")
+
+
+def _fake_summary() -> None:
+    ui.section("Summary Panel")
+    ui.summary(
+        "Seshat Commit",
+        {
+            "Provider": "openai",
+            "Model": "gpt-4.1",
+            "Language": "PT-BR",
+            "Project": "python",
+            "Checks": "lint, test",
+            "Code Review": "ativo",
+        },
+        icon=ui.icons["commit"],
+    )
+
+
+def _fake_result_banner() -> None:
+    ui.section("Result Banners")
+    ui.result_banner(
+        "Resultado — Sucesso",
+        {
+            f"{ui.icons['success']} Sucesso": "5",
+            f"{ui.icons['error']} Falhas": "0",
+            f"{ui.icons['warning']} Pulados": "1",
+        },
+        status_type="success",
+    )
+    ui.result_banner(
+        "Resultado — Com Falhas",
+        {
+            f"{ui.icons['success']} Sucesso": "3",
+            f"{ui.icons['error']} Falhas": "2",
+            f"{ui.icons['warning']} Pulados": "0",
+        },
+        status_type="error",
+    )
+
+
+def _fake_file_list() -> None:
+    ui.section("File List")
+    ui.file_list(
+        "Arquivos modificados",
+        [
+            "seshat/ui.py",
+            "seshat/theme.py",
+            "seshat/flow.py",
+            "seshat/cli.py",
+            "tests/test_ui.py",
+        ],
+    )
+    ui.file_list(
+        "Arquivos numerados",
+        [
+            "seshat/core.py",
+            "seshat/providers.py",
+            "seshat/config.py",
+        ],
+        numbered=True,
+    )
 
 
 def _fake_apply(commit_msg: str) -> None:
@@ -107,31 +176,18 @@ def _fake_apply(commit_msg: str) -> None:
     ui.step(commit_msg, fg="bright_white")
 
 
-
 def main() -> None:
     try:
-        palette = {
-            "primary": "#00c2ff",
-            "secondary": "#9aa0a6",
-            "accent": "magenta",
-            "info": "#5eafff",
-            "success": "#00c853",
-            "warning": "#ffab00",
-            "error": "#ff5252",
-            "panel_border": "#00c2ff",
-            "panel_title": "#00c2ff",
-            "panel_subtitle": "#9aa0a6",
-            "section": "#00c2ff",
-            "hr": "#555555",
-        }
-        ui.apply_theme(ui.theme_from_palette(palette))
-
         ui.panel(
             "Seshat — Preview UI",
             "AI-powered commit assistant · Simulação local",
         )
 
         _fake_messages()
+        _fake_kv_display()
+        _fake_summary()
+        _fake_result_banner()
+        _fake_file_list()
         _fake_prompts()
         config = _fake_config()
         _fake_diff_summary()
