@@ -46,7 +46,7 @@ def main() -> None:
         pass
 
     ui.section("Output formatado")
-    output = """❌ ruff (lint)
+    output = """⮑ ruff (lint)
 F401 [*] `typing.Tuple` imported but unused
  --> seshat/cli.py:7:50
   |
