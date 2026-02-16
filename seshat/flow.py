@@ -178,7 +178,7 @@ def flow(
                 if not ui.is_tty():
                     ui.section(f"[{idx}/{len(files)}] {file}")
                 
-                prog.info(f"Processando {file}...")
+                prog.info(f"{file}")
 
                 result = service.process_file(
                     file=file,
