@@ -581,7 +581,7 @@ def table(
         tbl = Table(
             title=title_text,
             title_style=Style(color="cyan", bold=True),
-            box=box.SIMPLE,
+            box=box.HORIZONTALS,
             border_style=Style(color="grey37"),
             header_style=Style(color="cyan", bold=True),
             show_header=True,
