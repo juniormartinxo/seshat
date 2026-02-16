@@ -901,17 +901,25 @@ def render_tool_output(
         console.print(p)
 
 
-def display_code_review(text: str) -> None:
+def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
     if _use_rich():
         clean_text = text
         if clean_text.strip().startswith(f"{icons['info']} Code review:"):
             clean_text = clean_text.split("\n", 1)[-1].strip()
 
+        # Build title with file info if provided
+        title_text = f" {icons['brain']} Code Review "
+        if files:
+            if len(files) == 1:
+                title_text = f" {icons['brain']} Code Review · {files[0]} "
+            else:
+                title_text = f" {icons['brain']} Code Review · {len(files)} arquivos "
+
         p = Panel(
             Text(clean_text),
             box=box.ROUNDED,
             border_style=style.get("warning", Style(color="gold1")),
-            title=Text(f" {icons['brain']} Code Review ", style=style.get("warning", Style(color="gold1", bold=True))),
+            title=Text(title_text, style=style.get("warning", Style(color="gold1", bold=True))),
             title_align="left",
             padding=(1, 2),
             expand=True,
