@@ -74,7 +74,10 @@ def commit(
                 # Invoca o comando init
                 ctx = click.get_current_context()
                 ctx.invoke(init)
-                ui.info("Agora você pode rodar 'seshat commit' novamente!", icon="✨")
+                ui.info(
+                    "Agora você pode rodar 'seshat commit' novamente!",
+                    icon=ui.icons["sparkle"],
+                )
             
             sys.exit(1)
         
@@ -370,7 +373,10 @@ def init(
         sys.exit(1)
     
     ui.title("Seshat Init")
-    ui.info("Detectando configuração do projeto...", icon="🔍")
+    ui.info(
+        "Detectando configuração do projeto...",
+        icon=ui.icons["search"],
+    )
     
     # Initialize runner to detect project
     runner = ToolingRunner(str(project_path))
@@ -394,14 +400,20 @@ def init(
         except (ValueError, IndexError):
             project_type = "python"
     
-    ui.step(f"Tipo de projeto: {project_type}", icon="📦")
+    ui.step(
+        f"Tipo de projeto: {project_type}",
+        icon=ui.icons["package"],
+    )
     
     # Discover available tools
     config = runner.discover_tools()
     discovered_tools = list(config.tools.keys())
     
     if discovered_tools:
-        ui.step(f"Ferramentas detectadas: {', '.join(discovered_tools)}", icon="🔧")
+        ui.step(
+            f"Ferramentas detectadas: {', '.join(discovered_tools)}",
+            icon=ui.icons["tools"],
+        )
     else:
         ui.warning("Nenhuma ferramenta de tooling detectada.")
 
@@ -534,7 +546,7 @@ def init(
 
             ui.success("Arquivo seshat-review.md criado (EXEMPLO - edite conforme seu projeto!)")
             ui.warning("O arquivo seshat-review.md é apenas um exemplo.")
-            ui.info("Edite-o para atender às necessidades do seu projeto.", icon="⮑")
+            ui.info("Edite-o para atender às necessidades do seu projeto.")
         
         # Show summary
         ui.hr()
@@ -609,7 +621,10 @@ def fix(
                 return
             target_desc = f"{len(files_list)} arquivos em stage"
             
-        ui.step(f"Executando correções ({check}) em: {target_desc}...", icon="🔧")
+        ui.step(
+            f"Executando correções ({check}) em: {target_desc}...",
+            icon=ui.icons["tools"],
+        )
             
         results = runner.fix_issues(check_type=check, files=files_list)
         
@@ -619,7 +634,7 @@ def fix(
 
         ui.hr()
         for block in runner.format_results(results, verbose=True):
-            ui.render_tool_output(block)
+            ui.render_tool_output(block.text, status=block.status)
         
         if runner.has_blocking_failures(results):
              ui.error("Algumas ferramentas falharam ao aplicar correções.")
