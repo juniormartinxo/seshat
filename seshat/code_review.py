@@ -435,14 +435,14 @@ def format_review_for_display(result: CodeReviewResult, verbose: bool = False) -
     lines = [f"⮑ Code review: {result.summary}"]
     
     severity_icons = {
-        "info": "ℹ️",
+        "info": "⮑️",
         "warning": "⮑️",
         "error": "⮑",
     }
     
     for issue in result.issues:
         icon = severity_icons.get(issue.severity, "•")
-        lines.append(f"   {icon} [{issue.type}] {issue.description}")
+        lines.append(f"{icon} [{issue.type}] {issue.description}")
         if verbose and issue.suggestion:
             lines.append(f"      💡 {issue.suggestion}")
     
