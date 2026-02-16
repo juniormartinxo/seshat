@@ -627,7 +627,8 @@ def commit_with_ai(
                                 f"Logs de review salvos: {len(created_logs)} arquivos"
                             )
                         else:
-                             ui.info(f"Logs salvos em {log_dir}")
+                            logs_text = ", ".join(created_logs)
+                            ui.info(f"Logs salvos em: {logs_text}")
                 except Exception as e:
                     ui.error(f"Erro ao salvar logs de review ({type(e).__name__}): {e}")
             else:
