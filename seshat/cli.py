@@ -132,7 +132,7 @@ def commit(
         
         # Show .seshat config notification if loaded
         if seshat_config.project_type or seshat_config.checks or seshat_config.code_review:
-            ui.info("Configurações carregadas do arquivo .seshat", icon="📄")
+            ui.info("Configurações carregadas do arquivo .seshat", icon="")
             details = []
             if seshat_config.project_type:
                 details.append(f"projeto: {seshat_config.project_type}")
@@ -534,7 +534,7 @@ def init(
 
             ui.success("Arquivo seshat-review.md criado (EXEMPLO - edite conforme seu projeto!)")
             ui.warning("O arquivo seshat-review.md é apenas um exemplo.")
-            ui.info("Edite-o para atender às necessidades do seu projeto.", icon="📝")
+            ui.info("Edite-o para atender às necessidades do seu projeto.", icon="⮑")
         
         # Show summary
         ui.hr()
