@@ -179,7 +179,7 @@ class ToolingRunner:
                 output += "\n" + result.stderr
             
             return ToolResult(
-                tool="@" + tool.name,
+                tool="└─ " + tool.name,
                 check_type=tool.check_type,
                 success=result.returncode == 0,
                 output=output.strip(),
@@ -187,7 +187,7 @@ class ToolingRunner:
             )
         except subprocess.TimeoutExpired:
             return ToolResult(
-                tool=tool.name,
+                tool="└─ " + tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output="Timeout: tool execution exceeded 5 minutes",
@@ -195,7 +195,7 @@ class ToolingRunner:
             )
         except FileNotFoundError:
             return ToolResult(
-                tool=tool.name,
+                tool="└─ " + tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output=f"Tool not found: {cmd[0]}",
@@ -203,7 +203,7 @@ class ToolingRunner:
             )
         except Exception as e:
             return ToolResult(
-                tool=tool.name,
+                tool="└─ " + tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output=f"Error: {str(e)}",
