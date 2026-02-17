@@ -917,7 +917,7 @@ def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
 
         p = Panel(
             Text(clean_text),
-            box=box.ROUNDED,
+            box=box.HORIZONTALS,
             border_style=style.get("warning", Style(color="gold1")),
             title=Text(title_text, style=style.get("warning", Style(color="gold1", bold=True))),
             title_align="left",
