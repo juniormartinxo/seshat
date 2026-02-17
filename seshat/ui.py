@@ -49,10 +49,29 @@ def _force_color() -> bool:
     )
 
 
+def _terminal_supports_rich() -> bool:
+    """Detect if the terminal likely supports Rich output."""
+    # COLORTERM is set by most modern terminal emulators
+    if os.getenv("COLORTERM") in ("truecolor", "24bit"):
+        return True
+    # WT_SESSION is set by Windows Terminal
+    if os.getenv("WT_SESSION"):
+        return True
+    # TERM_PROGRAM is set by many terminal emulators
+    term_program = os.getenv("TERM_PROGRAM", "")
+    if term_program in ("iTerm.app", "vscode", "Hyper", "Alacritty", "WezTerm"):
+        return True
+    # Common TERM values that support rich output
+    term = os.getenv("TERM", "")
+    if term and term != "dumb" and ("256color" in term or "xterm" in term or "screen" in term):
+        return True
+    return False
+
+
 def _use_rich() -> bool:
     if _FORCE_RICH is not None:
         return _FORCE_RICH
-    return sys.stdout.isatty() or _force_color()
+    return sys.stdout.isatty() or _force_color() or _terminal_supports_rich()
 
 
 def is_tty() -> bool:
