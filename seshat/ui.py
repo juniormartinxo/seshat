@@ -230,6 +230,8 @@ def panel(
     title_style: str | Style | None = None,
     subtitle_style: str | Style | None = None,
     content: str | RenderableType = "",
+    title_align: Literal["left", "center", "right"] = "center",
+    icon: str | None = None,
 ) -> None:
     if _use_rich():
         resolved_panel = panel_style or style.get("panel", Style())
@@ -251,6 +253,7 @@ def panel(
         if not body and isinstance(content, str):
              body = Text("")
 
+        panel_title = f"{icon} {title}" if icon else title
         p = Panel(
             body,
             style=resolved_panel,
@@ -258,8 +261,8 @@ def panel(
             box=box.ROUNDED,
             expand=True,
             padding=(1, 2),
-            title=Text(f" {title} ", style=t_style) if t_style else title,
-            title_align="center",
+            title=Text(f" {panel_title} ", style=t_style) if t_style else panel_title,
+            title_align=title_align,
             subtitle=Text(f" {subtitle} ", style=s_style) if subtitle and s_style else (subtitle or None),
         )
         _active_console().print()
