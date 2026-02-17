@@ -16,7 +16,7 @@ from rich.style import Style
 class UIIcons:
     """Ícones padrão — cada tipo de mensagem tem um ícone distinto e descritivo."""
 
-    info: str = "(i)"
+    info: str = "i"
     warning: str = "⚠"
     error: str = "✖"
     success: str = "✔"
