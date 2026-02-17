@@ -494,7 +494,7 @@ def commit_with_ai(
         code_review = False
     elif not code_review and seshat_config.code_review.get("enabled", False):
         code_review = True
-        ui.info("Code review ativado via .seshat", icon="")
+        ui.info("Code review ativado via .seshat", icon=ui.icons["config"])
 
     arquivos_analise = paths or get_staged_files()
     if arquivos_analise:
@@ -505,7 +505,6 @@ def commit_with_ai(
             panel_style="yellow",
             border_style="yellow",
             title_style="yellow",
-            title_align="left",
             icon=ui.icons["file"],
         )
     
