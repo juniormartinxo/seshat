@@ -360,7 +360,7 @@ def info(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon} ", style["info"]),
+                (f"{icon}  ", style["info"]),
                 (text, style["info"]),
             )
         )
