@@ -14,6 +14,7 @@ from .base import (
     ToolCommand,
     ToolOutputBlock,
     ToolResult,
+    ToolStatus,
     ToolingConfig,
     SeshatConfig,
 )
@@ -146,10 +147,10 @@ class ToolingRunner:
                     tool=tool.name,
                     check_type=tool.check_type,
                     success=True,
-                    output="",
+                    output=f"Nenhum arquivo relevante para {tool.check_type}",
                     blocking=tool.blocking,
-                    skipped=True,
-                    skip_reason=f"Nenhum arquivo relevante para {tool.check_type}",
+                    skipped=False,
+                    skip_reason="",
                 )
         else:
             relevant_files = []
@@ -179,7 +180,7 @@ class ToolingRunner:
                 output += "\n" + result.stderr
             
             return ToolResult(
-                tool="└─ " + tool.name,
+                tool=tool.name,
                 check_type=tool.check_type,
                 success=result.returncode == 0,
                 output=output.strip(),
@@ -187,7 +188,7 @@ class ToolingRunner:
             )
         except subprocess.TimeoutExpired:
             return ToolResult(
-                tool="└─ " + tool.name,
+                tool=tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output="Timeout: tool execution exceeded 5 minutes",
@@ -195,7 +196,7 @@ class ToolingRunner:
             )
         except FileNotFoundError:
             return ToolResult(
-                tool="└─ " + tool.name,
+                tool=tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output=f"Tool not found: {cmd[0]}",
@@ -203,7 +204,7 @@ class ToolingRunner:
             )
         except Exception as e:
             return ToolResult(
-                tool="└─ " + tool.name,
+                tool=tool.name,
                 check_type=tool.check_type,
                 success=False,
                 output=f"Error: {str(e)}",
@@ -320,19 +321,19 @@ class ToolingRunner:
                 )
                 continue
 
-            status = "success" if result.success else (
+            status: ToolStatus = "success" if result.success else (
                 "warning" if not result.blocking else "error"
             )
             header = f"{result.tool} ({result.check_type})"
 
-            if verbose or not result.success:
-                if result.output:
-                    output = result.output
-                    if len(output) > 500:
-                        output = output[:500] + "\n... (truncated)"
-                    block = "\n".join([header] + output.split("\n"))
-                    blocks.append(ToolOutputBlock(text=block, status=status))
-                    continue
+            # Always show output if present
+            if result.output:
+                output = result.output
+                if len(output) > 500 and not verbose:
+                    output = output[:500] + "\n... (truncated)"
+                block = "\n".join([header] + output.split("\n"))
+                blocks.append(ToolOutputBlock(text=block, status=status))
+                continue
 
             blocks.append(ToolOutputBlock(text=header, status=status))
 
