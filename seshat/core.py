@@ -505,7 +505,7 @@ def commit_with_ai(
             panel_style="yellow",
             border_style="yellow",
             title_style="yellow",
-            title_align="left"
+            title_align="left",
             icon=ui.icons["file"],
         )
     
@@ -524,11 +524,7 @@ def commit_with_ai(
             ]
             
             if enabled_checks:
-                ui.step(
-                    "Executando verificações configuradas no .seshat",
-                    icon=f"\n{ui.icons['step']}",
-                    fg="cyan",
-                )
+                ui.step("Executando verificações configuradas no .seshat")
                 
                 runner = ToolingRunner()
                 files = paths or get_staged_files()
