@@ -685,7 +685,7 @@ def summary(
     p = Panel(
         body,
         border_style=b_style,
-        box=box.ROUNDED,
+        box=box.HORIZONTALS,
         title=Text(f" {icon_str} {title_text} ", style=style.get("panel_title", Style(color="cyan", bold=True))),
         title_align="left",
         padding=(1, 2),
