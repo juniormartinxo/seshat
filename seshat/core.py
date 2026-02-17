@@ -378,9 +378,8 @@ def run_pre_commit_checks(
     runner = ToolingRunner()
     seshat_config = getattr(runner, "seshat_config", None)
     ui_config = getattr(seshat_config, "ui", None) if seshat_config is not None else None
-    if ui_config is not None:
-        ui.apply_configured_theme(ui_config)
-        ui.apply_configured_icons(ui_config)
+    if isinstance(ui_config, dict):
+        ui.apply_config(ui_config)
     project_type = runner.detect_project_type()
     
     if not project_type:
