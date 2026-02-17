@@ -178,10 +178,10 @@ def flow(
                     ui.warning(f"Pulando: {result.message}")
                     skipped_count += 1
                 elif result.success:
-                    ui.success(f"Sucesso: {result.message}")
+                    ui.success(f"Sucesso: {result.message}\n")
                     success_count += 1
                 else:
-                    ui.error(f"Falha: {result.message}")
+                    ui.error(f"Falha: {result.message}\n")
                     fail_count += 1
 
         # Determine overall status
