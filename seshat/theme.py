@@ -39,7 +39,7 @@ class UIIcons:
     check: str = "✓"
     cross: str = "✗"
     arrow: str = "→"
-    git: str = "⎇"
+    git: str = "🖧"
     lock: str = "🔒"
     config: str = "⚙"
 
