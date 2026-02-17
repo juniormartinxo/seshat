@@ -179,7 +179,7 @@ class ToolingRunner:
                 output += "\n" + result.stderr
             
             return ToolResult(
-                tool=tool.name,
+                tool="@" + tool.name,
                 check_type=tool.check_type,
                 success=result.returncode == 0,
                 output=output.strip(),
