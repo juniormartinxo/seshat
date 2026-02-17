@@ -397,7 +397,7 @@ def warning(text: str, icon: str | None = None) -> None:
 def error(text: str, icon: str | None = None) -> None:
     icon = icons["error"] if icon is None else icon
     if _use_rich():
-        _console_err().print(
+        _active_console().print(
             Text.assemble(
                 (f"{icon} ", style["error"]),
                 (text, style["error"]),
@@ -783,7 +783,7 @@ def file_list(
         border_style=style.get("panel_border", Style(color="grey37")),
         box=box.ROUNDED,
         title=Text(
-            f" {icons.get('folder', '📁')} {title_text} ({len(files)}) ",
+            f" {icons.get('folder', _default_icons.folder)} {title_text} ({len(files)}) ",
             style=style.get("panel_title", Style(color="cyan", bold=True)),
         ),
         title_align="left",
@@ -850,7 +850,7 @@ def render_tool_output(
     
     if start_index >= len(lines):
         if header_style:
-            console.print(Text(f" {lines[0]}", style=header_style))
+            console.print(Text(f"{lines[0]}", style=header_style)) # imprime a tool que será verificada
         return
 
     renderables: list[RenderableType] = []
@@ -890,7 +890,7 @@ def render_tool_output(
     if renderables:
         p = Panel(
             Group(*renderables),
-            box=box.SIMPLE,
+            box=box.HORIZONTALS,
             border_style=border_style,
             style="",
             title=_build_tool_panel_title(first_line, header_style),
