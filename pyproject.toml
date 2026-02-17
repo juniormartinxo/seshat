@@ -62,6 +62,7 @@ target-version = "py39"
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
+exclude = "^(build|dist)/"
 
 [[tool.mypy.overrides]]
 module = ["pytest.*", "_pytest.*"]
