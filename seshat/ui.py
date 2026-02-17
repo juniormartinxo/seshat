@@ -734,7 +734,7 @@ def result_banner(
     p = Panel(
         body,
         border_style=border,
-        box=box.ROUNDED,
+        box=box.HORIZONTALS,
         title=Text(f" {status_icon} {title_text} ", style=status_style),
         title_align="left",
         padding=(1, 1),
@@ -922,7 +922,7 @@ def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
             title=Text(title_text, style=style.get("warning", Style(color="gold1", bold=True))),
             title_align="left",
             padding=(1, 2),
-            expand=False,
+            expand=True,
         )
         _active_console().print()
         _active_console().print(p)
