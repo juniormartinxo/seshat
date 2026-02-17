@@ -52,11 +52,8 @@ def flow(
     try:
         # Carrega configuração
         seshat_config = SeshatConfig.load(path)
-        ui_force_rich = None
         if isinstance(seshat_config.ui, dict):
-            ui_force_rich = seshat_config.ui.get("force_rich")
-        if ui_force_rich is not None:
-            ui.set_force_rich(bool(ui_force_rich))
+            ui.apply_config(seshat_config.ui)
         config = load_config()
         config = apply_project_overrides(config, seshat_config.commit)
         if provider:
