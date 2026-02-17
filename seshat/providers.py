@@ -342,7 +342,7 @@ class ZAIProvider(BaseProvider):
             or os.getenv("ZAI_API_KEY")
             or os.getenv("ZHIPU_API_KEY")
         )
-        self.model = os.getenv("AI_MODEL", "glm-5")
+        self.model = os.getenv("AI_MODEL", "z-ai/glm-5:free")
         self.base_url = os.getenv("ZAI_BASE_URL", "https://api.z.ai/api/paas/v4")
 
     def validate_env(self) -> None:
