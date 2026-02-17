@@ -922,7 +922,7 @@ def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
             title=Text(title_text, style=style.get("warning", Style(color="gold1", bold=True))),
             title_align="left",
             padding=(1, 2),
-            expand=True,
+            expand=False,
         )
         _active_console().print()
         _active_console().print(p)
