@@ -60,8 +60,25 @@ def is_tty() -> bool:
 
 
 def set_force_rich(value: bool | None) -> None:
-    global _FORCE_RICH
+    global _FORCE_RICH, _CONSOLE, _CONSOLE_ERR
     _FORCE_RICH = value
+    _CONSOLE = None
+    _CONSOLE_ERR = None
+
+
+def _coerce_bool(value: object) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        return None
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return None
 
 
 # ─── Console singletons ──────────────────────────────────────────
@@ -197,6 +214,19 @@ def apply_configured_icons(config: dict) -> None:
     if not isinstance(icons_cfg, dict):
         return
     apply_icons(icons_cfg)
+
+
+def apply_config(config: dict) -> None:
+    """Aplica configuração de UI completa em `.seshat` (force_rich/theme/icons)."""
+    if not isinstance(config, dict):
+        return
+
+    force_rich = _coerce_bool(config.get("force_rich"))
+    if force_rich is not None:
+        set_force_rich(force_rich)
+
+    apply_configured_theme(config)
+    apply_configured_icons(config)
 
 
 # ─── Primitives ───────────────────────────────────────────────────
@@ -964,6 +994,7 @@ __all__ = [
     "style",
     "icons",
     "UITheme",
+    "apply_config",
     "apply_configured_theme",
     "apply_configured_icons",
     "apply_theme",
