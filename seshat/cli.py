@@ -83,6 +83,8 @@ def commit(
         
         # Carrega configuração unificada
         seshat_config = SeshatConfig.load()
+        if isinstance(seshat_config.ui, dict):
+            ui.apply_config(seshat_config.ui)
         config = load_config()
         config = apply_project_overrides(config, seshat_config.commit)
         
