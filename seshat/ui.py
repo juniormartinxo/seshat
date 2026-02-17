@@ -360,7 +360,7 @@ def info(text: str, icon: str | None = None) -> None:
     if _use_rich():
         _active_console().print(
             Text.assemble(
-                (f"{icon}  ", style["info"]),
+                (f"{icon} ", style["info"]),
                 (text, style["info"]),
             )
         )
@@ -868,7 +868,7 @@ def render_tool_output(
                     break
                 if first_line_no is None:
                     first_line_no = int(match.group(1))
-                code_lines.append("└ " + match.group(2))
+                code_lines.append(match.group(2))
                 i += 1
             syntax = Syntax(
                 "\n".join(code_lines),
