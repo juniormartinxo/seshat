@@ -482,7 +482,7 @@ def init(
         "",
         "# UI",
         "ui:",
-        "  force_rich: false",
+        "  force_rich: true",
         "",
         "# Custom commands (uncomment and modify as needed)",
         "# commands:",
