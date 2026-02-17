@@ -504,6 +504,9 @@ def commit_with_ai(
             content=content,
             panel_style="yellow",
             border_style="yellow",
+            title_style="yellow",
+            title_align="left",
+            icon=ui.icons["file"],
         )
     
     # Run pre-commit checks if requested via CLI flag
