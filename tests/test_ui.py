@@ -3,6 +3,19 @@ import pytest
 from seshat import ui
 
 
+_TERMINAL_ENV_VARS = (
+    "COLORTERM", "WT_SESSION", "TERM_PROGRAM", "TERM",
+    "FORCE_COLOR", "CLICOLOR_FORCE", "SESHAT_FORCE_COLOR",
+)
+
+
+@pytest.fixture
+def disable_terminal_rich(monkeypatch):
+    """Remove env vars that _terminal_supports_rich() checks."""
+    for var in _TERMINAL_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
 @pytest.fixture
 def mock_rich_console(monkeypatch):
     # Mockando a classe 'rich.console.Console' e sua instância
@@ -15,7 +28,7 @@ def mock_rich_console(monkeypatch):
 
 
 # Testando helper checks
-def test_is_tty(monkeypatch):
+def test_is_tty(monkeypatch, disable_terminal_rich):
     monkeypatch.setattr("sys.stdout.isatty", lambda: True)
     ui.set_force_rich(None)
     assert ui.is_tty() is True
@@ -71,7 +84,7 @@ def test_hr_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 1
 
 
-def test_hr_no_rich(mock_rich_console, monkeypatch):
+def test_hr_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -96,7 +109,7 @@ def test_title_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 2
 
 
-def test_title_no_rich(mock_rich_console, monkeypatch):
+def test_title_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -119,7 +132,7 @@ def test_section_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 2
 
 
-def test_section_no_rich(mock_rich_console, monkeypatch):
+def test_section_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -131,7 +144,7 @@ def test_section_no_rich(mock_rich_console, monkeypatch):
 
 
 # Testando confirm
-def test_confirm(monkeypatch):
+def test_confirm(monkeypatch, disable_terminal_rich):
     # Ensure isatty is False to use typer.confirm
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     mock_confirm = MagicMock(return_value=True)
@@ -156,7 +169,7 @@ def test_prompt(monkeypatch):
 
 
 # Testando prompt with choices - Non-Rich (Typer)
-def test_prompt_choices_no_rich(monkeypatch):
+def test_prompt_choices_no_rich(monkeypatch, disable_terminal_rich):
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     mock_prompt = MagicMock(return_value="choice1")
     click_choice_mock = MagicMock()
@@ -244,7 +257,7 @@ def test_table_rich(mock_rich_console, monkeypatch):
     mock_console_instance.print.assert_called()
 
 
-def test_table_no_rich(mock_rich_console, monkeypatch):
+def test_table_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -286,7 +299,7 @@ def test_kv_rich(mock_rich_console, monkeypatch):
     assert call_args is not None
 
 
-def test_kv_no_rich(mock_rich_console, monkeypatch):
+def test_kv_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -315,7 +328,7 @@ def test_summary_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 2  # blank + panel
 
 
-def test_summary_no_rich(mock_rich_console, monkeypatch):
+def test_summary_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -344,7 +357,7 @@ def test_result_banner_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 2
 
 
-def test_result_banner_no_rich(mock_rich_console, monkeypatch):
+def test_result_banner_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -373,7 +386,7 @@ def test_file_list_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 2
 
 
-def test_file_list_no_rich(mock_rich_console, monkeypatch):
+def test_file_list_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
@@ -385,7 +398,7 @@ def test_file_list_no_rich(mock_rich_console, monkeypatch):
     assert mock_console_instance.print.call_count == 3
 
 
-def test_file_list_numbered_no_rich(mock_rich_console, monkeypatch):
+def test_file_list_numbered_no_rich(mock_rich_console, monkeypatch, disable_terminal_rich):
     mock_console_class, mock_console_instance = mock_rich_console
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
     ui.set_force_rich(None)
