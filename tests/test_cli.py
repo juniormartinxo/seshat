@@ -74,6 +74,56 @@ def test_commit_yes_skips_confirmation_and_runs_git(
     assert "Commit criado" in success_msg
 
 
+def test_commit_applies_ui_config_from_seshat(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    called: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {
+            "AI_PROVIDER": "openai",
+            "AI_MODEL": "gpt-4",
+            "API_KEY": "secret",
+            "COMMIT_LANGUAGE": "ENG",
+            "MAX_DIFF_SIZE": 3000,
+            "WARN_DIFF_SIZE": 2500,
+        },
+    )
+    monkeypatch.setattr(cli_module, "normalize_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "validate_conf", lambda cfg: (True, None))
+    monkeypatch.setattr(
+        cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
+    )
+    monkeypatch.setattr(
+        cli_module.subprocess, "check_call", lambda args: called.setdefault("args", args)
+    )
+    monkeypatch.setattr(
+        cli_module, "get_last_commit_summary", lambda: "abc123 add tests"
+    )
+    monkeypatch.setattr(
+        cli_module.ui, "success", lambda msg: called.setdefault("success", msg)
+    )
+    monkeypatch.setattr(cli_module.ui, "confirm", lambda *a, **k: True)
+    monkeypatch.setattr(cli_module.ui, "apply_config", lambda cfg: called.setdefault("ui_cfg", cfg))
+
+    with runner.isolated_filesystem():
+        with open(".seshat", "w") as f:
+            f.write("project_type: python")
+        monkeypatch.setattr(
+            cli_module.SeshatConfig,
+            "load",
+            lambda: cli_module.SeshatConfig(
+                project_type="python",
+                ui={"force_rich": True},
+            ),
+        )
+        result = runner.invoke(cli, ["commit", "--yes"])
+
+    assert result.exit_code == 0
+    assert called.get("ui_cfg") == {"force_rich": True}
+
+
 def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     errors = []
