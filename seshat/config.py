@@ -14,7 +14,7 @@ DEFAULT_MODELS = {
     "claude": "claude-3-opus-20240229",
     "openai": "gpt-4-turbo-preview",
     "gemini": "gemini-2.0-flash",
-    "zai": "glm-5",
+    "zai": "z-ai/glm-5:free",
     "ollama": "llama3",
 }
 VALID_PROVIDERS = set(DEFAULT_MODELS.keys())
