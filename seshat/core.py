@@ -495,12 +495,22 @@ def commit_with_ai(
     elif not code_review and seshat_config.code_review.get("enabled", False):
         code_review = True
         ui.info("Code review ativado via .seshat", icon="")
+
+    arquivos_analise = paths or get_staged_files()
+    if arquivos_analise:
+        content = "\n".join([f"- {os.path.abspath(f)}" for f in arquivos_analise])
+        ui.panel(
+            "Iniciando commit do(s) arquivo(s)",
+            content=content,
+            panel_style="yellow",
+            border_style="yellow",
+        )
     
     # Run pre-commit checks if requested via CLI flag
     if check and not no_check:
         success, _ = run_pre_commit_checks(check, paths, verbose)
         if not success:
-            raise ValueError("Verificações pre-commit falharam.")
+            raise ValueError("Verificações pre-commit falharam.\n")
     elif not no_check:
         # Check if .seshat has checks enabled and run them automatically
         if seshat_config.checks:
@@ -538,7 +548,7 @@ def commit_with_ai(
                     has_blocking_failures = runner.has_blocking_failures(all_results)
                     if has_blocking_failures:
                         ui.error("Verificações falharam. Commit bloqueado.")
-                        raise ValueError("Verificações pre-commit falharam.")
+                        raise ValueError("Verificações pre-commit falharam.\n")
                     else:
                         ui.success("Verificações concluídas.")
     
