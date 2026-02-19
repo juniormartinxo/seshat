@@ -51,7 +51,7 @@ commit:
   provider: openai
   model: gpt-4-turbo-preview
   no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
-  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
 
 checks:
   lint:
