@@ -269,7 +269,27 @@ def is_markdown_only_commit(paths: Optional[List[str]] = None) -> bool:
     staged_files = get_staged_files(paths, exclude_deleted=True)
     if not staged_files:
         return False
-    return all(f.lower().endswith((".md", ".mdx")) for f in staged_files)
+    return all(_is_markdown_file(f) for f in staged_files)
+
+
+def _is_markdown_file(file_path: str) -> bool:
+    return file_path.lower().endswith((".md", ".mdx"))
+
+
+def _is_dotfile_path(file_path: str) -> bool:
+    normalized = file_path.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part]
+    if not parts:
+        return False
+    return any(part.startswith(".") and part not in (".", "..") for part in parts)
+
+
+def is_dotfile_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes are only dotfiles/directories."""
+    staged_files = get_staged_files(paths, exclude_deleted=True)
+    if not staged_files:
+        return False
+    return all(_is_dotfile_path(f) for f in staged_files)
 
 
 def generate_deletion_commit_message(deleted_files: List[str]) -> str:
@@ -299,6 +319,16 @@ def generate_markdown_commit_message(files: List[str]) -> str:
         files_str = ", ".join(files)
         return f"docs: update {files_str}"
     return f"docs: update {len(files)} arquivos"
+
+
+def generate_generic_update_commit_message(files: List[str]) -> str:
+    """Generate generic automatic commit message for non-code file updates."""
+    if len(files) == 1:
+        return f"chore: update {files[0]}"
+    elif len(files) <= 3:
+        files_str = ", ".join(files)
+        return f"chore: update {files_str}"
+    return f"chore: update {len(files)} arquivos"
 
 
 def _normalize_ext_list(values: Optional[object]) -> List[str]:
@@ -472,6 +502,17 @@ def commit_with_ai(
         ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
+    # Fast path: if commit is only dotfiles, skip AI and generate automatic message
+    if is_dotfile_only_commit(paths):
+        dotfiles = get_staged_files(paths, exclude_deleted=True)
+        commit_msg = generate_generic_update_commit_message(dotfiles)
+        ui.info(
+            f"Commit de dotfiles detectado ({len(dotfiles)} arquivo(s))",
+            icon=ui.icons["info"],
+        )
+        ui.info(f"Mensagem automática: {commit_msg}")
+        return commit_msg, None
+
     # Configurable no-AI bypass for selected file types/paths
     commit_config = getattr(seshat_config, "commit", {}) or {}
     no_ai_extensions = _normalize_ext_list(commit_config.get("no_ai_extensions"))
@@ -479,7 +520,10 @@ def commit_with_ai(
     if no_ai_extensions or no_ai_paths:
         staged_files = get_staged_files(paths, exclude_deleted=True)
         if is_no_ai_only_commit(staged_files, no_ai_extensions, no_ai_paths):
-            commit_msg = generate_markdown_commit_message(staged_files)
+            if all(_is_markdown_file(f) for f in staged_files):
+                commit_msg = generate_markdown_commit_message(staged_files)
+            else:
+                commit_msg = generate_generic_update_commit_message(staged_files)
             ui.info(
                 f"Commit sem IA detectado ({len(staged_files)} arquivo(s))",
             icon=ui.icons["bolt"],
