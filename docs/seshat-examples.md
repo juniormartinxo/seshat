@@ -12,7 +12,7 @@ commit:
   provider: openai
   model: gpt-4-turbo-preview
   no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
-  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
 
 checks:
   lint:
@@ -84,7 +84,7 @@ project_type: typescript
 
 commit:
   no_ai_extensions: [".md", ".mdx"]
-  no_ai_paths: ["docs/", ".github/"]
+  no_ai_paths: ["docs/", ".github/", ".env", ".nvmrc"]
 
 checks:
   lint:
@@ -126,5 +126,5 @@ Use `commit.no_ai_extensions` e `commit.no_ai_paths` para gerar commit automáti
 ```yaml
 commit:
   no_ai_extensions: [".md", ".mdx", ".yml", ".yaml", ".toml"]
-  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", "LICENSE"]
+  no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", "LICENSE", ".env", ".nvmrc"]
 ```
