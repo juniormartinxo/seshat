@@ -432,7 +432,7 @@ def init(
         f"  # provider: {provider_hint}",
         f"  # model: {model_hint}",
         "  # no_ai_extensions: [\".md\", \".mdx\"]",
-        "  # no_ai_paths: [\"docs/\", \".github/\", \"CHANGELOG.md\"]",
+        "  # no_ai_paths: [\"docs/\", \".github/\", \"CHANGELOG.md\", \".env\", \".nvmrc\"]",
         "",
         "# Pre-commit checks",
         "checks:",
