@@ -39,6 +39,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 * 📝 **Commits Automáticos para Docs (NOVO!):** Commits contendo apenas arquivos Markdown geram mensagem automática sem IA.
+* ⚙️ **Commits Automáticos para Dotfiles (NOVO!):** Commits contendo apenas dotfiles (ex.: `.env`, `.nvmrc`) geram mensagem automática genérica sem IA.
 * 🚫 **Bypass configurável de IA (NOVO!):** `commit.no_ai_extensions` e `commit.no_ai_paths` permitem commits automáticos para tipos de arquivo específicos.
 * 🎨 **Tema Configurável (NOVO!):** Paleta de cores, estilos e ícones centralizados em `seshat/theme.py`, customizáveis via `.seshat`.
 
@@ -573,7 +574,7 @@ commit:
   # provider: openai
   # model: gpt-4-turbo-preview
   # no_ai_extensions: [".md", ".mdx"]
-  # no_ai_paths: ["docs/", ".github/", "CHANGELOG.md"]
+  # no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
 
 # UI customization (optional)
 # ui:
