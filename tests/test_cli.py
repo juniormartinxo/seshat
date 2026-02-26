@@ -47,8 +47,11 @@ def test_commit_yes_skips_confirmation_and_runs_git(
     monkeypatch.setattr(
         cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
     )
+    monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-1"})
     monkeypatch.setattr(
-        cli_module.subprocess, "check_call", lambda args: called.setdefault("args", args)
+        cli_module.subprocess,
+        "check_call",
+        lambda args, **kwargs: called.update(args=args, env=kwargs.get("env")),
     )
     monkeypatch.setattr(
         cli_module, "get_last_commit_summary", lambda: "abc123 add tests"
@@ -69,6 +72,7 @@ def test_commit_yes_skips_confirmation_and_runs_git(
     assert "--date" in args
     assert "2020-01-01" in args
     assert "-m" in args
+    assert called.get("env") == {"GPG_TTY": "/tmp/tty-1"}
     
     success_msg = str(called.get("success", ""))
     assert "Commit criado" in success_msg
@@ -95,8 +99,11 @@ def test_commit_applies_ui_config_from_seshat(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
     )
+    monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-2"})
     monkeypatch.setattr(
-        cli_module.subprocess, "check_call", lambda args: called.setdefault("args", args)
+        cli_module.subprocess,
+        "check_call",
+        lambda args, **kwargs: called.update(args=args, env=kwargs.get("env")),
     )
     monkeypatch.setattr(
         cli_module, "get_last_commit_summary", lambda: "abc123 add tests"
@@ -122,6 +129,7 @@ def test_commit_applies_ui_config_from_seshat(monkeypatch: pytest.MonkeyPatch) -
 
     assert result.exit_code == 0
     assert called.get("ui_cfg") == {"force_rich": True}
+    assert called.get("env") == {"GPG_TTY": "/tmp/tty-2"}
 
 
 def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
