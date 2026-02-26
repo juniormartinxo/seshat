@@ -62,8 +62,16 @@ def commit(
         "--no-check",
         help="Disable all pre-commit checks",
     ),
+    format: Optional[str] = typer.Option(
+        None,
+        "--format",
+        help="Formato de saída: text (padrão) ou json (para integrações externas como extensões de editor)",
+        show_choices=True,
+    ),
 ) -> None:
     """Generate and execute AI-powered commits"""
+    if format == "json":
+        ui.enable_json_mode()
     try:
         # Verificar se .seshat existe (obrigatório)
         if not Path(".seshat").exists():
@@ -163,33 +171,44 @@ def commit(
                 no_check=no_check,
             )
 
-        if ui.is_tty():
+        if ui.is_json_mode():
+            ui.emit("message_ready", message=commit_message)
+            should_commit = yes or ui.confirm("Deseja confirmar o commit?")
+        elif ui.is_tty():
             ui.table("Mensagem sugerida", ["Commit"], [[commit_message]])
             should_commit = yes or ui.confirm("\nDeseja confirmar o commit?")
         else:
             should_commit = yes or ui.confirm(
                 f"\nMensagem sugerida:\n\n{commit_message}\n"
             )
+
         if should_commit:
-            # Se a data for fornecida, use o parâmetro --date do Git
             git_args = ["git", "commit"]
             if not verbose:
                 git_args.append("--quiet")
             if date:
                 git_args.extend(["--date", date])
-            
             git_args.extend(["-m", commit_message])
             subprocess.check_call(git_args)
-            summary = get_last_commit_summary() or commit_message.splitlines()[0]
-            if date:
-                ui.success(f"Commit criado: {summary} (data: {date})")
+            commit_summary = get_last_commit_summary() or commit_message.splitlines()[0]
+            if ui.is_json_mode():
+                extra = {"date": date} if date else {}
+                ui.emit("committed", summary=commit_summary, **extra)
+            elif date:
+                ui.success(f"Commit criado: {commit_summary} (data: {date})")
             else:
-                ui.success(f"Commit criado: {summary}")
+                ui.success(f"Commit criado: {commit_summary}")
         else:
-            ui.warning("Commit cancelado")
+            if ui.is_json_mode():
+                ui.emit("cancelled", reason="user_declined")
+            else:
+                ui.warning("Commit cancelado")
 
     except Exception as e:
-        display_error(str(e))
+        if ui.is_json_mode():
+            ui.emit("error", message=str(e))
+        else:
+            display_error(str(e))
         sys.exit(1)
 
 
