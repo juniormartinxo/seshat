@@ -6,11 +6,12 @@ mantêm a mesma assinatura para retrocompatibilidade.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import re
 from dataclasses import dataclass
-from typing import Iterable, Optional, Sequence, TypeVar, overload, Literal
+from typing import Any, Iterable, Optional, Sequence, TypeVar, overload, Literal
 
 import click
 import typer
@@ -37,6 +38,28 @@ from rich.padding import Padding
 from .theme import UITheme, UIIcons, default_theme, theme_from_palette, theme_from_config
 
 _FORCE_RICH: bool | None = None
+_JSON_MODE: bool = False
+
+
+# ─── JSON mode ────────────────────────────────────────────────────
+
+
+def enable_json_mode() -> None:
+    """Ativa o modo JSON: toda saída vira eventos JSON em stdout."""
+    global _JSON_MODE, _CONSOLE, _CONSOLE_ERR
+    _JSON_MODE = True
+    _CONSOLE = None   # Força recriação com stderr=True
+    _CONSOLE_ERR = None
+
+
+def is_json_mode() -> bool:
+    return _JSON_MODE
+
+
+def emit(event: str, **kwargs: Any) -> None:
+    """Emite um evento JSON para stdout (uma linha por evento)."""
+    data: dict[str, Any] = {"event": event, **kwargs}
+    print(json.dumps(data, ensure_ascii=False), flush=True)
 
 
 # ─── Color detection ──────────────────────────────────────────────
@@ -110,13 +133,16 @@ _ACTIVE_PROGRESS: Progress | None = None
 def _console() -> Console:
     global _CONSOLE
     if _CONSOLE is None:
-        # Se for TTY ou FORCE_COLOR, forçamos o terminal para garantir cores
-        should_force = _use_rich()
-        _CONSOLE = Console(
-            stderr=False,
-            color_system="auto" if should_force else None,
-            force_terminal=should_force,
-        )
+        if _JSON_MODE:
+            # Em modo JSON stdout é reservado para eventos; rich vai para stderr
+            _CONSOLE = Console(stderr=True, color_system=None, force_terminal=False)
+        else:
+            should_force = _use_rich()
+            _CONSOLE = Console(
+                stderr=False,
+                color_system="auto" if should_force else None,
+                force_terminal=should_force,
+            )
     return _CONSOLE
 
 
@@ -282,6 +308,9 @@ def panel(
     title_align: Literal["left", "center", "right"] = "center",
     icon: str | None = None,
 ) -> None:
+    if _JSON_MODE:
+        emit("panel", title=title, content=content if isinstance(content, str) else "")
+        return
     if _use_rich():
         resolved_panel = panel_style or style.get("panel", Style())
         if isinstance(resolved_panel, str):
@@ -394,6 +423,9 @@ def section(text: str) -> None:
 
 
 def step(text: str, icon: str | None = None, fg: str = "bright_black") -> None:
+    if _JSON_MODE:
+        emit("step", message=text)
+        return
     icon = icons["step"] if icon is None else icon
     if _use_rich():
         text_style = style.get(fg, Style.parse(fg))
@@ -408,6 +440,9 @@ def step(text: str, icon: str | None = None, fg: str = "bright_black") -> None:
 
 
 def info(text: str, icon: str | None = None) -> None:
+    if _JSON_MODE:
+        emit("info", message=text)
+        return
     icon = icons["info"] if icon is None else icon
     if _use_rich():
         _active_console().print(
@@ -421,6 +456,9 @@ def info(text: str, icon: str | None = None) -> None:
 
 
 def success(text: str, icon: str | None = None) -> None:
+    if _JSON_MODE:
+        emit("success", message=text)
+        return
     icon = icons["success"] if icon is None else icon
     if _use_rich():
         _active_console().print(
@@ -434,6 +472,9 @@ def success(text: str, icon: str | None = None) -> None:
 
 
 def warning(text: str, icon: str | None = None) -> None:
+    if _JSON_MODE:
+        emit("warning", message=text)
+        return
     icon = icons["warning"] if icon is None else icon
     if _use_rich():
         _active_console().print(
@@ -447,6 +488,9 @@ def warning(text: str, icon: str | None = None) -> None:
 
 
 def error(text: str, icon: str | None = None) -> None:
+    if _JSON_MODE:
+        emit("error", message=text)
+        return
     icon = icons["error"] if icon is None else icon
     if _use_rich():
         _active_console().print(
@@ -495,6 +539,13 @@ def badge(text: str, badge_style: str | Style | None = None) -> Text:
 
 
 def confirm(message: str, default: bool = False) -> bool:
+    if _JSON_MODE:
+        emit("confirm_needed", message=message, default=default)
+        try:
+            answer = sys.stdin.readline().strip().lower()
+            return answer in ("y", "yes", "s", "sim", "1", "true")
+        except (EOFError, OSError):
+            return default
     if _use_rich():
         return Confirm.ask(f"  {icons['confirm']} {message}", default=default)
     return typer.confirm(message, default=default)
@@ -533,6 +584,18 @@ def prompt(
     type: type | None = None,
     choices: Optional[Sequence[str]] = None,
 ) -> object:
+    if _JSON_MODE:
+        emit(
+            "choice_needed",
+            message=message,
+            choices=list(choices) if choices else None,
+            default=str(default) if default is not None else None,
+        )
+        try:
+            answer = sys.stdin.readline().strip()
+            return answer if answer else (str(default) if default is not None else "")
+        except (EOFError, OSError):
+            return str(default) if default is not None else ""
     if choices:
         if _use_rich():
             if default is None:
@@ -571,6 +634,9 @@ class Status:
     _status: Optional[RichStatus] = None
 
     def __enter__(self) -> "Status":
+        if _JSON_MODE:
+            emit("progress_started", message=self.message)
+            return self
         if _use_rich():
             self._status = _active_console().status(
                 Text(f" {self.message}", style=style.get("info", Style(color="cyan"))),
@@ -583,10 +649,16 @@ class Status:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        if _JSON_MODE:
+            emit("progress_done", message=self.message)
+            return
         if self._status:
             self._status.__exit__(exc_type, exc, tb)
 
     def update(self, message: str) -> None:
+        if _JSON_MODE:
+            emit("progress_update", message=message)
+            return
         if self._status and hasattr(self._status, "update"):
             self._status.update(
                 Text(f" {message}", style=style.get("info", Style(color="cyan")))
@@ -674,6 +746,10 @@ def table(
     *,
     alignments: Optional[Sequence[Literal["default", "left", "center", "right", "full"]]] = None,
 ) -> None:
+    if _JSON_MODE:
+        rows_list = [list(row) for row in rows]
+        emit("table", title=title_text, columns=list(columns), rows=rows_list)
+        return
     if _use_rich():
         tbl = Table(
             title=title_text,
@@ -712,6 +788,9 @@ def summary(
 
     Useful for showing configuration, results, or status at a glance.
     """
+    if _JSON_MODE:
+        emit("summary", title=title_text, data=items)
+        return
     if not _use_rich():
         echo(f"\n{title_text}")
         for k, v in items.items():
@@ -757,6 +836,9 @@ def result_banner(
     status_type: Literal["success", "warning", "error"] = "success",
 ) -> None:
     """Display a result banner with stats — ideal for end-of-flow summaries."""
+    if _JSON_MODE:
+        emit("result", title=title_text, stats={k: str(v) for k, v in stats.items()}, status=status_type)
+        return
     if not _use_rich():
         echo(f"\n{title_text}")
         for k, v in stats.items():
@@ -807,6 +889,9 @@ def file_list(
     numbered: bool = False,
 ) -> None:
     """Display a list of files with consistent formatting."""
+    if _JSON_MODE:
+        emit("file_list", title=title_text, files=list(files))
+        return
     if not _use_rich():
         echo(f"\n{title_text}")
         for i, f in enumerate(files, 1):
@@ -885,6 +970,9 @@ def render_tool_output(
     language: str = "python",
     status: str | None = None,
 ) -> None:
+    if _JSON_MODE:
+        emit("tool_output", output=output, language=language, status=status)
+        return
     if not _use_rich():
         echo(output)
         return
@@ -954,6 +1042,9 @@ def render_tool_output(
 
 
 def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
+    if _JSON_MODE:
+        emit("review_output", text=text, files=files or [])
+        return
     if _use_rich():
         clean_text = text
         if clean_text.strip().startswith(f"{icons['info']} Code review:"):
@@ -985,6 +1076,9 @@ def display_code_review(text: str, files: Optional[list[str]] = None) -> None:
 # ─── Exports ──────────────────────────────────────────────────────
 
 __all__ = [
+    "enable_json_mode",
+    "is_json_mode",
+    "emit",
     "is_tty",
     "echo",
     "hr",
