@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import List, Optional, Callable
 
 from .core import commit_with_ai
-from .utils import get_last_commit_summary
+from .utils import build_gpg_env, get_last_commit_summary
 
 @dataclass
 class ProcessResult:
@@ -153,7 +153,13 @@ class BatchCommitService:
                 cmd.extend(["--quiet"])
             cmd.extend(["--", file])
 
-            commit_result = subprocess.run(cmd, capture_output=True, text=True)
+            commit_result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=build_gpg_env(),
+            )
             if commit_result.returncode != 0:
                 output = self._git_output(commit_result)
                 if self._is_nothing_to_commit(output) or self._is_git_lock_error(output):
