@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Any
 from . import ui
 from .core import commit_with_ai  # noqa: F401
-from .utils import display_error, get_last_commit_summary
+from .utils import build_gpg_env, display_error, get_last_commit_summary
 from .config import (
     load_config,
     normalize_config,
@@ -189,7 +189,7 @@ def commit(
             if date:
                 git_args.extend(["--date", date])
             git_args.extend(["-m", commit_message])
-            subprocess.check_call(git_args)
+            subprocess.check_call(git_args, env=build_gpg_env())
             commit_summary = get_last_commit_summary() or commit_message.splitlines()[0]
             if ui.is_json_mode():
                 extra = {"date": date} if date else {}
