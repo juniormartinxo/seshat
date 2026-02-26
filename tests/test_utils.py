@@ -57,3 +57,34 @@ def test_normalize_commit_subject_case_keeps_lowercase() -> None:
 )
 def test_is_valid_conventional_commit_cases(message: str, expected: bool) -> None:
     assert utils.is_valid_conventional_commit(message) is expected
+
+
+def test_build_gpg_env_keeps_existing_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GPG_TTY", "/tmp/existing-tty")
+    env = utils.build_gpg_env()
+    assert env["GPG_TTY"] == "/tmp/existing-tty"
+
+
+def test_build_gpg_env_sets_tty_when_stdin_is_tty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GPG_TTY", raising=False)
+
+    class FakeStdin:
+        def isatty(self) -> bool:
+            return True
+
+        def fileno(self) -> int:
+            return 7
+
+    monkeypatch.setattr(utils.sys, "stdin", FakeStdin())
+    monkeypatch.setattr(utils.os, "ttyname", lambda fd: f"/dev/pts/{fd}")
+
+    env = utils.build_gpg_env()
+    assert env["GPG_TTY"] == "/dev/pts/7"
+
+
+def test_build_gpg_env_ignores_tty_detection_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GPG_TTY", raising=False)
+    monkeypatch.setattr(utils.sys, "stdin", object())
+
+    env = utils.build_gpg_env()
+    assert "GPG_TTY" not in env
