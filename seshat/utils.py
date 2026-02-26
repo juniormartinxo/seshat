@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import subprocess
@@ -6,6 +7,20 @@ import threading
 from typing import Callable, Optional, Sequence
 
 from . import ui
+
+
+def build_gpg_env() -> dict[str, str]:
+    """Retorna ambiente com GPG_TTY quando disponível para pinentry em commits assinados."""
+    env = os.environ.copy()
+    if "GPG_TTY" in env:
+        return env
+
+    try:
+        if sys.stdin.isatty():
+            env["GPG_TTY"] = os.ttyname(sys.stdin.fileno())
+    except (OSError, AttributeError):
+        pass
+    return env
 
 
 def _write_inline(text: str) -> None:
