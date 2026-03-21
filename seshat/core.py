@@ -276,6 +276,71 @@ def _is_markdown_file(file_path: str) -> bool:
     return file_path.lower().endswith((".md", ".mdx"))
 
 
+_LOCK_FILE_NAMES = {
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "Pipfile.lock",
+    "composer.lock",
+    "Gemfile.lock",
+    "Cargo.lock",
+    "flake.lock",
+    "bun.lockb",
+    "bun.lock",
+    "uv.lock",
+    "pdm.lock",
+    "packages.lock.json",
+    "pnpm-lock.yml",
+}
+
+
+def _is_lock_file(file_path: str) -> bool:
+    basename = os.path.basename(file_path)
+    return basename in _LOCK_FILE_NAMES
+
+
+def filter_lock_files_from_diff(diff: str) -> str:
+    """Remove lock file sections from a git diff string."""
+    import re
+    if not diff:
+        return diff
+
+    file_pattern = re.compile(r'^diff --git a/(.+?) b/(.+?)$', re.MULTILINE)
+    matches = list(file_pattern.finditer(diff))
+
+    if not matches:
+        return diff
+
+    filtered_sections = []
+    for i, match in enumerate(matches):
+        file_path = match.group(2)
+        if not _is_lock_file(file_path):
+            start = match.start()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(diff)
+            filtered_sections.append(diff[start:end])
+
+    return "".join(filtered_sections)
+
+
+def is_lock_file_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes are only lock files."""
+    staged_files = get_staged_files(paths, exclude_deleted=True)
+    if not staged_files:
+        return False
+    return all(_is_lock_file(f) for f in staged_files)
+
+
+def generate_lock_file_commit_message(files: List[str]) -> str:
+    """Generate automatic commit message for lock file updates."""
+    if len(files) == 1:
+        return f"chore: update {files[0]}"
+    elif len(files) <= 3:
+        files_str = ", ".join(files)
+        return f"chore: update {files_str}"
+    return f"chore: update {len(files)} lock files"
+
+
 def _is_dotfile_path(file_path: str) -> bool:
     normalized = file_path.replace("\\", "/")
     parts = [part for part in normalized.split("/") if part]
@@ -502,6 +567,17 @@ def commit_with_ai(
         ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
+    # Fast path: if commit is only lock files, skip AI and generate automatic message
+    if is_lock_file_only_commit(paths):
+        lock_files = get_staged_files(paths, exclude_deleted=True)
+        commit_msg = generate_lock_file_commit_message(lock_files)
+        ui.info(
+            f"Commit de lock files detectado ({len(lock_files)} arquivo(s))",
+            icon=ui.icons["info"],
+        )
+        ui.info(f"Mensagem automática: {commit_msg}")
+        return commit_msg, None
+
     # Fast path: if commit is only dotfiles, skip AI and generate automatic message
     if is_dotfile_only_commit(paths):
         dotfiles = get_staged_files(paths, exclude_deleted=True)
@@ -595,6 +671,9 @@ def commit_with_ai(
                         ui.success("Verificações concluídas.")
     
     diff = get_git_diff(skip_confirmation, paths=paths)
+
+    # Filter lock files from diff before sending to AI
+    diff = filter_lock_files_from_diff(diff)
 
     if verbose:
         ui.echo("📋 Diff analysis:")
