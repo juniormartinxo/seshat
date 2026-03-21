@@ -589,3 +589,60 @@ def test_commit_with_ai_code_review_no_files(monkeypatch: pytest.MonkeyPatch) ->
     assert commit_msg == "feat: add tests"
     assert review is not None
     assert review.summary
+
+
+def test_filter_lock_files_from_diff() -> None:
+    diff = (
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+        "diff --git a/package-lock.json b/package-lock.json\n"
+        "--- a/package-lock.json\n"
+        "+++ b/package-lock.json\n"
+        "@@ -1 +1 @@\n"
+        "-lock old\n"
+        "+lock new\n"
+        "diff --git a/src/utils.py b/src/utils.py\n"
+        "--- a/src/utils.py\n"
+        "+++ b/src/utils.py\n"
+        "@@ -1 +1 @@\n"
+        "-util old\n"
+        "+util new\n"
+    )
+    result = core.filter_lock_files_from_diff(diff)
+    assert "package-lock.json" not in result
+    assert "src/app.py" in result
+    assert "src/utils.py" in result
+
+
+def test_filter_lock_files_from_diff_all_lock_files() -> None:
+    diff = (
+        "diff --git a/poetry.lock b/poetry.lock\n"
+        "--- a/poetry.lock\n"
+        "+++ b/poetry.lock\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+    )
+    result = core.filter_lock_files_from_diff(diff)
+    assert result == ""
+
+
+def test_filter_lock_files_from_diff_no_lock_files() -> None:
+    diff = (
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+    )
+    result = core.filter_lock_files_from_diff(diff)
+    assert result == diff
+
+
+def test_filter_lock_files_from_diff_empty() -> None:
+    assert core.filter_lock_files_from_diff("") == ""
