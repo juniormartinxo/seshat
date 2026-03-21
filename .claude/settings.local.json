@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(python -m pytest tests/test_core.py -v -x --timeout=30)",
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(make test:*)",
+      "Bash(pip install:*)",
+      "Bash(pytest tests/ -x -q)",
+      "Bash(docker compose:*)"
+    ]
+  }
+}
