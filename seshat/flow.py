@@ -7,6 +7,7 @@ from .commands import cli
 from .config import load_config, normalize_config, validate_config, apply_project_overrides
 from .tooling_ts import SeshatConfig
 from . import ui
+from .utils import build_gpg_env, ensure_gpg_auth, is_gpg_signing_enabled
 
 @cli.command()
 def flow(
@@ -138,6 +139,12 @@ def flow(
             ui.file_list("Arquivos a serem processados", files)
             if not ui.confirm("Deseja prosseguir?"):
                 return
+
+        git_env = build_gpg_env()
+        if is_gpg_signing_enabled(git_env):
+            ui.step("Commits assinados detectados. Validando autenticação GPG antes do lote")
+            with ui.status("Autenticando com GPG"):
+                ensure_gpg_auth(git_env)
 
         success_count = 0
         fail_count = 0
