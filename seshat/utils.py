@@ -23,6 +23,79 @@ def build_gpg_env() -> dict[str, str]:
     return env
 
 
+def _git_config_get(
+    key: str,
+    env: Optional[dict[str, str]] = None,
+    *,
+    bool_mode: bool = False,
+) -> Optional[str]:
+    cmd = ["git", "config"]
+    if bool_mode:
+        cmd.append("--bool")
+    cmd.extend(["--get", key])
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if result.returncode != 0:
+        return None
+
+    value = result.stdout.strip()
+    return value or None
+
+
+def is_gpg_signing_enabled(env: Optional[dict[str, str]] = None) -> bool:
+    """Detecta se commits assinados com OpenPGP/GPG estão ativos no Git atual."""
+    env = env or build_gpg_env()
+    gpg_format = (_git_config_get("gpg.format", env=env) or "openpgp").lower()
+    if gpg_format != "openpgp":
+        return False
+
+    return (_git_config_get("commit.gpgsign", env=env, bool_mode=True) or "").lower() == "true"
+
+
+def ensure_gpg_auth(env: Optional[dict[str, str]] = None) -> dict[str, str]:
+    """
+    Se o repositório usa commits assinados com GPG/OpenPGP, faz uma assinatura
+    descartável para destravar o pinentry/gpg-agent antes do `git commit`.
+    """
+    env = env or build_gpg_env()
+    if not is_gpg_signing_enabled(env):
+        return env
+
+    gpg_program = _git_config_get("gpg.program", env=env) or "gpg"
+    signing_key = _git_config_get("user.signingkey", env=env)
+
+    cmd = [gpg_program, "--armor", "--detach-sign", "--output", os.devnull]
+    if signing_key:
+        cmd.extend(["--local-user", signing_key])
+
+    try:
+        result = subprocess.run(
+            cmd,
+            input="seshat-gpg-auth-check\n",
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Commit assinado com GPG detectado, mas não foi possível executar '{gpg_program}': {exc}"
+        ) from exc
+
+    if result.returncode == 0:
+        return env
+
+    details = (result.stderr or result.stdout or "").strip()
+    message = "Commit assinado com GPG detectado, mas a autenticação prévia falhou."
+    if details:
+        message = f"{message}\n{details}"
+    raise RuntimeError(message)
+
+
 def _write_inline(text: str) -> None:
     sys.stdout.write(text)
     sys.stdout.flush()
