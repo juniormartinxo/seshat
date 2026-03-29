@@ -167,9 +167,12 @@ def commit(
         ui.summary("Seshat Commit", summary_items, icon=ui.icons["commit"])
 
         if is_gpg_signing_enabled(git_env):
-            ui.step("Commit assinado detectado. Validando autenticação GPG antes de continuar")
-            with ui.status("Autenticando com GPG"):
+            if ui.is_tty():
                 git_env = ensure_gpg_auth(git_env)
+            else:
+                ui.step("Commit assinado detectado. Validando autenticação GPG antes de continuar")
+                with ui.status("Autenticando com GPG"):
+                    git_env = ensure_gpg_auth(git_env)
 
         with ui.status("Gerando mensagem de commit"):
             commit_message, review_result = commit_with_ai(
