@@ -39,6 +39,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * 📄 **Configuração por Projeto (NOVO!):** Arquivo `.seshat` para configurações locais do time.
 * 🗑️ **Commits Automáticos de Deleção (NOVO!):** Commits contendo apenas arquivos deletados são processados automaticamente sem chamar a IA.
 * 📝 **Commits Automáticos para Docs (NOVO!):** Commits contendo apenas arquivos Markdown geram mensagem automática sem IA.
+* 🖼️ **Commits Automáticos para Imagens (NOVO!):** Commits contendo apenas imagens geram mensagem automática sem IA, e imagens/docs são removidas do diff enviado aos providers.
 * ⚙️ **Commits Automáticos para Dotfiles (NOVO!):** Commits contendo apenas dotfiles (ex.: `.env`, `.nvmrc`) geram mensagem automática genérica sem IA.
 * 🚫 **Bypass configurável de IA (NOVO!):** `commit.no_ai_extensions` e `commit.no_ai_paths` permitem commits automáticos para tipos de arquivo específicos.
 * 🎨 **Tema Configurável (NOVO!):** Paleta de cores, estilos e ícones centralizados em `seshat/theme.py`, customizáveis via `.seshat`.
@@ -58,19 +59,23 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 `pipx` é uma ferramenta que instala e executa aplicativos Python em ambientes isolados, garantindo que as dependências do Seshat não interfiram em outros projetos.
 
 ```bash
-# 1. Instalar pipx (se você ainda não tiver)
+# Linux: instalar pipx (se você ainda não tiver)
 # Debian/Ubuntu (PEP 668): prefira o pacote do sistema
 sudo apt update
 sudo apt install pipx
 pipx ensurepath
 
-# Outras distros
+# Linux: outras distros
 python3 -m pip install --user pipx
 python3 -m pipx ensurepath
 
-# 2. Instalar Seshat
-pipx install git+https://github.com/juniormartinxo/seshat.git
+# Windows (PowerShell)
+py -m pip install --user pipx
+py -m pipx ensurepath
+py -m pipx install git+https://github.com/juniormartinxo/seshat.git
 ```
+
+> No Windows, feche e abra o PowerShell após `pipx ensurepath` para que o comando `seshat` entre no `PATH`.
 
 ### Instalação para Desenvolvimento
 
@@ -81,9 +86,13 @@ Para contribuir com o desenvolvimento do Seshat, siga estas etapas:
 git clone https://github.com/juniormartinxo/seshat.git
 cd seshat
 
-# 2. Criar um ambiente virtual (altamente recomendado)
+# 2. Criar um ambiente virtual (altamente recomendado, Linux/macOS)
 python3 -m venv .venv
-source .venv/bin/activate  # No Windows: .venv\Scripts\activate
+source .venv/bin/activate
+
+# 2b. Criar um ambiente virtual (Windows PowerShell)
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
 # 3. Instalar as dependências (inclui ferramentas de dev)
 pip install -e ".[dev]"
@@ -734,6 +743,34 @@ Se o comando `flow` não for reconhecido, verifique se a instalação está atua
 
 ```bash
 pip install --upgrade git+https://github.com/juniormartinxo/seshat.git
+```
+
+**`seshat` não é reconhecido no PowerShell:**
+
+Esse erro normalmente significa que o Seshat ainda não foi instalado no ambiente Python atual, ou que a pasta `Scripts` não entrou no `PATH`.
+
+```powershell
+# Opção 1: instalação global isolada com pipx
+py -m pip install --user pipx
+py -m pipx ensurepath
+py -m pipx install git+https://github.com/juniormartinxo/seshat.git
+
+# Opção 2: dentro do repositório, para desenvolvimento
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+py -m pip install -e ".[dev]"
+```
+
+Depois disso, abra um novo PowerShell e rode:
+
+```powershell
+seshat --help
+```
+
+Se preferir, dentro do ambiente virtual você também pode usar:
+
+```powershell
+py -m seshat --help
 ```
 
 **Flow concorrente e arquivos pulados:**
