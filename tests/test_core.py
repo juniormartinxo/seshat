@@ -295,6 +295,22 @@ def test_is_markdown_only_commit(monkeypatch: pytest.MonkeyPatch) -> None:
     assert core.is_markdown_only_commit() is False
 
 
+def test_is_image_only_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["assets/logo.png", "docs/diagram.svg"],
+    )
+    assert core.is_image_only_commit() is True
+
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["assets/logo.png", "README.md"],
+    )
+    assert core.is_image_only_commit() is False
+
+
 def test_is_dotfile_only_commit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         core,
@@ -404,6 +420,44 @@ def test_commit_with_ai_markdown_only(monkeypatch: pytest.MonkeyPatch) -> None:
     assert review is None
 
 
+def test_commit_with_ai_image_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {}
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_image_only_commit", lambda _paths=None: True)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["assets/logo.png"],
+    )
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "chore: update assets/logo.png"
+    assert review is None
+
+
 def test_commit_with_ai_dotfile_only(monkeypatch: pytest.MonkeyPatch) -> None:
     class DummyConfig:
         def __init__(self) -> None:
@@ -488,6 +542,200 @@ def test_commit_with_ai_no_ai_config(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
     assert commit_msg == "chore: update .github/workflows/ci.yml"
+    assert review is None
+
+
+def test_commit_with_ai_filters_no_ai_paths_from_review_and_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diff = (
+        "diff --git a/docs/script.py b/docs/script.py\n"
+        "--- a/docs/script.py\n"
+        "+++ b/docs/script.py\n"
+        "@@ -1 +1 @@\n"
+        "-print('old doc helper')\n"
+        "+print('new doc helper')\n"
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1 +1 @@\n"
+        "-print('old app')\n"
+        "+print('new app')\n"
+    )
+
+    class DummyProvider:
+        name = "openai"
+
+        def generate_commit_message(self, filtered_diff: str, model: object, code_review: bool) -> str:
+            assert "docs/script.py" not in filtered_diff
+            assert "src/app.py" in filtered_diff
+            return "feat: update app logic"
+
+        def generate_code_review(self, filtered_diff: str, model: object, custom_prompt: object) -> str:
+            assert "docs/script.py" not in filtered_diff
+            assert "src/app.py" in filtered_diff
+            return "RAW"
+
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review: dict[str, object] = {
+                "enabled": True,
+                "extensions": [".py"],
+            }
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = "python"
+            self.commit: dict[str, object] = {"no_ai_paths": ["docs/"]}
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_image_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_lock_file_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_dotfile_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_builtin_no_ai_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "get_git_diff", lambda *args, **kwargs: diff)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["docs/script.py", "src/app.py"],
+    )
+    monkeypatch.setattr(core, "get_provider", lambda _p: DummyProvider())
+    monkeypatch.setattr(core, "start_thinking_animation", lambda: DummyAnimation())
+    monkeypatch.setattr(core, "stop_thinking_animation", lambda _a: None)
+    monkeypatch.setattr(core, "normalize_commit_subject_case", lambda msg: msg)
+    monkeypatch.setattr(core, "is_valid_conventional_commit", lambda msg: True)
+    monkeypatch.setattr(
+        core,
+        "parse_standalone_review",
+        lambda _raw: CodeReviewResult(has_issues=False, summary="ok"),
+    )
+    monkeypatch.setattr(core, "format_review_for_display", lambda _r, _v: "display")
+    monkeypatch.setattr(core, "get_review_prompt", lambda **_kwargs: None)
+    monkeypatch.setattr(core.ui, "step", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "panel", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "display_code_review", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        skip_confirmation=True,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "feat: update app logic"
+    assert review is not None
+    assert review.summary == "ok"
+
+
+def test_commit_with_ai_builtin_non_ai_mix(monkeypatch: pytest.MonkeyPatch) -> None:
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {}
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_image_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_lock_file_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_builtin_no_ai_only_commit", lambda _paths=None: True)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["docs/guide.md", "assets/diagram.png"],
+    )
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "chore: update docs/guide.md, assets/diagram.png"
+    assert review is None
+
+
+def test_commit_with_ai_auto_message_when_diff_only_has_filtered_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    diff = (
+        "diff --git a/README.md b/README.md\n"
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-old docs\n"
+        "+new docs\n"
+        "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n"
+        "--- a/.github/workflows/ci.yml\n"
+        "+++ b/.github/workflows/ci.yml\n"
+        "@@ -1 +1 @@\n"
+        "-old ci\n"
+        "+new ci\n"
+    )
+
+    class DummyConfig:
+        def __init__(self) -> None:
+            self.code_review: dict[str, object] = {}
+            self.checks: dict[str, object] = {}
+            self.project_type: Optional[str] = None
+            self.commit: dict[str, object] = {"no_ai_paths": [".github/"]}
+
+        @staticmethod
+        def load(_path: object = None) -> "DummyConfig":
+            return DummyConfig()
+
+    monkeypatch.setattr(core, "is_deletion_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_markdown_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_image_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_lock_file_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_dotfile_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "is_builtin_no_ai_only_commit", lambda _paths=None: False)
+    monkeypatch.setattr(core, "get_git_diff", lambda *args, **kwargs: diff)
+    monkeypatch.setattr(
+        core,
+        "get_staged_files",
+        lambda _paths=None, exclude_deleted=True: ["README.md", ".github/workflows/ci.yml"],
+    )
+    monkeypatch.setattr(core, "get_provider", lambda _p: (_ for _ in ()).throw(AssertionError("provider should not be used")))
+    monkeypatch.setattr(core.ui, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr(core.ui, "panel", lambda *args, **kwargs: None)
+    monkeypatch.setattr("seshat.tooling_ts.SeshatConfig", DummyConfig)
+
+    commit_msg, review = core.commit_with_ai(
+        provider="openai",
+        model=None,
+        verbose=False,
+        skip_confirmation=True,
+        paths=None,
+        check=None,
+        code_review=False,
+        no_review=False,
+        no_check=True,
+    )
+
+    assert commit_msg == "chore: update README.md, .github/workflows/ci.yml"
     assert review is None
 
 
@@ -646,3 +894,54 @@ def test_filter_lock_files_from_diff_no_lock_files() -> None:
 
 def test_filter_lock_files_from_diff_empty() -> None:
     assert core.filter_lock_files_from_diff("") == ""
+
+
+def test_filter_non_ai_files_from_diff() -> None:
+    diff = (
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1 +1 @@\n"
+        "-old\n"
+        "+new\n"
+        "diff --git a/README.md b/README.md\n"
+        "--- a/README.md\n"
+        "+++ b/README.md\n"
+        "@@ -1 +1 @@\n"
+        "-old doc\n"
+        "+new doc\n"
+        "diff --git a/assets/logo.png b/assets/logo.png\n"
+        "Binary files a/assets/logo.png and b/assets/logo.png differ\n"
+        "diff --git a/package-lock.json b/package-lock.json\n"
+        "--- a/package-lock.json\n"
+        "+++ b/package-lock.json\n"
+        "@@ -1 +1 @@\n"
+        "-lock old\n"
+        "+lock new\n"
+    )
+    result = core.filter_non_ai_files_from_diff(diff)
+    assert "src/app.py" in result
+    assert "README.md" not in result
+    assert "assets/logo.png" not in result
+    assert "package-lock.json" not in result
+
+
+def test_filter_configured_no_ai_files_from_diff() -> None:
+    diff = (
+        "diff --git a/docs/script.py b/docs/script.py\n"
+        "--- a/docs/script.py\n"
+        "+++ b/docs/script.py\n"
+        "@@ -1 +1 @@\n"
+        "-old doc helper\n"
+        "+new doc helper\n"
+        "diff --git a/src/app.py b/src/app.py\n"
+        "--- a/src/app.py\n"
+        "+++ b/src/app.py\n"
+        "@@ -1 +1 @@\n"
+        "-old app\n"
+        "+new app\n"
+    )
+
+    result = core.filter_configured_no_ai_files_from_diff(diff, [], ["docs/"])
+    assert "docs/script.py" not in result
+    assert "src/app.py" in result
