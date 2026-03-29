@@ -48,6 +48,7 @@ def test_commit_yes_skips_confirmation_and_runs_git(
         cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
     )
     monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-1"})
+    monkeypatch.setattr(cli_module, "is_gpg_signing_enabled", lambda env: False)
     monkeypatch.setattr(
         cli_module.subprocess,
         "check_call",
@@ -100,6 +101,7 @@ def test_commit_applies_ui_config_from_seshat(monkeypatch: pytest.MonkeyPatch) -
         cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
     )
     monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-2"})
+    monkeypatch.setattr(cli_module, "is_gpg_signing_enabled", lambda env: False)
     monkeypatch.setattr(
         cli_module.subprocess,
         "check_call",
@@ -130,6 +132,59 @@ def test_commit_applies_ui_config_from_seshat(monkeypatch: pytest.MonkeyPatch) -
     assert result.exit_code == 0
     assert called.get("ui_cfg") == {"force_rich": True}
     assert called.get("env") == {"GPG_TTY": "/tmp/tty-2"}
+
+
+def test_commit_prewarms_gpg_when_signing_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = CliRunner()
+    called: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        cli_module,
+        "load_config",
+        lambda: {
+            "AI_PROVIDER": "openai",
+            "AI_MODEL": "gpt-4",
+            "API_KEY": "secret",
+            "COMMIT_LANGUAGE": "ENG",
+            "MAX_DIFF_SIZE": 3000,
+            "WARN_DIFF_SIZE": 2500,
+        },
+    )
+    monkeypatch.setattr(cli_module, "normalize_config", lambda cfg: cfg)
+    monkeypatch.setattr(cli_module, "validate_conf", lambda cfg: (True, None))
+    monkeypatch.setattr(
+        cli_module, "commit_with_ai", lambda **kwargs: ("feat: add tests", None)
+    )
+    monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-3"})
+    monkeypatch.setattr(cli_module, "is_gpg_signing_enabled", lambda env: True)
+
+    def fake_ensure_gpg_auth(env: dict[str, str]) -> dict[str, str]:
+        called["warmed_env"] = env
+        return env
+
+    monkeypatch.setattr(cli_module, "ensure_gpg_auth", fake_ensure_gpg_auth)
+    monkeypatch.setattr(
+        cli_module.subprocess,
+        "check_call",
+        lambda args, **kwargs: called.update(args=args, env=kwargs.get("env")),
+    )
+    monkeypatch.setattr(
+        cli_module, "get_last_commit_summary", lambda: "abc123 add tests"
+    )
+    monkeypatch.setattr(
+        cli_module.ui, "success", lambda msg: called.setdefault("success", msg)
+    )
+
+    with runner.isolated_filesystem():
+        with open(".seshat", "w") as f:
+            f.write("project_type: python")
+        result = runner.invoke(cli, ["commit", "--yes"])
+
+    assert result.exit_code == 0
+    assert called.get("warmed_env") == {"GPG_TTY": "/tmp/tty-3"}
+    assert called.get("env") == {"GPG_TTY": "/tmp/tty-3"}
 
 
 def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
