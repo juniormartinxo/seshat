@@ -95,20 +95,38 @@ class BatchCommitService:
             )
             if add_result.returncode != 0:
                 output = self._git_output(add_result)
+                has_staged_changes = self._has_staged_changes_for_file(file)
                 if self._is_missing_path_error(output):
+                    if has_staged_changes:
+                        output = ""
+                    else:
+                        return ProcessResult(
+                            file,
+                            False,
+                            "Arquivo não encontrado ou já processado.",
+                            skipped=True,
+                        )
+                if self._is_ignored_path_error(output):
+                    if has_staged_changes:
+                        output = ""
+                    else:
+                        return ProcessResult(
+                            file,
+                            False,
+                            "Arquivo ignorado pelo Git.",
+                            skipped=True,
+                        )
+                if self._is_git_lock_error(output):
                     return ProcessResult(
                         file,
                         False,
-                        "Arquivo não encontrado ou já processado.",
+                        "Git ocupado.",
                         skipped=True,
                     )
-                if self._is_git_lock_error(output):
+                if output:
                     return ProcessResult(
-                        file, False, "Git ocupado.", skipped=True
+                        file, False, f"Erro Git: {output.strip() or 'git add falhou'}"
                     )
-                return ProcessResult(
-                    file, False, f"Erro Git: {output.strip() or 'git add falhou'}"
-                )
 
             if not self._has_staged_changes_for_file(file):
                 self._reset_file(file)
@@ -222,6 +240,10 @@ class BatchCommitService:
     def _is_missing_path_error(self, output: str) -> bool:
         lower = output.lower()
         return "pathspec" in lower and "did not match" in lower
+
+    def _is_ignored_path_error(self, output: str) -> bool:
+        lower = output.lower()
+        return "ignored by one of your .gitignore files" in lower
 
     def _is_git_lock_error(self, output: str) -> bool:
         lower = output.lower()
