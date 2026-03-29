@@ -34,6 +34,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **Tipos Estruturados para Tooling**: novo `ToolOutputBlock` (dataclass) com status tipado (`ToolStatus`) para saída formatada de ferramentas.
 - **Scripts de Preview**: `scripts/ui_preview.py` e `scripts/ui_only_preview.py` para visualização local da UI.
 - **14 Novos Testes de UI**: cobertura para `blank()`, `kv()`, `badge()`, `summary()`, `result_banner()`, `file_list()`, distinção de ícones e novos ícones.
+- **Commits Automáticos para Imagens**: commits contendo apenas arquivos de imagem agora geram mensagem automática sem chamar a IA.
 
 ### Alterado
 
@@ -48,6 +49,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - Estilo das caixas (Panel) alterado para `box.ROUNDED`.
 - `ToolingRunner.format_results()` agora retorna `list[ToolOutputBlock]` em vez de string.
 - Funções `apply_configured_theme()` e `apply_configured_icons()` aplicam configuração do `.seshat` automaticamente.
+- Diffs enviados aos providers agora removem arquivos Markdown, imagens e lockfiles para reduzir custo e ruído nas mensagens de commit.
 
 ### Corrigido
 
