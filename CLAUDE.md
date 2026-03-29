@@ -77,7 +77,7 @@ Ordem de detecção: TypeScript tem prioridade sobre Python. O `project_type` no
 
 1. Verifica existência do `.seshat` (obrigatório)
 2. Carrega `SeshatConfig` + configuração global
-3. Fast-paths sem IA: deleção-only → `chore: remove ...`; markdown-only → `docs: update ...`; dotfiles-only → `chore: update ...`; arquivos em `no_ai_extensions`/`no_ai_paths` → mensagem genérica
+3. Fast-paths sem IA: deleção-only → `chore: remove ...`; markdown-only → `docs: update ...`; image-only → `chore: update ...`; dotfiles-only → `chore: update ...`; arquivos em `no_ai_extensions`/`no_ai_paths` → mensagem genérica
 4. Executa pré-checks (lint/test/typecheck) se configurado
 5. Executa code review via IA (se `--review` ou `code_review.enabled: true` no `.seshat`)
 6. Gera mensagem de commit via provider selecionado
