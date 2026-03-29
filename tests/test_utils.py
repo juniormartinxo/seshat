@@ -1,4 +1,5 @@
 import pytest
+import subprocess
 
 from seshat import utils
 
@@ -88,3 +89,106 @@ def test_build_gpg_env_ignores_tty_detection_errors(monkeypatch: pytest.MonkeyPa
 
     env = utils.build_gpg_env()
     assert "GPG_TTY" not in env
+
+
+def test_is_gpg_signing_enabled_only_for_openpgp(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        utils,
+        "_git_config_get",
+        lambda key, env=None, bool_mode=False: {
+            ("gpg.format", False): "openpgp",
+            ("commit.gpgsign", True): "true",
+        }.get((key, bool_mode)),
+    )
+
+    assert utils.is_gpg_signing_enabled({"GPG_TTY": "/tmp/tty-1"}) is True
+
+    monkeypatch.setattr(
+        utils,
+        "_git_config_get",
+        lambda key, env=None, bool_mode=False: {
+            ("gpg.format", False): "ssh",
+            ("commit.gpgsign", True): "true",
+        }.get((key, bool_mode)),
+    )
+
+    assert utils.is_gpg_signing_enabled({"GPG_TTY": "/tmp/tty-1"}) is False
+
+
+def test_ensure_gpg_auth_skips_when_signing_is_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"GPG_TTY": "/tmp/tty-1"}
+
+    monkeypatch.setattr(utils, "is_gpg_signing_enabled", lambda current_env=None: False)
+    monkeypatch.setattr(
+        utils.subprocess,
+        "run",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not run gpg")),
+    )
+
+    assert utils.ensure_gpg_auth(env) == env
+
+
+def test_ensure_gpg_auth_runs_probe_with_signing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"GPG_TTY": "/tmp/tty-2"}
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(utils, "is_gpg_signing_enabled", lambda current_env=None: True)
+    monkeypatch.setattr(
+        utils,
+        "_git_config_get",
+        lambda key, env=None, bool_mode=False: {
+            ("gpg.program", False): "gpg",
+            ("user.signingkey", False): "ABC123",
+        }.get((key, bool_mode)),
+    )
+
+    def fake_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(utils.subprocess, "run", fake_run)
+
+    returned_env = utils.ensure_gpg_auth(env)
+
+    assert returned_env == env
+    assert captured["cmd"] == [
+        "gpg",
+        "--armor",
+        "--detach-sign",
+        "--output",
+        utils.os.devnull,
+        "--local-user",
+        "ABC123",
+    ]
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["input"] == "seshat-gpg-auth-check\n"
+    assert kwargs["env"] == env
+
+
+def test_ensure_gpg_auth_raises_on_failed_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = {"GPG_TTY": "/tmp/tty-3"}
+
+    monkeypatch.setattr(utils, "is_gpg_signing_enabled", lambda current_env=None: True)
+    monkeypatch.setattr(
+        utils,
+        "_git_config_get",
+        lambda key, env=None, bool_mode=False: {
+            ("gpg.program", False): "gpg",
+            ("user.signingkey", False): None,
+        }.get((key, bool_mode)),
+    )
+    monkeypatch.setattr(
+        utils.subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(
+            cmd,
+            2,
+            stdout="",
+            stderr="No pinentry",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="No pinentry"):
+        utils.ensure_gpg_auth(env)
