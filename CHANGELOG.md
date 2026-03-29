@@ -35,6 +35,7 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **Scripts de Preview**: `scripts/ui_preview.py` e `scripts/ui_only_preview.py` para visualização local da UI.
 - **14 Novos Testes de UI**: cobertura para `blank()`, `kv()`, `badge()`, `summary()`, `result_banner()`, `file_list()`, distinção de ícones e novos ícones.
 - **Commits Automáticos para Imagens**: commits contendo apenas arquivos de imagem agora geram mensagem automática sem chamar a IA.
+- **Pré-autenticação GPG**: `commit` e `flow` agora detectam `commit.gpgsign` com `gpg.format=openpgp` e validam a autenticação antes do `git commit`, reduzindo falhas tardias por pinentry/passphrase.
 
 ### Alterado
 
