@@ -1,7 +1,7 @@
 import sys
 import subprocess
 import os
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 from .providers import get_provider
 from .utils import (
     start_thinking_animation,
@@ -276,6 +276,35 @@ def _is_markdown_file(file_path: str) -> bool:
     return file_path.lower().endswith((".md", ".mdx"))
 
 
+_IMAGE_EXTENSIONS = (
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".svg",
+    ".avif",
+    ".bmp",
+    ".ico",
+    ".tif",
+    ".tiff",
+    ".heic",
+    ".heif",
+)
+
+
+def _is_image_file(file_path: str) -> bool:
+    return file_path.lower().endswith(_IMAGE_EXTENSIONS)
+
+
+def is_image_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes are only image files."""
+    staged_files = get_staged_files(paths, exclude_deleted=True)
+    if not staged_files:
+        return False
+    return all(_is_image_file(f) for f in staged_files)
+
+
 _LOCK_FILE_NAMES = {
     "package-lock.json",
     "yarn.lock",
@@ -300,8 +329,23 @@ def _is_lock_file(file_path: str) -> bool:
     return basename in _LOCK_FILE_NAMES
 
 
-def filter_lock_files_from_diff(diff: str) -> str:
-    """Remove lock file sections from a git diff string."""
+def _is_builtin_no_ai_file(file_path: str) -> bool:
+    return (
+        _is_markdown_file(file_path)
+        or _is_image_file(file_path)
+        or _is_lock_file(file_path)
+    )
+
+
+def is_builtin_no_ai_only_commit(paths: Optional[List[str]] = None) -> bool:
+    """Check if staged changes contain only built-in non-AI file types."""
+    staged_files = get_staged_files(paths, exclude_deleted=True)
+    if not staged_files:
+        return False
+    return all(_is_builtin_no_ai_file(f) for f in staged_files)
+
+
+def _filter_diff_sections(diff: str, should_exclude: Callable[[str], bool]) -> str:
     import re
     if not diff:
         return diff
@@ -315,12 +359,22 @@ def filter_lock_files_from_diff(diff: str) -> str:
     filtered_sections = []
     for i, match in enumerate(matches):
         file_path = match.group(2)
-        if not _is_lock_file(file_path):
+        if not should_exclude(file_path):
             start = match.start()
             end = matches[i + 1].start() if i + 1 < len(matches) else len(diff)
             filtered_sections.append(diff[start:end])
 
     return "".join(filtered_sections)
+
+
+def filter_lock_files_from_diff(diff: str) -> str:
+    """Remove lock file sections from a git diff string."""
+    return _filter_diff_sections(diff, _is_lock_file)
+
+
+def filter_non_ai_files_from_diff(diff: str) -> str:
+    """Remove markdown, image, and lock file sections before sending the diff to AI."""
+    return _filter_diff_sections(diff, _is_builtin_no_ai_file)
 
 
 def is_lock_file_only_commit(paths: Optional[List[str]] = None) -> bool:
@@ -416,6 +470,44 @@ def _normalize_path_list(values: Optional[object]) -> List[str]:
     return []
 
 
+def _normalize_no_ai_rules(
+    no_ai_extensions: List[str],
+    no_ai_paths: List[str],
+) -> Tuple[set[str], List[str]]:
+    normalized_exts = {
+        (ext if ext.startswith(".") else f".{ext}").lower()
+        for ext in no_ai_extensions
+        if ext
+    }
+    normalized_paths = [path.replace("\\", "/") for path in no_ai_paths if path]
+    return normalized_exts, normalized_paths
+
+
+def _matches_no_ai_rule(
+    file_path: str,
+    normalized_exts: set[str],
+    normalized_paths: List[str],
+) -> bool:
+    normalized_file = file_path.replace("\\", "/")
+    file_lower = normalized_file.lower()
+
+    if any(file_lower.endswith(ext) for ext in normalized_exts):
+        return True
+
+    for path in normalized_paths:
+        normalized_path = path.replace("\\", "/")
+        path_lower = normalized_path.lower()
+        if normalized_path.endswith("/"):
+            if file_lower.startswith(path_lower):
+                return True
+        else:
+            if file_lower == path_lower:
+                return True
+            if file_lower.startswith(f"{path_lower}/"):
+                return True
+    return False
+
+
 def is_no_ai_only_commit(
     files: List[str],
     no_ai_extensions: List[str],
@@ -425,33 +517,53 @@ def is_no_ai_only_commit(
     if not files:
         return False
 
-    normalized_exts = {
-        (ext if ext.startswith(".") else f".{ext}").lower()
-        for ext in no_ai_extensions
-        if ext
-    }
-    normalized_paths = [p.replace("\\", "/") for p in no_ai_paths if p]
+    normalized_exts, normalized_paths = _normalize_no_ai_rules(
+        no_ai_extensions,
+        no_ai_paths,
+    )
+    return all(
+        _matches_no_ai_rule(file_path, normalized_exts, normalized_paths)
+        for file_path in files
+    )
 
-    def is_allowed(file_path: str) -> bool:
-        normalized_file = file_path.replace("\\", "/")
-        file_lower = normalized_file.lower()
 
-        if any(file_lower.endswith(ext) for ext in normalized_exts):
-            return True
+def filter_configured_no_ai_files_from_diff(
+    diff: str,
+    no_ai_extensions: List[str],
+    no_ai_paths: List[str],
+) -> str:
+    """Remove configured no-AI files from a git diff string."""
+    normalized_exts, normalized_paths = _normalize_no_ai_rules(
+        no_ai_extensions,
+        no_ai_paths,
+    )
+    if not normalized_exts and not normalized_paths:
+        return diff
+    return _filter_diff_sections(
+        diff,
+        lambda file_path: _matches_no_ai_rule(
+            file_path,
+            normalized_exts,
+            normalized_paths,
+        ),
+    )
 
-        for path in normalized_paths:
-            normalized_path = path.replace("\\", "/")
-            if normalized_path.endswith("/"):
-                if file_lower.startswith(normalized_path.lower()):
-                    return True
-            else:
-                if file_lower == normalized_path.lower():
-                    return True
-                if file_lower.startswith(f"{normalized_path.lower()}/"):
-                    return True
-        return False
 
-    return all(is_allowed(f) for f in files)
+def get_diff_files(diff: str) -> List[str]:
+    """Extract file paths from a git diff string."""
+    import re
+
+    if not diff:
+        return []
+
+    file_pattern = re.compile(r"^diff --git a/(.+?) b/(.+?)$", re.MULTILINE)
+    return [match.group(2) for match in file_pattern.finditer(diff)]
+
+
+def _generate_no_ai_commit_message(files: List[str]) -> str:
+    if all(_is_markdown_file(file_path) for file_path in files):
+        return generate_markdown_commit_message(files)
+    return generate_generic_update_commit_message(files)
 
 
 def run_pre_commit_checks(
@@ -567,6 +679,17 @@ def commit_with_ai(
         ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
+    # Fast path: if commit is only images, skip AI and generate automatic message
+    if is_image_only_commit(paths):
+        image_files = get_staged_files(paths, exclude_deleted=True)
+        commit_msg = generate_generic_update_commit_message(image_files)
+        ui.info(
+            f"Commit de imagens detectado ({len(image_files)} arquivo(s))",
+            icon=ui.icons["info"],
+        )
+        ui.info(f"Mensagem automática: {commit_msg}")
+        return commit_msg, None
+
     # Fast path: if commit is only lock files, skip AI and generate automatic message
     if is_lock_file_only_commit(paths):
         lock_files = get_staged_files(paths, exclude_deleted=True)
@@ -589,6 +712,17 @@ def commit_with_ai(
         ui.info(f"Mensagem automática: {commit_msg}")
         return commit_msg, None
 
+    # Fast path: if commit mixes only built-in non-AI file types, skip AI
+    if is_builtin_no_ai_only_commit(paths):
+        non_ai_files = get_staged_files(paths, exclude_deleted=True)
+        commit_msg = generate_generic_update_commit_message(non_ai_files)
+        ui.info(
+            f"Commit sem IA detectado ({len(non_ai_files)} arquivo(s))",
+            icon=ui.icons["bolt"],
+        )
+        ui.info(f"Mensagem automática: {commit_msg}")
+        return commit_msg, None
+
     # Configurable no-AI bypass for selected file types/paths
     commit_config = getattr(seshat_config, "commit", {}) or {}
     no_ai_extensions = _normalize_ext_list(commit_config.get("no_ai_extensions"))
@@ -596,10 +730,7 @@ def commit_with_ai(
     if no_ai_extensions or no_ai_paths:
         staged_files = get_staged_files(paths, exclude_deleted=True)
         if is_no_ai_only_commit(staged_files, no_ai_extensions, no_ai_paths):
-            if all(_is_markdown_file(f) for f in staged_files):
-                commit_msg = generate_markdown_commit_message(staged_files)
-            else:
-                commit_msg = generate_generic_update_commit_message(staged_files)
+            commit_msg = _generate_no_ai_commit_message(staged_files)
             ui.info(
                 f"Commit sem IA detectado ({len(staged_files)} arquivo(s))",
             icon=ui.icons["bolt"],
@@ -672,8 +803,24 @@ def commit_with_ai(
     
     diff = get_git_diff(skip_confirmation, paths=paths)
 
-    # Filter lock files from diff before sending to AI
-    diff = filter_lock_files_from_diff(diff)
+    # Remove files that should never be sent to the AI in commit generation.
+    diff = filter_non_ai_files_from_diff(diff)
+    diff = filter_configured_no_ai_files_from_diff(
+        diff,
+        no_ai_extensions,
+        no_ai_paths,
+    )
+
+    if not diff.strip():
+        staged_files = get_staged_files(paths, exclude_deleted=True)
+        if staged_files:
+            commit_msg = _generate_no_ai_commit_message(staged_files)
+            ui.info(
+                f"Commit sem IA detectado ({len(staged_files)} arquivo(s))",
+                icon=ui.icons["bolt"],
+            )
+            ui.info(f"Mensagem automática: {commit_msg}")
+            return commit_msg, None
 
     if verbose:
         ui.echo("📋 Diff analysis:")
@@ -741,8 +888,7 @@ def commit_with_ai(
                 stop_thinking_animation(animation)
         
         # Display review results
-        # Get list of files being reviewed from paths or staged files
-        reviewed_files = paths or get_staged_files()
+        reviewed_files = get_diff_files(filtered_diff)
         ui.display_code_review(format_review_for_display(review_result, verbose), files=reviewed_files)
         
         # Log Review Results if issues found
