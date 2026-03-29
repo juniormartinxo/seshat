@@ -142,9 +142,12 @@ def flow(
 
         git_env = build_gpg_env()
         if is_gpg_signing_enabled(git_env):
-            ui.step("Commits assinados detectados. Validando autenticação GPG antes do lote")
-            with ui.status("Autenticando com GPG"):
+            if ui.is_tty():
                 ensure_gpg_auth(git_env)
+            else:
+                ui.step("Commits assinados detectados. Validando autenticação GPG antes do lote")
+                with ui.status("Autenticando com GPG"):
+                    ensure_gpg_auth(git_env)
 
         success_count = 0
         fail_count = 0
