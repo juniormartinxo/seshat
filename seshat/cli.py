@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Annotated, Literal, Optional, Any
 from . import ui
 from .core import commit_with_ai  # noqa: F401
-from .utils import build_gpg_env, display_error, get_last_commit_summary
+from .utils import (
+    build_gpg_env,
+    display_error,
+    ensure_gpg_auth,
+    get_last_commit_summary,
+    is_gpg_signing_enabled,
+)
 from .config import (
     load_config,
     normalize_config,
@@ -137,6 +143,7 @@ def commit(
 
         provider_name = config.get("AI_PROVIDER") or "openai"
         language = config.get("COMMIT_LANGUAGE", "PT-BR")
+        git_env = build_gpg_env()
         
         if not date and config.get("DEFAULT_DATE"):
             date = config["DEFAULT_DATE"]
@@ -158,6 +165,11 @@ def commit(
             summary_items["Date"] = date
 
         ui.summary("Seshat Commit", summary_items, icon=ui.icons["commit"])
+
+        if is_gpg_signing_enabled(git_env):
+            ui.step("Commit assinado detectado. Validando autenticação GPG antes de continuar")
+            with ui.status("Autenticando com GPG"):
+                git_env = ensure_gpg_auth(git_env)
 
         with ui.status("Gerando mensagem de commit"):
             commit_message, review_result = commit_with_ai(
@@ -189,7 +201,7 @@ def commit(
             if date:
                 git_args.extend(["--date", date])
             git_args.extend(["-m", commit_message])
-            subprocess.check_call(git_args, env=build_gpg_env())
+            subprocess.check_call(git_args, env=git_env)
             commit_summary = get_last_commit_summary() or commit_message.splitlines()[0]
             if ui.is_json_mode():
                 extra = {"date": date} if date else {}
