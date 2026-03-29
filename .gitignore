@@ -93,3 +93,4 @@ coverage.xml
 *.pot
 
 /scripts/problematic_*
+.codex
