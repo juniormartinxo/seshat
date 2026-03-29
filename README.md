@@ -43,6 +43,7 @@ Uma CLI poderosa para automatizar a criação de mensagens de commit seguindo o 
 * ⚙️ **Commits Automáticos para Dotfiles (NOVO!):** Commits contendo apenas dotfiles (ex.: `.env`, `.nvmrc`) geram mensagem automática genérica sem IA.
 * 🚫 **Bypass configurável de IA (NOVO!):** `commit.no_ai_extensions` e `commit.no_ai_paths` permitem commits automáticos para tipos de arquivo específicos.
 * 🎨 **Tema Configurável (NOVO!):** Paleta de cores, estilos e ícones centralizados em `seshat/theme.py`, customizáveis via `.seshat`.
+* 🔐 **Pré-autenticação GPG (NOVO!):** Se o Git estiver com `commit.gpgsign=true` e `gpg.format=openpgp`, o Seshat valida a autenticação GPG antes de iniciar o commit/lote.
 
 ## 📚 Documentação detalhada
 
