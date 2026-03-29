@@ -139,6 +139,7 @@ def test_commit_prewarms_gpg_when_signing_is_enabled(
 ) -> None:
     runner = CliRunner()
     called: dict[str, object] = {}
+    status_calls: list[str] = []
 
     monkeypatch.setattr(
         cli_module,
@@ -159,12 +160,26 @@ def test_commit_prewarms_gpg_when_signing_is_enabled(
     )
     monkeypatch.setattr(cli_module, "build_gpg_env", lambda: {"GPG_TTY": "/tmp/tty-3"})
     monkeypatch.setattr(cli_module, "is_gpg_signing_enabled", lambda env: True)
+    monkeypatch.setattr(cli_module.ui, "is_tty", lambda: True)
 
     def fake_ensure_gpg_auth(env: dict[str, str]) -> dict[str, str]:
         called["warmed_env"] = env
         return env
 
     monkeypatch.setattr(cli_module, "ensure_gpg_auth", fake_ensure_gpg_auth)
+
+    class FakeStatus:
+        def __enter__(self) -> "FakeStatus":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(
+        cli_module.ui,
+        "status",
+        lambda message: status_calls.append(message) or FakeStatus(),
+    )
     monkeypatch.setattr(
         cli_module.subprocess,
         "check_call",
@@ -185,6 +200,7 @@ def test_commit_prewarms_gpg_when_signing_is_enabled(
     assert result.exit_code == 0
     assert called.get("warmed_env") == {"GPG_TTY": "/tmp/tty-3"}
     assert called.get("env") == {"GPG_TTY": "/tmp/tty-3"}
+    assert "Autenticando com GPG" not in status_calls
 
 
 def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
