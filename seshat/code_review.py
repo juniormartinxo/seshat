@@ -205,6 +205,48 @@ DEFAULT_REVIEW_EXTENSIONS = {
     ],
 }
 
+_REVIEW_EXCLUDED_FILENAMES = {
+    "package.json",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yml",
+    "compose.yaml",
+}
+
+_LOCK_FILE_NAMES = {
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "poetry.lock",
+    "pipfile.lock",
+    "composer.lock",
+    "gemfile.lock",
+    "cargo.lock",
+    "flake.lock",
+    "bun.lockb",
+    "bun.lock",
+    "uv.lock",
+    "pdm.lock",
+    "packages.lock.json",
+    "pnpm-lock.yml",
+}
+
+
+def _is_review_excluded_file(file_path: str) -> bool:
+    """Return True for files that should never be sent to AI code review."""
+    basename = Path(file_path).name.lower()
+
+    if basename in _REVIEW_EXCLUDED_FILENAMES or basename in _LOCK_FILE_NAMES:
+        return True
+
+    if basename == "dockerfile" or basename.startswith("dockerfile."):
+        return True
+
+    if basename.startswith("docker-compose.") and basename.endswith((".yml", ".yaml")):
+        return True
+
+    return False
+
 
 def get_default_extensions(project_type: Optional[str] = None) -> List[str]:
     """Get default extensions for code review based on project type."""
@@ -257,7 +299,10 @@ def filter_diff_by_extensions(
     for i, match in enumerate(matches):
         file_path = match.group(2)  # Use the "b/..." path (new file)
         file_ext = Path(file_path).suffix.lower()
-        
+
+        if _is_review_excluded_file(file_path):
+            continue
+
         # Check if extension matches
         if file_ext in exts:
             # Get the section content
