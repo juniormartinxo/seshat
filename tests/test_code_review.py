@@ -9,6 +9,7 @@ from seshat.code_review import (
     CodeIssue,
     save_review_to_log,
     get_code_review_prompt_addon,
+    filter_diff_by_extensions,
 )
 
 
@@ -215,3 +216,49 @@ class TestSaveReviewToLog:
         assert unknown_path is not None
         assert unknown_path.name.startswith("unknown_")
         assert unknown_path.suffix == ".log"
+
+
+class TestFilterDiffByExtensions:
+    """Tests for review diff filtering."""
+
+    def test_excludes_docker_package_and_lock_files_from_review(self) -> None:
+        diff = (
+            "diff --git a/src/app.ts b/src/app.ts\n"
+            "--- a/src/app.ts\n"
+            "+++ b/src/app.ts\n"
+            "@@ -1 +1 @@\n"
+            "-old\n"
+            "+new\n"
+            "diff --git a/package.json b/package.json\n"
+            "--- a/package.json\n"
+            "+++ b/package.json\n"
+            "@@ -1 +1 @@\n"
+            "-old package\n"
+            "+new package\n"
+            "diff --git a/Dockerfile b/Dockerfile\n"
+            "--- a/Dockerfile\n"
+            "+++ b/Dockerfile\n"
+            "@@ -1 +1 @@\n"
+            "-FROM python:3.12\n"
+            "+FROM python:3.13\n"
+            "diff --git a/docker-compose.prod.yml b/docker-compose.prod.yml\n"
+            "--- a/docker-compose.prod.yml\n"
+            "+++ b/docker-compose.prod.yml\n"
+            "@@ -1 +1 @@\n"
+            "-version: '3'\n"
+            "+version: '3.9'\n"
+            "diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml\n"
+            "--- a/pnpm-lock.yaml\n"
+            "+++ b/pnpm-lock.yaml\n"
+            "@@ -1 +1 @@\n"
+            "-lock old\n"
+            "+lock new\n"
+        )
+
+        result = filter_diff_by_extensions(diff, extensions=[".ts", ".json", ".yml", ".yaml"])
+
+        assert "src/app.ts" in result
+        assert "package.json" not in result
+        assert "Dockerfile" not in result
+        assert "docker-compose.prod.yml" not in result
+        assert "pnpm-lock.yaml" not in result
