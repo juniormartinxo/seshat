@@ -1,3 +1,6 @@
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from seshat import providers
@@ -159,9 +162,137 @@ def test_get_provider_valid() -> None:
     assert isinstance(provider, providers.OpenAIProvider)
 
 
+def test_get_provider_codex() -> None:
+    provider = providers.get_provider("codex")
+    assert isinstance(provider, providers.CodexCLIProvider)
+
+
+def test_get_provider_claude_cli() -> None:
+    provider = providers.get_provider("claude-cli")
+    assert isinstance(provider, providers.ClaudeCLIProvider)
+
+
 def test_get_provider_invalid() -> None:
     with pytest.raises(ValueError):
         providers.get_provider("unknown")
+
+
+def test_codex_cli_validate_env_requires_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(providers.shutil, "which", lambda _value: None)
+
+    with pytest.raises(ValueError, match="Codex CLI não encontrada"):
+        providers.CodexCLIProvider().validate_env()
+
+
+def test_codex_cli_generate_commit_uses_exec(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    monkeypatch.delenv("CODEX_PROFILE", raising=False)
+
+    provider = providers.CodexCLIProvider()
+    monkeypatch.setattr(provider, "validate_env", lambda: None)
+    monkeypatch.setattr(provider, "_clean_response", lambda value: "feat: add codex")
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls["args"] = args
+        calls["input"] = kwargs.get("input")
+        output_path = Path(args[args.index("-o") + 1])
+        output_path.write_text("```commit\nfeat: add codex\n```")
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(providers.subprocess, "run", fake_run)
+
+    assert provider.generate_commit_message("diff content", model="gpt-test") == "feat: add codex"
+
+    args = calls["args"]
+    assert isinstance(args, list)
+    assert args[:3] == ["codex", "--ask-for-approval", "never"]
+    assert "--model" in args
+    assert "gpt-test" in args
+    assert "exec" in args
+    assert "--ephemeral" in args
+    assert "read-only" in args
+    assert "-C" in args
+    assert str(calls["input"]).count("diff content") == 1
+    assert "Return only the final Conventional Commit message." in str(calls["input"])
+
+
+def test_codex_cli_generate_review_reports_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = providers.CodexCLIProvider()
+    monkeypatch.setattr(provider, "validate_env", lambda: None)
+    monkeypatch.setattr(providers.time, "sleep", lambda _value: None)
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 2, stdout="", stderr="not logged in")
+
+    monkeypatch.setattr(providers.subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError, match="Codex CLI falhou: not logged in"):
+        provider.generate_code_review("diff content")
+
+
+def test_claude_cli_validate_env_requires_binary(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(providers.shutil, "which", lambda _value: None)
+
+    with pytest.raises(ValueError, match="Claude CLI não encontrada"):
+        providers.ClaudeCLIProvider().validate_env()
+
+
+def test_claude_cli_generate_commit_uses_print(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: dict[str, object] = {}
+    monkeypatch.delenv("AI_MODEL", raising=False)
+    monkeypatch.delenv("CLAUDE_MODEL", raising=False)
+    monkeypatch.delenv("CLAUDE_AGENT", raising=False)
+    monkeypatch.delenv("CLAUDE_SETTINGS", raising=False)
+
+    provider = providers.ClaudeCLIProvider()
+    monkeypatch.setattr(provider, "validate_env", lambda: None)
+    monkeypatch.setattr(provider, "_clean_response", lambda value: "feat: add claude cli")
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls["args"] = args
+        calls["input"] = kwargs.get("input")
+        calls["cwd"] = kwargs.get("cwd")
+        return subprocess.CompletedProcess(args, 0, stdout="feat: add claude cli", stderr="")
+
+    monkeypatch.setattr(providers.subprocess, "run", fake_run)
+
+    assert provider.generate_commit_message("diff content", model="sonnet") == "feat: add claude cli"
+
+    args = calls["args"]
+    assert isinstance(args, list)
+    assert args[:3] == ["claude", "--print", "--output-format"]
+    assert "text" in args
+    assert "--no-session-persistence" in args
+    assert "--permission-mode" in args
+    assert "dontAsk" in args
+    assert "--tools" in args
+    assert "" in args
+    assert "--model" in args
+    assert "sonnet" in args
+    assert str(calls["input"]).count("diff content") == 1
+    assert "Return only the final Conventional Commit message." in str(calls["input"])
+
+
+def test_claude_cli_generate_review_reports_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = providers.ClaudeCLIProvider()
+    monkeypatch.setattr(provider, "validate_env", lambda: None)
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args, 1, stdout="", stderr="not logged in")
+
+    monkeypatch.setattr(providers.subprocess, "run", fake_run)
+
+    with pytest.raises(ValueError, match="Claude CLI falhou: not logged in"):
+        provider.generate_code_review("diff content")
 
 
 def test_ollama_check_running_ok(monkeypatch: pytest.MonkeyPatch) -> None:
