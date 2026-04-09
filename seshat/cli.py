@@ -32,7 +32,7 @@ from . import flow  # noqa: F401
 @cli.command()
 def commit(
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai/codex)"
+        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai/codex/claude-cli)"
     ),
     model: Optional[str] = typer.Option(None, "--model", help="Modelo específico do provedor"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
@@ -234,14 +234,14 @@ def config(
     provider: Optional[str] = typer.Option(
         None,
         "--provider",
-        help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai/codex)",
+        help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai/codex/claude-cli)",
     ),
     model: Optional[str] = typer.Option(None, "--model", help="Configure o modelo padrão para o seu provider"),
     judge_api_key: Optional[str] = typer.Option(None, "--judge-api-key", help="Configure a API Key do JUDGE"),
     judge_provider: Optional[str] = typer.Option(
         None,
         "--judge-provider",
-        help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai/codex)",
+        help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai/codex/claude-cli)",
     ),
     judge_model: Optional[str] = typer.Option(None, "--judge-model", help="Configure o modelo padrão para o JUDGE"),
     default_date: Optional[str] = typer.Option(
