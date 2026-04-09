@@ -39,6 +39,17 @@ Ao salvar `API_KEY` ou `JUDGE_API_KEY`, o Seshat tenta usar o **keyring do siste
 O provider `codex` usa `codex exec` em modo efêmero e read-only. Ele não exige `API_KEY`;
 a autenticação vem do login/configuração local da própria CLI do Codex.
 
+### Claude CLI
+
+- `CLAUDE_BIN`: caminho ou nome do binário da CLI do Claude (default: `claude`)
+- `CLAUDE_MODEL`: modelo da CLI do Claude se `AI_MODEL` não estiver definido
+- `CLAUDE_AGENT`: agent da CLI do Claude a usar
+- `CLAUDE_SETTINGS`: arquivo ou JSON de settings para a CLI do Claude
+- `CLAUDE_TIMEOUT`: timeout em segundos para cada chamada da CLI (default: `300`)
+
+O provider `claude-cli` usa `claude --print` sem persistência de sessão e com ferramentas desabilitadas.
+Ele não exige `API_KEY`; a autenticação vem do login/configuração local da própria CLI do Claude.
+
 ### Provedores com chaves alternativas
 
 - **Gemini**: `GEMINI_API_KEY` (usado se `API_KEY` estiver ausente)
@@ -57,7 +68,7 @@ commit:
   language: PT-BR
   max_diff_size: 3000
   warn_diff_size: 2500
-  provider: openai  # deepseek | claude | ollama | openai | gemini | zai | codex
+  provider: openai  # deepseek | claude | ollama | openai | gemini | zai | codex | claude-cli
   model: gpt-4-turbo-preview
   no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
   no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
