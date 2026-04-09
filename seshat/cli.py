@@ -20,6 +20,7 @@ from .config import (
     validate_config as validate_conf,
     save_config,
     apply_project_overrides,
+    VALID_PROVIDERS,
 )
 from .commands import cli
 from .tooling_ts import SeshatConfig
@@ -31,7 +32,7 @@ from . import flow  # noqa: F401
 @cli.command()
 def commit(
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai)"
+        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai/codex)"
     ),
     model: Optional[str] = typer.Option(None, "--model", help="Modelo específico do provedor"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
@@ -233,14 +234,14 @@ def config(
     provider: Optional[str] = typer.Option(
         None,
         "--provider",
-        help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai)",
+        help="Configure o provedor padrão (deepseek/claude/ollama/openai/gemini/zai/codex)",
     ),
     model: Optional[str] = typer.Option(None, "--model", help="Configure o modelo padrão para o seu provider"),
     judge_api_key: Optional[str] = typer.Option(None, "--judge-api-key", help="Configure a API Key do JUDGE"),
     judge_provider: Optional[str] = typer.Option(
         None,
         "--judge-provider",
-        help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai)",
+        help="Configure o provedor JUDGE (deepseek/claude/ollama/openai/gemini/zai/codex)",
     ),
     judge_model: Optional[str] = typer.Option(None, "--judge-model", help="Configure o modelo padrão para o JUDGE"),
     default_date: Optional[str] = typer.Option(
@@ -270,7 +271,7 @@ def config(
             modified = True
 
         if provider:
-            valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini", "zai"]
+            valid_providers = sorted(VALID_PROVIDERS)
             if provider not in valid_providers:
                 raise ValueError(
                     f"Provedor inválido. Opções: {', '.join(valid_providers)}"
@@ -279,7 +280,7 @@ def config(
             modified = True
 
         if judge_provider:
-            valid_providers = ["deepseek", "claude", "ollama", "openai", "gemini", "zai"]
+            valid_providers = sorted(VALID_PROVIDERS)
             if judge_provider not in valid_providers:
                 raise ValueError(
                     f"Provedor inválido para JUDGE. Opções: {', '.join(valid_providers)}"
