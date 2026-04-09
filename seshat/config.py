@@ -1,10 +1,28 @@
 import os
 import json
-import keyring
 import typer
 from pathlib import Path
 from typing import Any, Callable, Optional
-from dotenv import load_dotenv, find_dotenv
+
+try:
+    from dotenv import find_dotenv as _find_dotenv, load_dotenv as _load_dotenv
+except ImportError:
+    def _find_dotenv(*_args: Any, **_kwargs: Any) -> str:
+        return ""
+
+    def _load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+        return False
+
+find_dotenv: Callable[..., str] = _find_dotenv
+load_dotenv: Callable[..., bool] = _load_dotenv
+
+_keyring: Any
+try:
+    import keyring as _keyring
+except Exception:
+    _keyring = None
+
+keyring: Any = _keyring
 
 CONFIG_PATH = Path.home() / ".seshat"
 APP_NAME = "seshat"
@@ -98,6 +116,8 @@ def normalize_config(config: dict[str, Any]) -> dict[str, Any]:
 
 def get_secure_key(key_name: str) -> Optional[str]:
     """Recupera chave do keyring do sistema"""
+    if keyring is None:
+        return None
     try:
         return keyring.get_password(APP_NAME, key_name)
     except Exception:
@@ -106,6 +126,8 @@ def get_secure_key(key_name: str) -> Optional[str]:
 
 def set_secure_key(key_name: str, value: str) -> bool:
     """Salva chave no keyring do sistema"""
+    if keyring is None:
+        return False
     try:
         keyring.set_password(APP_NAME, key_name, value)
         return True
@@ -128,6 +150,27 @@ def _prompt_plaintext_fallback(key_name: str) -> bool:
         fg="yellow",
     )
     return typer.confirm("Deseja salvar em texto plano mesmo assim?", default=False)
+
+
+def _save_secret_update(
+    current_config: dict[str, Any],
+    key_name: str,
+    value: str,
+) -> None:
+    """Persist secret in keyring or plaintext fallback, avoiding duplicate prompts."""
+    if not value:
+        return
+
+    if current_config.get(key_name) == value:
+        return
+
+    if not set_secure_key(key_name, value):
+        if _prompt_plaintext_fallback(key_name):
+            current_config[key_name] = value
+        else:
+            typer.secho(f"{key_name} não foi salva.", fg="red")
+    elif key_name in current_config:
+        del current_config[key_name]
 
 
 def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
@@ -184,27 +227,11 @@ def save_config(updates: dict[str, Any]) -> dict[str, Any]:
     # Se tiver API_KEY, tenta salvar no keyring e remove do arquivo
     if "API_KEY" in updates:
         api_key = updates.pop("API_KEY")
-        if api_key:
-            if not set_secure_key("API_KEY", api_key):
-                if _prompt_plaintext_fallback("API_KEY"):
-                    current_config["API_KEY"] = api_key
-                else:
-                    typer.secho("API_KEY não foi salva.", fg="red")
-            else:
-                if "API_KEY" in current_config:
-                    del current_config["API_KEY"]
+        _save_secret_update(current_config, "API_KEY", api_key)
 
     if "JUDGE_API_KEY" in updates:
         judge_api_key = updates.pop("JUDGE_API_KEY")
-        if judge_api_key:
-            if not set_secure_key("JUDGE_API_KEY", judge_api_key):
-                if _prompt_plaintext_fallback("JUDGE_API_KEY"):
-                    current_config["JUDGE_API_KEY"] = judge_api_key
-                else:
-                    typer.secho("JUDGE_API_KEY não foi salva.", fg="red")
-            else:
-                if "JUDGE_API_KEY" in current_config:
-                    del current_config["JUDGE_API_KEY"]
+        _save_secret_update(current_config, "JUDGE_API_KEY", judge_api_key)
     
     current_config.update(updates)
     
