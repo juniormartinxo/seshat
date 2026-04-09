@@ -17,7 +17,7 @@ DEFAULT_MODELS = {
     "zai": "z-ai/glm-5:free",
     "ollama": "llama3",
 }
-API_KEYLESS_PROVIDERS = {"codex", "ollama"}
+API_KEYLESS_PROVIDERS = {"claude-cli", "codex", "ollama"}
 VALID_PROVIDERS = set(DEFAULT_MODELS.keys()) | API_KEYLESS_PROVIDERS
 
 
