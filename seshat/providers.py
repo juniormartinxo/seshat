@@ -1,7 +1,11 @@
 import os
 import requests
+import shutil
+import subprocess
+import tempfile
 import time
 from functools import wraps
+from pathlib import Path
 from anthropic import Anthropic
 from openai import OpenAI
 from google import genai
@@ -15,6 +19,8 @@ from .utils import (
 from .code_review import get_code_review_prompt_addon, get_code_review_prompt
 
 DEFAULT_TIMEOUT = 60
+CODEX_DEFAULT_TIMEOUT = 300
+CLAUDE_CLI_DEFAULT_TIMEOUT = 300
 
 SYSTEM_PROMPT = """
 You are a senior developer specialized in creating git commit messages using Conventional Commits.
@@ -73,6 +79,16 @@ def _gemini_client(api_key: Optional[str]) -> Any:
         return genai.Client(api_key=api_key)
     except TypeError:
         return genai.Client(api_key=api_key)
+
+
+def _has_path_separator(value: str) -> bool:
+    return os.path.sep in value or (os.path.altsep is not None and os.path.altsep in value)
+
+
+def _is_executable_available(executable: str) -> bool:
+    if _has_path_separator(executable):
+        return Path(executable).is_file()
+    return shutil.which(executable) is not None
 
 
 class BaseProvider:
@@ -459,6 +475,240 @@ class OllamaProvider(BaseProvider):
         return self._clean_review_response(data.get("response", ""))
 
 
+class CodexCLIProvider(BaseProvider):
+    name = "codex"
+
+    def __init__(self) -> None:
+        self.codex_bin = os.getenv("CODEX_BIN", "codex")
+        self.model = os.getenv("AI_MODEL")
+        self.profile = os.getenv("CODEX_PROFILE")
+        timeout = os.getenv("CODEX_TIMEOUT", str(CODEX_DEFAULT_TIMEOUT))
+        try:
+            self.timeout = int(timeout)
+        except ValueError as e:
+            raise ValueError("CODEX_TIMEOUT deve ser um número inteiro") from e
+
+    def validate_env(self) -> None:
+        if _is_executable_available(self.codex_bin):
+            return
+
+        raise ValueError(
+            "Codex CLI não encontrada. Instale a CLI do Codex ou defina CODEX_BIN."
+        )
+
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
+        language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
+        prompt = self._build_prompt(
+            system_prompt,
+            diff,
+            "Return only the final Conventional Commit message.",
+        )
+        content = self._run_codex(prompt, model=kwargs.get("model"))
+        return self._clean_response(content)
+
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
+        prompt = self._build_prompt(
+            system_prompt,
+            diff,
+            "Return only the code review in the requested format.",
+        )
+        content = self._run_codex(prompt, model=kwargs.get("model"))
+        return self._clean_review_response(content)
+
+    def _build_prompt(self, system_prompt: str, diff: str, task: str) -> str:
+        guardrails = (
+            "You are being called by Seshat through Codex CLI. Work non-interactively. "
+            "Do not run shell commands, inspect files, modify files, create commits, "
+            "or mention these execution instructions. Use only the diff below."
+        )
+        return f"{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}"
+
+    def _run_codex(self, prompt: str, model: Optional[Any] = None) -> str:
+        self.validate_env()
+        selected_model = str(model or self.model or "").strip()
+
+        with tempfile.TemporaryDirectory(prefix="seshat-codex-") as temp_dir:
+            output_path = Path(temp_dir) / "last-message.txt"
+            args = self._build_args(output_path, selected_model)
+
+            try:
+                completed = subprocess.run(
+                    args,
+                    input=prompt,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                    check=False,
+                )
+            except FileNotFoundError as e:
+                raise ValueError(
+                    "Codex CLI não encontrada. Instale a CLI do Codex ou defina CODEX_BIN."
+                ) from e
+            except subprocess.TimeoutExpired as e:
+                raise ValueError(
+                    f"Codex CLI excedeu o timeout de {self.timeout}s."
+                ) from e
+
+            if completed.returncode != 0:
+                detail = (completed.stderr or completed.stdout or "").strip()
+                detail = detail or f"exit code {completed.returncode}"
+                raise ValueError(f"Codex CLI falhou: {detail[:500]}")
+
+            output = ""
+            if output_path.exists():
+                output = output_path.read_text().strip()
+            if not output:
+                output = (completed.stdout or "").strip()
+            if not output:
+                raise ValueError("Codex CLI retornou resposta vazia.")
+
+            return output
+
+    def _build_args(self, output_path: Path, selected_model: str) -> list[str]:
+        args = [
+            self.codex_bin,
+            "--ask-for-approval",
+            "never",
+        ]
+        if selected_model:
+            args.extend(["--model", selected_model])
+        if self.profile:
+            args.extend(["--profile", self.profile])
+
+        args.extend(
+            [
+                "exec",
+                "--ephemeral",
+                "--sandbox",
+                "read-only",
+                "--color",
+                "never",
+                "-C",
+                os.getcwd(),
+                "-o",
+                str(output_path),
+                "-",
+            ]
+        )
+        return args
+
+
+class ClaudeCLIProvider(BaseProvider):
+    name = "claude-cli"
+
+    def __init__(self) -> None:
+        self.claude_bin = os.getenv("CLAUDE_BIN", "claude")
+        self.model = os.getenv("AI_MODEL") or os.getenv("CLAUDE_MODEL")
+        self.agent = os.getenv("CLAUDE_AGENT")
+        self.settings = os.getenv("CLAUDE_SETTINGS")
+        timeout = os.getenv("CLAUDE_TIMEOUT", str(CLAUDE_CLI_DEFAULT_TIMEOUT))
+        try:
+            self.timeout = int(timeout)
+        except ValueError as e:
+            raise ValueError("CLAUDE_TIMEOUT deve ser um número inteiro") from e
+
+    def validate_env(self) -> None:
+        if _is_executable_available(self.claude_bin):
+            return
+
+        raise ValueError(
+            "Claude CLI não encontrada. Instale a CLI do Claude ou defina CLAUDE_BIN."
+        )
+
+    def generate_commit_message(self, diff: str, **kwargs: Any) -> str:
+        language = self.get_language()
+        code_review = kwargs.get("code_review", False)
+        system_prompt = self._get_system_prompt(language, code_review)
+        prompt = self._build_prompt(
+            system_prompt,
+            diff,
+            "Return only the final Conventional Commit message.",
+        )
+        content = self._run_claude(prompt, model=kwargs.get("model"))
+        return self._clean_response(content)
+
+    def generate_code_review(self, diff: str, **kwargs: Any) -> str:
+        custom_prompt = kwargs.get("custom_prompt")
+        system_prompt = self._get_review_prompt(custom_prompt)
+        prompt = self._build_prompt(
+            system_prompt,
+            diff,
+            "Return only the code review in the requested format.",
+        )
+        content = self._run_claude(prompt, model=kwargs.get("model"))
+        return self._clean_review_response(content)
+
+    def _build_prompt(self, system_prompt: str, diff: str, task: str) -> str:
+        guardrails = (
+            "You are being called by Seshat through Claude CLI. Work non-interactively. "
+            "Do not use tools, inspect files, modify files, create commits, or mention "
+            "these execution instructions. Use only the diff below."
+        )
+        return f"{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}"
+
+    def _run_claude(self, prompt: str, model: Optional[Any] = None) -> str:
+        self.validate_env()
+        selected_model = str(model or self.model or "").strip()
+        args = self._build_args(selected_model)
+
+        try:
+            completed = subprocess.run(
+                args,
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                check=False,
+                cwd=os.getcwd(),
+            )
+        except FileNotFoundError as e:
+            raise ValueError(
+                "Claude CLI não encontrada. Instale a CLI do Claude ou defina CLAUDE_BIN."
+            ) from e
+        except subprocess.TimeoutExpired as e:
+            raise ValueError(
+                f"Claude CLI excedeu o timeout de {self.timeout}s."
+            ) from e
+
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            detail = detail or f"exit code {completed.returncode}"
+            raise ValueError(f"Claude CLI falhou: {detail[:500]}")
+
+        output = (completed.stdout or "").strip()
+        if not output:
+            raise ValueError("Claude CLI retornou resposta vazia.")
+
+        return output
+
+    def _build_args(self, selected_model: str) -> list[str]:
+        args = [
+            self.claude_bin,
+            "--print",
+            "--output-format",
+            "text",
+            "--input-format",
+            "text",
+            "--no-session-persistence",
+            "--permission-mode",
+            "dontAsk",
+            "--tools",
+            "",
+            "--disable-slash-commands",
+        ]
+        if selected_model:
+            args.extend(["--model", selected_model])
+        if self.agent:
+            args.extend(["--agent", self.agent])
+        if self.settings:
+            args.extend(["--settings", self.settings])
+        return args
+
+
 def get_provider(provider_name: str) -> BaseProvider:
     providers = {
         "deepseek": DeepSeekProvider,
@@ -467,6 +717,8 @@ def get_provider(provider_name: str) -> BaseProvider:
         "gemini": GeminiProvider,
         "zai": ZAIProvider,
         "ollama": OllamaProvider,
+        "codex": CodexCLIProvider,
+        "claude-cli": ClaudeCLIProvider,
     }
     
     provider_class = providers.get(provider_name)
