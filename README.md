@@ -165,7 +165,7 @@ Seshat suporta os seguintes provedores de IA:
     seshat config --provider codex
     ```
 
-    `codex` não exige `API_KEY`; opcionalmente use `seshat config --model MODELO` para sobrescrever o modelo da CLI.
+    `codex` não exige `API_KEY`. Opcionalmente defina `CODEX_MODEL=MODELO` para sobrescrever o modelo da CLI.
 
     Para usar a CLI do Claude, faça login nela antes e configure:
 
@@ -173,7 +173,7 @@ Seshat suporta os seguintes provedores de IA:
     seshat config --provider claude-cli
     ```
 
-    `claude-cli` não exige `API_KEY`; opcionalmente use `seshat config --model MODELO` para sobrescrever o modelo da CLI.
+    `claude-cli` não exige `API_KEY`. Opcionalmente defina `CLAUDE_MODEL=MODELO` para sobrescrever o modelo da CLI.
 
 ### Configuração do Z.AI (GLM)
 
