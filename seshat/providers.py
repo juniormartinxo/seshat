@@ -6,9 +6,6 @@ import tempfile
 import time
 from functools import wraps
 from pathlib import Path
-from anthropic import Anthropic
-from openai import OpenAI
-from google import genai
 from typing import Any, Callable, Optional
 
 from .utils import (
@@ -21,6 +18,10 @@ from .code_review import get_code_review_prompt_addon, get_code_review_prompt
 DEFAULT_TIMEOUT = 60
 CODEX_DEFAULT_TIMEOUT = 300
 CLAUDE_CLI_DEFAULT_TIMEOUT = 300
+
+Anthropic: Any = None
+OpenAI: Any = None
+genai: Any = None
 
 SYSTEM_PROMPT = """
 You are a senior developer specialized in creating git commit messages using Conventional Commits.
@@ -59,6 +60,14 @@ def retry_on_error(
     return decorator
 
 def _openai_client(api_key: Optional[str], base_url: Optional[str] = None) -> Any:
+    global OpenAI
+    if OpenAI is None:
+        try:
+            from openai import OpenAI as OpenAIClient
+        except ImportError as e:
+            raise ValueError("Pacote openai não instalado.") from e
+        OpenAI = OpenAIClient
+
     try:
         return OpenAI(api_key=api_key, base_url=base_url, timeout=DEFAULT_TIMEOUT)
     except TypeError:
@@ -68,6 +77,14 @@ def _openai_client(api_key: Optional[str], base_url: Optional[str] = None) -> An
 
 
 def _anthropic_client(api_key: Optional[str]) -> Any:
+    global Anthropic
+    if Anthropic is None:
+        try:
+            from anthropic import Anthropic as AnthropicClient
+        except ImportError as e:
+            raise ValueError("Pacote anthropic não instalado.") from e
+        Anthropic = AnthropicClient
+
     try:
         return Anthropic(api_key=api_key, timeout=DEFAULT_TIMEOUT)
     except TypeError:
@@ -75,6 +92,14 @@ def _anthropic_client(api_key: Optional[str]) -> Any:
 
 
 def _gemini_client(api_key: Optional[str]) -> Any:
+    global genai
+    if genai is None:
+        try:
+            from google import genai as google_genai
+        except ImportError as e:
+            raise ValueError("Pacote google-genai não instalado.") from e
+        genai = google_genai
+
     try:
         return genai.Client(api_key=api_key)
     except TypeError:
@@ -89,6 +114,13 @@ def _is_executable_available(executable: str) -> bool:
     if _has_path_separator(executable):
         return Path(executable).is_file()
     return shutil.which(executable) is not None
+
+
+def _tail_error_detail(value: str, limit: int = 500) -> str:
+    value = value.strip()
+    if len(value) <= limit:
+        return value
+    return value[-limit:]
 
 
 class BaseProvider:
@@ -480,7 +512,7 @@ class CodexCLIProvider(BaseProvider):
 
     def __init__(self) -> None:
         self.codex_bin = os.getenv("CODEX_BIN", "codex")
-        self.model = os.getenv("AI_MODEL")
+        self.model = os.getenv("CODEX_MODEL")
         self.profile = os.getenv("CODEX_PROFILE")
         timeout = os.getenv("CODEX_TIMEOUT", str(CODEX_DEFAULT_TIMEOUT))
         try:
@@ -505,7 +537,7 @@ class CodexCLIProvider(BaseProvider):
             diff,
             "Return only the final Conventional Commit message.",
         )
-        content = self._run_codex(prompt, model=kwargs.get("model"))
+        content = self._run_codex(prompt)
         return self._clean_response(content)
 
     def generate_code_review(self, diff: str, **kwargs: Any) -> str:
@@ -516,7 +548,7 @@ class CodexCLIProvider(BaseProvider):
             diff,
             "Return only the code review in the requested format.",
         )
-        content = self._run_codex(prompt, model=kwargs.get("model"))
+        content = self._run_codex(prompt)
         return self._clean_review_response(content)
 
     def _build_prompt(self, system_prompt: str, diff: str, task: str) -> str:
@@ -527,9 +559,9 @@ class CodexCLIProvider(BaseProvider):
         )
         return f"{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}"
 
-    def _run_codex(self, prompt: str, model: Optional[Any] = None) -> str:
+    def _run_codex(self, prompt: str) -> str:
         self.validate_env()
-        selected_model = str(model or self.model or "").strip()
+        selected_model = str(self.model or "").strip()
 
         with tempfile.TemporaryDirectory(prefix="seshat-codex-") as temp_dir:
             output_path = Path(temp_dir) / "last-message.txt"
@@ -556,7 +588,7 @@ class CodexCLIProvider(BaseProvider):
             if completed.returncode != 0:
                 detail = (completed.stderr or completed.stdout or "").strip()
                 detail = detail or f"exit code {completed.returncode}"
-                raise ValueError(f"Codex CLI falhou: {detail[:500]}")
+                raise ValueError(f"Codex CLI falhou: {_tail_error_detail(detail)}")
 
             output = ""
             if output_path.exists():
@@ -602,7 +634,7 @@ class ClaudeCLIProvider(BaseProvider):
 
     def __init__(self) -> None:
         self.claude_bin = os.getenv("CLAUDE_BIN", "claude")
-        self.model = os.getenv("AI_MODEL") or os.getenv("CLAUDE_MODEL")
+        self.model = os.getenv("CLAUDE_MODEL")
         self.agent = os.getenv("CLAUDE_AGENT")
         self.settings = os.getenv("CLAUDE_SETTINGS")
         timeout = os.getenv("CLAUDE_TIMEOUT", str(CLAUDE_CLI_DEFAULT_TIMEOUT))
@@ -628,7 +660,7 @@ class ClaudeCLIProvider(BaseProvider):
             diff,
             "Return only the final Conventional Commit message.",
         )
-        content = self._run_claude(prompt, model=kwargs.get("model"))
+        content = self._run_claude(prompt)
         return self._clean_response(content)
 
     def generate_code_review(self, diff: str, **kwargs: Any) -> str:
@@ -639,7 +671,7 @@ class ClaudeCLIProvider(BaseProvider):
             diff,
             "Return only the code review in the requested format.",
         )
-        content = self._run_claude(prompt, model=kwargs.get("model"))
+        content = self._run_claude(prompt)
         return self._clean_review_response(content)
 
     def _build_prompt(self, system_prompt: str, diff: str, task: str) -> str:
@@ -650,9 +682,9 @@ class ClaudeCLIProvider(BaseProvider):
         )
         return f"{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}"
 
-    def _run_claude(self, prompt: str, model: Optional[Any] = None) -> str:
+    def _run_claude(self, prompt: str) -> str:
         self.validate_env()
-        selected_model = str(model or self.model or "").strip()
+        selected_model = str(self.model or "").strip()
         args = self._build_args(selected_model)
 
         try:
@@ -677,7 +709,7 @@ class ClaudeCLIProvider(BaseProvider):
         if completed.returncode != 0:
             detail = (completed.stderr or completed.stdout or "").strip()
             detail = detail or f"exit code {completed.returncode}"
-            raise ValueError(f"Claude CLI falhou: {detail[:500]}")
+            raise ValueError(f"Claude CLI falhou: {_tail_error_detail(detail)}")
 
         output = (completed.stdout or "").strip()
         if not output:
