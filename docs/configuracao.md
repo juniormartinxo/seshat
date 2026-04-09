@@ -33,11 +33,13 @@ Ao salvar `API_KEY` ou `JUDGE_API_KEY`, o Seshat tenta usar o **keyring do siste
 ### Codex CLI
 
 - `CODEX_BIN`: caminho ou nome do binário da CLI do Codex (default: `codex`)
+- `CODEX_MODEL`: modelo da CLI do Codex
 - `CODEX_PROFILE`: perfil da CLI do Codex a usar
 - `CODEX_TIMEOUT`: timeout em segundos para cada chamada da CLI (default: `300`)
 
 O provider `codex` usa `codex exec` em modo efêmero e read-only. Ele não exige `API_KEY`;
-a autenticação vem do login/configuração local da própria CLI do Codex.
+a autenticação vem do login/configuração local da própria CLI do Codex. `AI_MODEL` é ignorado
+para evitar que modelos de provedores de API vazem para a CLI.
 
 ### Claude CLI
 
@@ -49,6 +51,7 @@ a autenticação vem do login/configuração local da própria CLI do Codex.
 
 O provider `claude-cli` usa `claude --print` sem persistência de sessão e com ferramentas desabilitadas.
 Ele não exige `API_KEY`; a autenticação vem do login/configuração local da própria CLI do Claude.
+`AI_MODEL` é ignorado para evitar que modelos de provedores de API vazem para a CLI.
 
 ### Provedores com chaves alternativas
 
