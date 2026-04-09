@@ -30,6 +30,15 @@ Ao salvar `API_KEY` ou `JUDGE_API_KEY`, o Seshat tenta usar o **keyring do siste
 - `COMMIT_LANGUAGE`
 - `DEFAULT_DATE`
 
+### Codex CLI
+
+- `CODEX_BIN`: caminho ou nome do binário da CLI do Codex (default: `codex`)
+- `CODEX_PROFILE`: perfil da CLI do Codex a usar
+- `CODEX_TIMEOUT`: timeout em segundos para cada chamada da CLI (default: `300`)
+
+O provider `codex` usa `codex exec` em modo efêmero e read-only. Ele não exige `API_KEY`;
+a autenticação vem do login/configuração local da própria CLI do Codex.
+
 ### Provedores com chaves alternativas
 
 - **Gemini**: `GEMINI_API_KEY` (usado se `API_KEY` estiver ausente)
@@ -48,7 +57,7 @@ commit:
   language: PT-BR
   max_diff_size: 3000
   warn_diff_size: 2500
-  provider: openai
+  provider: openai  # deepseek | claude | ollama | openai | gemini | zai | codex
   model: gpt-4-turbo-preview
   no_ai_extensions: [".md", ".mdx", ".yml", ".yaml"]
   no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
