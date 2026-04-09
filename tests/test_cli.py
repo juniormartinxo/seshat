@@ -213,6 +213,30 @@ def test_config_invalid_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     assert errors
 
 
+def test_config_accepts_codex_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(cli_module, "save_config", lambda updates: saved.update(updates))
+
+    result = runner.invoke(cli, ["config", "--provider", "codex"])
+
+    assert result.exit_code == 0
+    assert saved == {"AI_PROVIDER": "codex"}
+
+
+def test_config_accepts_claude_cli_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    saved: dict[str, object] = {}
+
+    monkeypatch.setattr(cli_module, "save_config", lambda updates: saved.update(updates))
+
+    result = runner.invoke(cli, ["config", "--provider", "claude-cli"])
+
+    assert result.exit_code == 0
+    assert saved == {"AI_PROVIDER": "claude-cli"}
+
+
 def test_config_shows_current_config(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     monkeypatch.setattr(
