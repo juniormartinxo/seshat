@@ -93,7 +93,7 @@ Ordem de detecção: TypeScript tem prioridade sobre Python. O `project_type` no
 
 1. Criar classe em `seshat/providers.py` herdando `BaseProvider`, implementando `generate_commit_message` e `generate_code_review`
 2. Registrar no dict `providers` dentro de `get_provider()`
-3. Adicionar em `DEFAULT_MODELS` em `seshat/config.py` e em `VALID_PROVIDERS`
+3. Adicionar em `DEFAULT_MODELS` ou `VALID_PROVIDERS` em `seshat/config.py`
 
 ### Adicionando suporte a nova linguagem no Tooling
 
