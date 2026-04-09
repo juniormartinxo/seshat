@@ -17,7 +17,8 @@ DEFAULT_MODELS = {
     "zai": "z-ai/glm-5:free",
     "ollama": "llama3",
 }
-VALID_PROVIDERS = set(DEFAULT_MODELS.keys())
+API_KEYLESS_PROVIDERS = {"codex", "ollama"}
+VALID_PROVIDERS = set(DEFAULT_MODELS.keys()) | API_KEYLESS_PROVIDERS
 
 
 def load_config() -> dict[str, Any]:
@@ -144,21 +145,21 @@ def validate_config(config: dict[str, Any]) -> tuple[bool, Optional[str]]:
     if provider not in VALID_PROVIDERS:
         return False, f"Provedor inválido: {provider}. Opções: {', '.join(sorted(VALID_PROVIDERS))}."
 
-    if not config.get("API_KEY") and provider != "ollama":
+    if not config.get("API_KEY") and provider not in API_KEYLESS_PROVIDERS:
         return False, f"API_KEY não encontrada para o provedor {provider}. Configure via env var ou 'seshat config --api-key'."
 
-    if not config.get("AI_MODEL") and provider != "ollama":
+    if not config.get("AI_MODEL") and provider not in API_KEYLESS_PROVIDERS:
         return False, f"AI_MODEL não configurado para o provedor {provider}. Use 'seshat config --model <nome>'."
 
     if judge_provider:
         if judge_provider not in VALID_PROVIDERS:
             return False, f"Provedor inválido para JUDGE: {judge_provider}. Opções: {', '.join(sorted(VALID_PROVIDERS))}."
-        if not config.get("JUDGE_API_KEY") and judge_provider != "ollama":
+        if not config.get("JUDGE_API_KEY") and judge_provider not in API_KEYLESS_PROVIDERS:
             return False, (
                 f"JUDGE_API_KEY não encontrada para o provedor {judge_provider}. "
                 "Configure via env var ou 'seshat config --judge-api-key'."
             )
-        if not config.get("JUDGE_MODEL") and judge_provider != "ollama":
+        if not config.get("JUDGE_MODEL") and judge_provider not in API_KEYLESS_PROVIDERS:
             return False, (
                 f"JUDGE_MODEL não configurado para o provedor {judge_provider}. "
                 "Use 'seshat config --judge-model <nome>'."
