@@ -4,17 +4,29 @@ import typer
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+_dotenv_find_dotenv: Optional[Callable[..., str]]
+_dotenv_load_dotenv: Optional[Callable[..., bool]]
+
 try:
-    from dotenv import find_dotenv as _find_dotenv, load_dotenv as _load_dotenv
+    from dotenv import find_dotenv as _imported_find_dotenv
+    from dotenv import load_dotenv as _imported_load_dotenv
 except ImportError:
-    def _find_dotenv(*_args: Any, **_kwargs: Any) -> str:
-        return ""
+    _dotenv_find_dotenv = None
+    _dotenv_load_dotenv = None
+else:
+    _dotenv_find_dotenv = _imported_find_dotenv
+    _dotenv_load_dotenv = _imported_load_dotenv
 
-    def _load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
-        return False
 
-find_dotenv: Callable[..., str] = _find_dotenv
-load_dotenv: Callable[..., bool] = _load_dotenv
+def _fallback_find_dotenv(*_args: Any, **_kwargs: Any) -> str:
+    return ""
+
+
+def _fallback_load_dotenv(*_args: Any, **_kwargs: Any) -> bool:
+    return False
+
+find_dotenv: Callable[..., str] = _dotenv_find_dotenv or _fallback_find_dotenv
+load_dotenv: Callable[..., bool] = _dotenv_load_dotenv or _fallback_load_dotenv
 
 _keyring: Any
 try:
