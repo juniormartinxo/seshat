@@ -117,6 +117,7 @@ Seshat suporta os seguintes provedores de IA:
 * **DeepSeek API:**  Um provedor de IA online.
 * **Claude API (Anthropic):** Outro provedor de IA online.
 * **OpenAI API:** Provedor de IA online, muito conhecido como ChatGPT.
+* **Codex CLI:** Usa a autenticação e configuração local da CLI do Codex.
 * **Gemini API (Google):** Provedor de IA do Google.
 * **Z.AI (GLM):** Provedor de IA da Z.AI (GLM).
 * **Ollama (Local):**  Execute modelos de IA localmente usando Ollama.
@@ -134,7 +135,7 @@ Seshat suporta os seguintes provedores de IA:
 2. **Configure via CLI:**
 
     ```bash
-    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
+    seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai|codex
     seshat config --api-key SUA_CHAVE_API
     seshat config --model SEU_MODEL #ex: deepseek-chat, claude-3-opus-20240229, gpt-4-turbo-preview, gemini-2.0-flash, glm-5
     ```
@@ -150,12 +151,20 @@ Seshat suporta os seguintes provedores de IA:
     Ou, alternativamente defina as variáveis de ambiente em um arquivo `.env`:
 
     ```bash
-    AI_PROVIDER=deepseek|claude|ollama|openai|gemini|zai 
+    AI_PROVIDER=deepseek|claude|ollama|openai|gemini|zai|codex
     API_KEY=sua_chave_aqui 
     AI_MODEL=seu-modelo
     ```
 
     > **Detalhes avançados:** precedência de configuração, keyring e env vars adicionais estão em `docs/configuracao.md`.
+
+    Para usar a CLI do Codex, faça login nela antes e configure:
+
+    ```bash
+    seshat config --provider codex
+    ```
+
+    `codex` não exige `API_KEY`; opcionalmente use `seshat config --model MODELO` para sobrescrever o modelo da CLI.
 
 ### Configuração do Z.AI (GLM)
 
@@ -692,7 +701,7 @@ commands:
 seshat config
 
 # Redefinir a configuração
-seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai
+seshat config --provider SEU_PROVIDER # Provedores aceitos deepseek|claude|ollama|openai|gemini|zai|codex
 seshat config --api-key SUA_NOVA_CHAVE
 seshat config --model MODELO_DO_SEU_PROVIDER #ex: deepseek-chat, claude-3-opus-20240229, gpt-4-turbo-preview, gemini-2.0-flash, glm-5
 ```
