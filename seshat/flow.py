@@ -13,7 +13,7 @@ from .utils import build_gpg_env, ensure_gpg_auth, is_gpg_signing_enabled
 def flow(
     count: int = typer.Argument(0, help="Número máximo de arquivos a processar"),
     provider: Optional[str] = typer.Option(
-        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai/codex)"
+        None, "--provider", help="Provedor de IA (deepseek/claude/ollama/openai/gemini/zai/codex/claude-cli)"
     ),
     model: Optional[str] = typer.Option(None, "--model", help="Modelo específico do provedor"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
