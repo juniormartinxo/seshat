@@ -188,7 +188,8 @@ def test_codex_cli_generate_commit_uses_exec(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
-    monkeypatch.delenv("AI_MODEL", raising=False)
+    monkeypatch.setenv("AI_MODEL", "deepseek-reasoner")
+    monkeypatch.setenv("CODEX_MODEL", "gpt-test")
     monkeypatch.delenv("CODEX_PROFILE", raising=False)
 
     provider = providers.CodexCLIProvider()
@@ -204,13 +205,15 @@ def test_codex_cli_generate_commit_uses_exec(
 
     monkeypatch.setattr(providers.subprocess, "run", fake_run)
 
-    assert provider.generate_commit_message("diff content", model="gpt-test") == "feat: add codex"
+    assert provider.generate_commit_message("diff content", model="ignored-model") == "feat: add codex"
 
     args = calls["args"]
     assert isinstance(args, list)
     assert args[:3] == ["codex", "--ask-for-approval", "never"]
     assert "--model" in args
     assert "gpt-test" in args
+    assert "deepseek-reasoner" not in args
+    assert "ignored-model" not in args
     assert "exec" in args
     assert "--ephemeral" in args
     assert "read-only" in args
@@ -246,8 +249,8 @@ def test_claude_cli_generate_commit_uses_print(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: dict[str, object] = {}
-    monkeypatch.delenv("AI_MODEL", raising=False)
-    monkeypatch.delenv("CLAUDE_MODEL", raising=False)
+    monkeypatch.setenv("AI_MODEL", "deepseek-reasoner")
+    monkeypatch.setenv("CLAUDE_MODEL", "sonnet")
     monkeypatch.delenv("CLAUDE_AGENT", raising=False)
     monkeypatch.delenv("CLAUDE_SETTINGS", raising=False)
 
@@ -263,7 +266,7 @@ def test_claude_cli_generate_commit_uses_print(
 
     monkeypatch.setattr(providers.subprocess, "run", fake_run)
 
-    assert provider.generate_commit_message("diff content", model="sonnet") == "feat: add claude cli"
+    assert provider.generate_commit_message("diff content", model="ignored-model") == "feat: add claude cli"
 
     args = calls["args"]
     assert isinstance(args, list)
@@ -276,6 +279,8 @@ def test_claude_cli_generate_commit_uses_print(
     assert "" in args
     assert "--model" in args
     assert "sonnet" in args
+    assert "deepseek-reasoner" not in args
+    assert "ignored-model" not in args
     assert str(calls["input"]).count("diff content") == 1
     assert "Return only the final Conventional Commit message." in str(calls["input"])
 
