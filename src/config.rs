@@ -318,40 +318,137 @@ pub fn config_path() -> PathBuf {
 }
 
 pub fn load_config() -> AppConfig {
-    let mut config = load_global_config(&config_path()).unwrap_or_default();
+    load_config_for_path(".")
+}
 
-    if let Ok(value) = env::var("API_KEY") {
-        config.api_key = Some(value);
-    }
-    if let Ok(value) = env::var("JUDGE_API_KEY") {
-        config.judge_api_key = Some(value);
-    }
-    if let Ok(value) = env::var("AI_PROVIDER") {
-        config.ai_provider = Some(value);
-    }
-    if let Ok(value) = env::var("AI_MODEL") {
-        config.ai_model = Some(value);
-    }
-    if let Ok(value) = env::var("JUDGE_PROVIDER") {
-        config.judge_provider = Some(value);
-    }
-    if let Ok(value) = env::var("JUDGE_MODEL") {
-        config.judge_model = Some(value);
-    }
-    if let Ok(value) = env::var("MAX_DIFF_SIZE") {
-        config.max_diff_size = value.parse().unwrap_or(config.max_diff_size);
-    }
-    if let Ok(value) = env::var("WARN_DIFF_SIZE") {
-        config.warn_diff_size = value.parse().unwrap_or(config.warn_diff_size);
-    }
-    if let Ok(value) = env::var("COMMIT_LANGUAGE") {
-        config.commit_language = value;
-    }
-    if let Ok(value) = env::var("DEFAULT_DATE") {
-        config.default_date = Some(value);
-    }
+pub fn load_config_for_path(base_path: impl AsRef<Path>) -> AppConfig {
+    let mut config = load_global_config(&config_path()).unwrap_or_default();
+    let dotenv = load_dotenv_file(base_path.as_ref());
+
+    apply_config_values(&mut config, |key| dotenv.get(key).cloned());
+    apply_provider_aliases(&mut config, |key| dotenv.get(key).cloned());
+
+    apply_config_values(&mut config, |key| env::var(key).ok());
+    apply_environment_provider_aliases(&mut config);
 
     normalize_config(config)
+}
+
+fn load_dotenv_file(base_path: &Path) -> HashMap<String, String> {
+    let path = base_path.join(".env");
+    let Ok(content) = fs::read_to_string(path) else {
+        return HashMap::new();
+    };
+    parse_dotenv(&content)
+}
+
+fn parse_dotenv(content: &str) -> HashMap<String, String> {
+    content
+        .lines()
+        .filter_map(parse_dotenv_line)
+        .collect::<HashMap<_, _>>()
+}
+
+fn parse_dotenv_line(line: &str) -> Option<(String, String)> {
+    let mut line = line.trim();
+    if line.is_empty() || line.starts_with('#') {
+        return None;
+    }
+    if let Some(stripped) = line.strip_prefix("export ") {
+        line = stripped.trim_start();
+    }
+    let (key, value) = line.split_once('=')?;
+    let key = key.trim();
+    if key.is_empty() {
+        return None;
+    }
+    Some((key.to_string(), unquote_dotenv_value(value.trim())))
+}
+
+fn unquote_dotenv_value(value: &str) -> String {
+    if value.len() >= 2 {
+        let bytes = value.as_bytes();
+        let quote = bytes[0];
+        if (quote == b'"' || quote == b'\'') && bytes[value.len() - 1] == quote {
+            return value[1..value.len() - 1].to_string();
+        }
+    }
+    value.to_string()
+}
+
+fn apply_config_values(config: &mut AppConfig, mut get: impl FnMut(&str) -> Option<String>) {
+    if let Some(value) = get("API_KEY") {
+        config.api_key = Some(value);
+    }
+    if let Some(value) = get("JUDGE_API_KEY") {
+        config.judge_api_key = Some(value);
+    }
+    if let Some(value) = get("AI_PROVIDER") {
+        config.ai_provider = Some(value);
+    }
+    if let Some(value) = get("AI_MODEL") {
+        config.ai_model = Some(value);
+    }
+    if let Some(value) = get("JUDGE_PROVIDER") {
+        config.judge_provider = Some(value);
+    }
+    if let Some(value) = get("JUDGE_MODEL") {
+        config.judge_model = Some(value);
+    }
+    if let Some(value) = get("MAX_DIFF_SIZE") {
+        config.max_diff_size = value.parse().unwrap_or(config.max_diff_size);
+    }
+    if let Some(value) = get("WARN_DIFF_SIZE") {
+        config.warn_diff_size = value.parse().unwrap_or(config.warn_diff_size);
+    }
+    if let Some(value) = get("COMMIT_LANGUAGE") {
+        config.commit_language = value;
+    }
+    if let Some(value) = get("DEFAULT_DATE") {
+        config.default_date = Some(value);
+    }
+}
+
+fn apply_provider_aliases(config: &mut AppConfig, mut get: impl FnMut(&str) -> Option<String>) {
+    if config.ai_provider.as_deref() == Some("gemini") && config.api_key.is_none() {
+        config.api_key = get("GEMINI_API_KEY");
+    }
+    if config.ai_provider.as_deref() == Some("zai") && config.api_key.is_none() {
+        config.api_key = get("ZAI_API_KEY").or_else(|| get("ZHIPU_API_KEY"));
+    }
+    if config.judge_provider.as_deref() == Some("gemini") && config.judge_api_key.is_none() {
+        config.judge_api_key = get("GEMINI_API_KEY");
+    }
+    if config.judge_provider.as_deref() == Some("zai") && config.judge_api_key.is_none() {
+        config.judge_api_key = get("ZAI_API_KEY").or_else(|| get("ZHIPU_API_KEY"));
+    }
+}
+
+fn apply_environment_provider_aliases(config: &mut AppConfig) {
+    if env::var_os("API_KEY").is_none() {
+        if config.ai_provider.as_deref() == Some("gemini") {
+            if let Ok(value) = env::var("GEMINI_API_KEY") {
+                config.api_key = Some(value);
+            }
+        }
+        if config.ai_provider.as_deref() == Some("zai") {
+            if let Ok(value) = env::var("ZAI_API_KEY").or_else(|_| env::var("ZHIPU_API_KEY")) {
+                config.api_key = Some(value);
+            }
+        }
+    }
+    if env::var_os("JUDGE_API_KEY").is_none() {
+        if config.judge_provider.as_deref() == Some("gemini") {
+            if let Ok(value) = env::var("GEMINI_API_KEY") {
+                config.judge_api_key = Some(value);
+            }
+        }
+        if config.judge_provider.as_deref() == Some("zai") {
+            if let Ok(value) = env::var("ZAI_API_KEY").or_else(|_| env::var("ZHIPU_API_KEY")) {
+                config.judge_api_key = Some(value);
+            }
+        }
+    }
 }
 
 fn load_global_config(path: &Path) -> Result<AppConfig> {
@@ -565,6 +662,46 @@ pub fn mask_api_key(key: Option<&str>, language: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_clean_env(test: impl FnOnce(&Path)) {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let keys = [
+            "HOME",
+            "API_KEY",
+            "AI_PROVIDER",
+            "AI_MODEL",
+            "JUDGE_API_KEY",
+            "JUDGE_PROVIDER",
+            "JUDGE_MODEL",
+            "MAX_DIFF_SIZE",
+            "WARN_DIFF_SIZE",
+            "COMMIT_LANGUAGE",
+            "DEFAULT_DATE",
+            "GEMINI_API_KEY",
+            "ZAI_API_KEY",
+            "ZHIPU_API_KEY",
+        ];
+        let previous = keys
+            .iter()
+            .map(|key| ((*key).to_string(), env::var_os(key)))
+            .collect::<Vec<_>>();
+        for key in keys {
+            env::remove_var(key);
+        }
+        let home = tempfile::tempdir().unwrap();
+        env::set_var("HOME", home.path());
+        test(home.path());
+        for (key, value) in previous {
+            if let Some(value) = value {
+                env::set_var(key, value);
+            } else {
+                env::remove_var(key);
+            }
+        }
+    }
 
     #[test]
     fn apply_project_overrides_normalizes_values() {
@@ -621,5 +758,90 @@ checks:
         assert_eq!(config.commit.max_diff_size, Some(4000));
         assert_eq!(config.commit.no_ai_paths, vec!["docs/"]);
         assert!(!config.checks["lint"].blocking);
+    }
+
+    #[test]
+    fn dotenv_loads_local_values() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+API_KEY=local-key
+AI_PROVIDER=ollama
+AI_MODEL=llama3
+MAX_DIFF_SIZE=9000
+WARN_DIFF_SIZE=8000
+COMMIT_LANGUAGE=ENG
+DEFAULT_DATE=2020-01-02
+",
+            )
+            .unwrap();
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.api_key.as_deref(), Some("local-key"));
+            assert_eq!(config.ai_provider.as_deref(), Some("ollama"));
+            assert_eq!(config.ai_model.as_deref(), Some("llama3"));
+            assert_eq!(config.max_diff_size, 9000);
+            assert_eq!(config.warn_diff_size, 8000);
+            assert_eq!(config.commit_language, "ENG");
+            assert_eq!(config.default_date.as_deref(), Some("2020-01-02"));
+        });
+    }
+
+    #[test]
+    fn dotenv_does_not_override_real_environment() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(dir.path().join(".env"), "AI_PROVIDER=ollama\n").unwrap();
+            env::set_var("AI_PROVIDER", "codex");
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.ai_provider.as_deref(), Some("codex"));
+        });
+    }
+
+    #[test]
+    fn dotenv_supports_provider_key_aliases() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+AI_PROVIDER=gemini
+GEMINI_API_KEY=gemini-key
+JUDGE_PROVIDER=zai
+ZHIPU_API_KEY=zhipu-key
+",
+            )
+            .unwrap();
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.api_key.as_deref(), Some("gemini-key"));
+            assert_eq!(config.judge_api_key.as_deref(), Some("zhipu-key"));
+        });
+    }
+
+    #[test]
+    fn dotenv_aliases_do_not_override_real_environment_aliases() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+AI_PROVIDER=gemini
+GEMINI_API_KEY=dotenv-key
+",
+            )
+            .unwrap();
+            env::set_var("GEMINI_API_KEY", "real-key");
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.api_key.as_deref(), Some("real-key"));
+        });
     }
 }
