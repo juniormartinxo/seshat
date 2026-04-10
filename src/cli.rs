@@ -5,6 +5,7 @@ use crate::config::{
 use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
 use crate::git::GitClient;
+use crate::json_output;
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
 use crate::ui;
@@ -159,7 +160,7 @@ struct FlowArgs {
 
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
-    match cli.command {
+    let result = match cli.command {
         Some(Commands::Commit(args)) => run_commit(args),
         Some(Commands::Config(args)) => run_config(args),
         Some(Commands::Init(args)) => run_init(args),
@@ -169,25 +170,27 @@ pub fn run() -> Result<()> {
             println!("seshat, version {VERSION}");
             Ok(())
         }
+    };
+    if let Err(error) = &result {
+        if ui::json_mode_enabled() {
+            json_output::error(&error.to_string());
+        }
     }
+    result
 }
 
 fn run_commit(args: CommitArgs) -> Result<()> {
     let git = GitClient::new(".");
     let json_mode = matches!(args.format, Some(OutputFormat::Json));
+    ui::set_json_mode(json_mode);
     if !git.repo_path().join(".seshat").exists() {
-        if json_mode {
-            println!(
-                "{}",
-                json!({"event": "error", "message": "Arquivo .seshat não encontrado."})
-            );
-        }
         return Err(anyhow!(
             "Arquivo .seshat não encontrado. O Seshat requer um arquivo de configuração .seshat no projeto."
         ));
     }
 
     let project_config = ProjectConfig::load(git.repo_path());
+    ui::apply_config(&project_config.ui);
     let effective = resolve_effective_config(
         git.repo_path(),
         &project_config,
@@ -243,7 +246,7 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     };
     let (message, _) = commit_with_ai(&options)?;
     if json_mode {
-        println!("{}", json!({"event": "message_ready", "message": message}));
+        json_output::message_ready(&message);
     } else if ui::is_interactive() {
         println!("Mensagem sugerida\n{message}");
     } else {
@@ -253,16 +256,14 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     let should_commit = args.yes || ui::confirm("Deseja confirmar o commit?", false)?;
     if !should_commit {
         if json_mode {
-            println!(
-                "{}",
-                json!({"event": "cancelled", "reason": "user_declined"})
-            );
+            json_output::cancelled("user_declined");
         } else {
             ui::warning("Commit cancelado");
         }
         return Ok(());
     }
 
+    let committed_date = date.clone();
     let mut commit_args = vec!["commit".to_string()];
     if !args.verbose {
         commit_args.push("--quiet".to_string());
@@ -278,7 +279,7 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     let summary = get_last_commit_summary_for_repo(git.repo_path())
         .unwrap_or_else(|| message.lines().next().unwrap_or(&message).to_string());
     if json_mode {
-        println!("{}", json!({"event": "committed", "summary": summary}));
+        json_output::committed(&summary, committed_date.as_deref());
     } else {
         ui::success(format!("Commit criado: {summary}"));
     }
@@ -508,6 +509,8 @@ fn run_init(args: InitArgs) -> Result<()> {
 }
 
 fn run_fix(args: FixArgs) -> Result<()> {
+    let project_config = ProjectConfig::load(".");
+    ui::apply_config(&project_config.ui);
     let runner = ToolingRunner::default();
     let files = if !args.files.is_empty() {
         Some(args.files)
@@ -531,7 +534,7 @@ fn run_fix(args: FixArgs) -> Result<()> {
         return Ok(());
     }
     for block in runner.format_results(&results, true) {
-        println!("{}", block.text);
+        ui::render_tool_output(&block.text, block.status.as_deref());
     }
     if runner.has_blocking_failures(&results) {
         Err(anyhow!(
@@ -546,6 +549,7 @@ fn run_fix(args: FixArgs) -> Result<()> {
 fn run_flow(args: FlowArgs) -> Result<()> {
     let git = GitClient::new(&args.path);
     let project_config = ProjectConfig::load(git.repo_path());
+    ui::apply_config(&project_config.ui);
     let effective = resolve_effective_config(
         git.repo_path(),
         &project_config,
