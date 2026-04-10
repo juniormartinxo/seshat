@@ -1,6 +1,6 @@
 # 018 - Completar Contrato de JSON Mode
 
-Status: todo
+Status: done
 Priority: P1
 Type: feature
 Milestone: CLI Pronta para Uso Diario
