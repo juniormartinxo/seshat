@@ -1,6 +1,6 @@
 # 005 - Cobrir Init, Config e Fix com E2E
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: Config Confiavel
