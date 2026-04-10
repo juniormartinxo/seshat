@@ -1,6 +1,6 @@
 # 013 - Completar Fluxo de Code Review e JUDGE
 
-Status: todo
+Status: done
 Priority: P1
 Type: feature
 Milestone: Review Completo
