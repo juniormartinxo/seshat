@@ -1,6 +1,6 @@
 # 007 - Implementar Keyring para Segredos
 
-Status: todo
+Status: done
 Priority: P1
 Type: feature
 Milestone: Config Confiavel
