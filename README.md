@@ -131,6 +131,7 @@ Campos principais:
 - `checks.*.pass_files`: passa arquivos staged/explicitados ao comando.
 - `checks.*.auto_fix`: usa `fix_command` durante o check.
 - `code_review.*`: ativa review por IA, bloqueio, prompt, logs e extensoes.
+- `code_review.max_diff_size`: limite de caracteres enviado ao provider de code review; quando excedido, o diff e compactado.
 - `ui.force_rich` e `ui.icons`: controlam renderizacao humana.
 
 ## Variaveis de Ambiente
@@ -138,6 +139,8 @@ Campos principais:
 - `API_KEY`: chave do provider principal.
 - `AI_PROVIDER`: provider padrao.
 - `AI_MODEL`: modelo padrao.
+- `AI_TIMEOUT`: timeout HTTP em segundos para geracao de mensagem. Padrao: 60.
+- `CODE_REVIEW_TIMEOUT`: timeout em segundos para code review. Padrao HTTP: 180; em CLI, sobrescreve `CODEX_TIMEOUT`/`CLAUDE_TIMEOUT` apenas no review.
 - `JUDGE_API_KEY`: chave usada pela IA JUDGE.
 - `JUDGE_PROVIDER`: provider usado pela IA JUDGE.
 - `JUDGE_MODEL`: modelo usado pela IA JUDGE.
