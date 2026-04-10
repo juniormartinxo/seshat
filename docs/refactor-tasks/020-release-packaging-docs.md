@@ -1,6 +1,6 @@
 # 020 - Preparar Release, Instalacao e Documentacao
 
-Status: todo
+Status: done
 Priority: P1
 Type: release
 Milestone: Corte Final
