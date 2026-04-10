@@ -1,6 +1,6 @@
 # 011 - Testar Anthropic, Gemini e Ollama
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: IA Testavel
