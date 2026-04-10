@@ -326,3 +326,17 @@ fn e2e_flow_path_uses_target_repository() {
     let lock_dir = repo.path().join(".git").join("seshat-flow-locks");
     assert!(lock_dir.exists());
 }
+
+#[test]
+fn e2e_flow_accepts_explicit_date() {
+    let repo = GitRepo::init();
+    repo.write("README.md", "# Seshat\n");
+
+    repo.seshat()
+        .args(["flow", "1", "--yes", "--date", "2020-01-02"])
+        .assert()
+        .success();
+
+    assert_eq!(repo.last_subject(), "docs: update README.md");
+    assert_eq!(repo.last_date(), "2020-01-02");
+}
