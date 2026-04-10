@@ -1,6 +1,6 @@
 # 002 - Introduzir GitClient com repo_path
 
-Status: todo
+Status: done
 Priority: P0
 Type: refactor
 Milestone: Git Seguro
