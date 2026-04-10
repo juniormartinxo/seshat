@@ -1,3 +1,4 @@
+use crate::bench::{self, AgentBenchFormat, AgentBenchOptions, AgentFixture, ReportLanguage};
 use crate::config::{
     load_config, load_config_for_path, mask_api_key, resolve_effective_config, save_config,
     valid_providers, AppConfig, CliConfigOverrides, ProjectConfig,
@@ -35,6 +36,7 @@ enum Commands {
     Init(InitArgs),
     Fix(FixArgs),
     Flow(FlowArgs),
+    Bench(BenchArgs),
 }
 
 #[derive(Debug, Args)]
@@ -86,6 +88,57 @@ impl CheckKind {
 enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Debug, Args)]
+struct BenchArgs {
+    #[command(subcommand)]
+    command: BenchCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum BenchCommands {
+    Agents(BenchAgentsArgs),
+}
+
+#[derive(Debug, Args)]
+struct BenchAgentsArgs {
+    #[arg(long, value_delimiter = ',')]
+    agents: Vec<String>,
+    #[arg(
+        long,
+        value_delimiter = ',',
+        value_enum,
+        default_value = "rust,python,typescript"
+    )]
+    fixtures: Vec<BenchFixture>,
+    #[arg(long, default_value_t = 3)]
+    iterations: usize,
+    #[arg(long)]
+    model: Option<String>,
+    #[arg(long, value_enum, default_value = "text")]
+    format: OutputFormat,
+    #[arg(long = "pt-br")]
+    pt_br: bool,
+    #[arg(long = "keep-temp")]
+    keep_temp: bool,
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+enum BenchFixture {
+    Rust,
+    Python,
+    Typescript,
+}
+
+impl From<BenchFixture> for AgentFixture {
+    fn from(value: BenchFixture) -> Self {
+        match value {
+            BenchFixture::Rust => AgentFixture::Rust,
+            BenchFixture::Python => AgentFixture::Python,
+            BenchFixture::Typescript => AgentFixture::TypeScript,
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -166,6 +219,7 @@ pub fn run() -> Result<()> {
         Some(Commands::Init(args)) => run_init(args),
         Some(Commands::Fix(args)) => run_fix(args),
         Some(Commands::Flow(args)) => run_flow(args),
+        Some(Commands::Bench(args)) => run_bench(args),
         None => {
             println!("seshat, version {VERSION}");
             Ok(())
@@ -177,6 +231,41 @@ pub fn run() -> Result<()> {
         }
     }
     result
+}
+
+fn run_bench(args: BenchArgs) -> Result<()> {
+    match args.command {
+        BenchCommands::Agents(args) => run_bench_agents(args),
+    }
+}
+
+fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
+    let format = match args.format {
+        OutputFormat::Text => AgentBenchFormat::Text,
+        OutputFormat::Json => AgentBenchFormat::Json,
+    };
+    let language = if args.pt_br {
+        ReportLanguage::Portuguese
+    } else {
+        ReportLanguage::English
+    };
+    let options = AgentBenchOptions {
+        agents: args.agents,
+        fixtures: args.fixtures.into_iter().map(Into::into).collect(),
+        iterations: args.iterations,
+        model: args.model,
+        format,
+        language,
+        keep_temp: args.keep_temp,
+    };
+    let format = options.format;
+    let language = options.language;
+    let report = bench::run_agents(options)?;
+    match format {
+        AgentBenchFormat::Text => bench::print_report(&report, language),
+        AgentBenchFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+    }
+    Ok(())
 }
 
 fn run_commit(args: CommitArgs) -> Result<()> {
