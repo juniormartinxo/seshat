@@ -1,4 +1,4 @@
-use crate::config::{default_models, valid_providers, ProjectConfig};
+use crate::config::{default_models, project_false_positive_path, valid_providers, ProjectConfig};
 use crate::git::{self, GitClient};
 use crate::providers::{get_provider, Provider};
 use crate::review::{self, CodeReviewResult};
@@ -176,7 +176,7 @@ fn commit_with_ai_with_provider_factory_and_action(
         code_review = false;
     } else if !code_review && project_config.code_review.enabled {
         code_review = true;
-        ui::info("Code review ativado via .seshat");
+        ui::info("Code review ativado via .seshat/config.yaml");
     }
 
     let files_for_panel = paths
@@ -414,20 +414,7 @@ fn commit_with_ai_with_provider_factory_and_action(
 }
 
 fn false_positive_store_path(git: &GitClient) -> PathBuf {
-    let Ok(path) = git.run_output(["rev-parse", "--git-path", review::FALSE_POSITIVE_STORE_NAME])
-    else {
-        return git.repo_path().join(review::FALSE_POSITIVE_STORE_NAME);
-    };
-    let path = path.trim();
-    if path.is_empty() {
-        return git.repo_path().join(review::FALSE_POSITIVE_STORE_NAME);
-    }
-    let path = PathBuf::from(path);
-    if path.is_absolute() {
-        path
-    } else {
-        git.repo_path().join(path)
-    }
+    project_false_positive_path(git.repo_path())
 }
 
 fn suppress_known_false_positives(
@@ -1079,7 +1066,9 @@ code_review:
             &["config", "user.email", "seshat@example.test"],
         );
         git(repo.path(), &["config", "commit.gpgsign", "false"]);
-        fs::write(repo.path().join(".seshat"), config).unwrap();
+        let config_path = crate::config::project_config_path(repo.path());
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        fs::write(config_path, config).unwrap();
         fs::create_dir_all(repo.path().join("src")).unwrap();
         fs::write(repo.path().join("src/main.rs"), "fn main() {}\n").unwrap();
         git(repo.path(), &["add", "--", "src/main.rs"]);
