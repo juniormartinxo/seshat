@@ -1,8 +1,10 @@
+use crate::git::GitClient;
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
 use std::collections::HashMap;
 use std::env;
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::{Command, Stdio};
 
 const CONVENTIONAL_TYPES: &[&str] = &[
@@ -176,33 +178,34 @@ pub fn git_config_get(
     bool_mode: bool,
     envs: Option<&HashMap<OsString, OsString>>,
 ) -> Option<String> {
-    let mut command = Command::new("git");
-    command.arg("config");
-    if bool_mode {
-        command.arg("--bool");
-    }
-    command.arg("--get").arg(key);
-    if let Some(envs) = envs {
-        command.env_clear();
-        command.envs(envs.iter());
-    }
+    git_config_get_for_repo(".", key, bool_mode, envs)
+}
 
-    let output = command.output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!value.is_empty()).then_some(value)
+pub fn git_config_get_for_repo(
+    repo_path: impl AsRef<Path>,
+    key: &str,
+    bool_mode: bool,
+    envs: Option<&HashMap<OsString, OsString>>,
+) -> Option<String> {
+    GitClient::new(repo_path.as_ref()).config_get(key, bool_mode, envs)
 }
 
 pub fn is_gpg_signing_enabled(envs: Option<&HashMap<OsString, OsString>>) -> bool {
-    let gpg_format =
-        git_config_get("gpg.format", false, envs).unwrap_or_else(|| "openpgp".to_string());
+    is_gpg_signing_enabled_for_repo(".", envs)
+}
+
+pub fn is_gpg_signing_enabled_for_repo(
+    repo_path: impl AsRef<Path>,
+    envs: Option<&HashMap<OsString, OsString>>,
+) -> bool {
+    let repo_path = repo_path.as_ref();
+    let gpg_format = git_config_get_for_repo(repo_path, "gpg.format", false, envs)
+        .unwrap_or_else(|| "openpgp".to_string());
     if !gpg_format.eq_ignore_ascii_case("openpgp") {
         return false;
     }
 
-    git_config_get("commit.gpgsign", true, envs)
+    git_config_get_for_repo(repo_path, "commit.gpgsign", true, envs)
         .unwrap_or_default()
         .eq_ignore_ascii_case("true")
 }
@@ -210,14 +213,22 @@ pub fn is_gpg_signing_enabled(envs: Option<&HashMap<OsString, OsString>>) -> boo
 pub fn ensure_gpg_auth(
     envs: Option<&HashMap<OsString, OsString>>,
 ) -> Result<HashMap<OsString, OsString>> {
+    ensure_gpg_auth_for_repo(".", envs)
+}
+
+pub fn ensure_gpg_auth_for_repo(
+    repo_path: impl AsRef<Path>,
+    envs: Option<&HashMap<OsString, OsString>>,
+) -> Result<HashMap<OsString, OsString>> {
+    let repo_path = repo_path.as_ref();
     let envs = envs.cloned().unwrap_or_else(build_gpg_env);
-    if !is_gpg_signing_enabled(Some(&envs)) {
+    if !is_gpg_signing_enabled_for_repo(repo_path, Some(&envs)) {
         return Ok(envs);
     }
 
-    let gpg_program =
-        git_config_get("gpg.program", false, Some(&envs)).unwrap_or_else(|| "gpg".to_string());
-    let signing_key = git_config_get("user.signingkey", false, Some(&envs));
+    let gpg_program = git_config_get_for_repo(repo_path, "gpg.program", false, Some(&envs))
+        .unwrap_or_else(|| "gpg".to_string());
+    let signing_key = git_config_get_for_repo(repo_path, "user.signingkey", false, Some(&envs));
     let output_path = std::env::temp_dir().join("seshat-gpg-auth-check.sig");
     let mut command = Command::new(&gpg_program);
     command
@@ -264,15 +275,11 @@ pub fn ensure_gpg_auth(
 }
 
 pub fn get_last_commit_summary() -> Option<String> {
-    let output = Command::new("git")
-        .args(["log", "-1", "--pretty=%h %s"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let summary = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    (!summary.is_empty()).then_some(summary)
+    get_last_commit_summary_for_repo(".")
+}
+
+pub fn get_last_commit_summary_for_repo(repo_path: impl AsRef<Path>) -> Option<String> {
+    GitClient::new(repo_path.as_ref()).last_commit_summary()
 }
 
 #[cfg(test)]
