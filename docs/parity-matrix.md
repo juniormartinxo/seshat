@@ -20,10 +20,10 @@ Status:
 | Config global + `.seshat` + `.env` + keyring | ported | `resolve_effective_config` centraliza precedencia | `006`, `007`, `008` |
 | Providers HTTP/CLI | ported | Providers HTTP cobertos por transporte fake; providers CLI cobertos com executaveis fake | - |
 | Code review | ported | Parser, filtros, logs e JUDGE cobertos | - |
-| Tooling/fix | partial | Strategies existem, falta E2E com comandos fake | `015`, `016` |
-| UI/JSON | partial | JSON basico em `commit`, contrato incompleto | `017`, `018` |
-| GPG | partial | Prewarm existe, falta hardening de falhas tardias | `019` |
-| Release/cutover | missing | Ainda sem pacote/corte Python | `020`, `021` |
+| Tooling/fix | ported | Strategies separadas por linguagem e E2E com comandos fake para commit/fix | - |
+| UI/JSON | ported | UI humana e JSONL de `commit` tem contrato documentado e testes | - |
+| GPG | ported | Prewarm usa tempdir seguro, respeita `gpg.format` e falha antes de IA | - |
+| Release/cutover | ported | Estrategia de repos separados por linguagem documentada; sem pendencia no repo Rust | - |
 
 ## `seshat commit`
 
@@ -37,18 +37,18 @@ Status:
 | `--verbose`, `-v` | `CommitArgs.verbose` | ported | Usado em diff/check/commit quiet | - |
 | `--date`, `-d` | `CommitArgs.date` | ported | E2E valida data do commit | `004` |
 | `--max-diff` | `CommitArgs.max_diff` | ported | Override aplicado em config efetiva | - |
-| `--check`, `-c` | `CheckKind` | ported | `full`, `lint`, `test`, `typecheck` | `016` para E2E fake |
+| `--check`, `-c` | `CheckKind` | ported | `full`, `lint`, `test`, `typecheck`; E2E cobre `lint` com comando fake | - |
 | `--review`, `-r` | `CommitArgs.review` | ported | Liga review por flag | `013`, `014` |
 | `--no-review` | `CommitArgs.no_review` | ported | Sobrepoe `.seshat` | `014` |
-| `--no-check` | `CommitArgs.no_check` | ported | Pula checks | `016` |
-| `--format json` | `OutputFormat::Json` | partial | Eventos existem, contrato ainda incompleto | `018` |
+| `--no-check` | `CommitArgs.no_check` | ported | Pula checks | - |
+| `--format json` | `OutputFormat::Json` | ported | JSONL cobre `message_ready`, `committed`, `cancelled` e `error` | - |
 
 ### Contratos de comportamento
 
 | Item Python | Rust | Status | Notas | Gap/Card |
 | --- | --- | --- | --- | --- |
 | `.seshat` obrigatorio no `commit` | `run_commit` valida arquivo | ported | Em JSON emite erro antes do erro final | - |
-| Oferece `seshat init` se `.seshat` faltar | Nao oferece | changed | Rust falha direto; decisao pendente de UX | `017` |
+| Oferece `seshat init` se `.seshat` faltar | Nao oferece | changed | Rust falha direto; decisao mantida para automacao | - |
 | Delecao sem IA | `GitClient::is_deletion_only_commit` | ported | E2E valida subject | `004` |
 | Markdown sem IA | `is_markdown_only_commit` | ported | E2E smoke e no-AI | `003`, `004` |
 | Imagem sem IA | `is_image_only_commit` | ported | E2E valida subject | `004` |
@@ -57,11 +57,11 @@ Status:
 | Mix builtin no-AI | `is_builtin_no_ai_only_commit` | ported | E2E valida subject generico | `004` |
 | `commit.no_ai_extensions` | `matches_no_ai_rule` | ported | E2E valida `.txt` | `004` |
 | `commit.no_ai_paths` | `matches_no_ai_rule` | ported | E2E valida `generated/` | `004` |
-| Diff grande com confirmacao | `validate_diff_size` | partial | Falta E2E/contrato UI | `017` |
-| Checks por flag | `run_pre_commit_checks` | partial | Repo path explicito; falta comandos fake | `016` |
-| Checks por `.seshat` | `project_config.checks` | partial | Falta E2E | `016` |
+| Diff grande com confirmacao | `validate_diff_size` | ported | E2E cobre cancelamento sem `--yes` e continuidade com `--yes` | - |
+| Checks por flag | `run_pre_commit_checks` | ported | E2E cobre sucesso, falha bloqueante, falha nao bloqueante e output truncado | - |
+| Checks por `.seshat` | `project_config.checks` | ported | E2E cobre check habilitado e check desabilitado sem flag | - |
 | Code review por flag/config | `commit_with_ai` | ported | Inclui bloqueio e reavaliacao por JUDGE | - |
-| Commit assinado GPG | `ensure_gpg_auth_for_repo` | partial | Usa repo path; falta hardening | `019` |
+| Commit assinado GPG | `ensure_gpg_auth_for_repo` | ported | Usa repo path, `gpg.program`, `user.signingkey`, tempdir seguro e detalhe de stderr | - |
 
 ## `seshat flow`
 
@@ -75,10 +75,10 @@ Status:
 | `--model` | `FlowArgs.model` | ported | Override de config | - |
 | `--yes`, `-y` | `FlowArgs.yes` | ported | E2E cobre `--yes` | `003` |
 | `--verbose`, `-v` | `FlowArgs.verbose` | ported | Passado ao processamento | - |
-| `--date`, `-d` | `FlowArgs.date` | partial | Implementado; falta E2E proprio de flow | `004` cobre commit |
-| `--check`, `-c` | `FlowArgs.check` | partial | Repo path explicito; falta fake tools | `016` |
+| `--date`, `-d` | `FlowArgs.date` | ported | E2E proprio valida data no commit gerado por flow | - |
+| `--check`, `-c` | `FlowArgs.check` | ported | E2E cobre fake tool no flow | - |
 | `--review`, `-r` | `FlowArgs.review` | ported | Passado ao commit por arquivo | - |
-| `--no-check` | `FlowArgs.no_check` | partial | Passado ao commit por arquivo | `016` |
+| `--no-check` | `FlowArgs.no_check` | ported | E2E cobre skip de fake tool no flow | - |
 
 ### Contratos de comportamento
 
@@ -101,18 +101,18 @@ Status:
 | Detecta Python | `ToolingRunner` | ported | Unit tests cobrem detection | `005` |
 | Detecta Rust | `ToolingRunner` | changed | Rust novo no port; desejado para binario Rust | `015` |
 | Inclui `commit.no_ai_*` no template | `run_init` | ported | E2E valida presenca no template | `005` |
-| Inclui `ui` no template | `run_init` | partial | E2E valida presenca; contrato de UI segue pendente | `017` |
-| Nao sobrescreve prompt customizado | Parcial | Precisa validar no Rust | `005` |
+| Inclui `ui` no template | `run_init` | ported | E2E valida presenca; contrato documentado em `docs/ui-contract.md` | - |
+| Nao sobrescreve prompt customizado | `run_init` | ported | E2E preserva `seshat-review.md` existente | - |
 
 ## `seshat fix`
 
 | Item Python | Rust | Status | Notas | Gap/Card |
 | --- | --- | --- | --- | --- |
-| `--check lint` | `FixCheckKind::Lint` | ported | Apenas lint, como Python | `016` |
-| `--all`, `-a` | `FixArgs.run_all` | ported | Roda sem lista de arquivos | `016` |
-| Arquivos especificos | `FixArgs.files` | ported | Passa lista ao runner | `016` |
+| `--check lint` | `FixCheckKind::Lint` | ported | Apenas lint, como Python | - |
+| `--all`, `-a` | `FixArgs.run_all` | ported | Roda sem lista de arquivos | - |
+| Arquivos especificos | `FixArgs.files` | ported | Passa lista ao runner | - |
 | Default em staged files | `git::staged_files` | ported | E2E cobre arquivo staged com `ruff` fake | `005` |
-| Comandos fake em E2E | `tests/e2e_cli.rs` | ported | Cobre sucesso, `--all`, arquivos explicitos e falha | `005` |
+| Comandos fake em E2E | `tests/e2e_cli.rs` | ported | Cobre sucesso, `--all`, arquivos explicitos, falha e `fix_command` configurado | - |
 
 ## `seshat config`
 
@@ -161,16 +161,19 @@ Status:
 | `commit.no_ai_extensions` | `CommitConfig.no_ai_extensions` | ported | E2E cobre | `004` |
 | `commit.no_ai_paths` | `CommitConfig.no_ai_paths` | ported | E2E cobre | `004` |
 | Campos legados no topo | `normalize_legacy_commit_fields` | ported | Unit test cobre parte | `008` |
-| `checks.*.enabled` | `ProjectConfig.checks` | partial | Falta E2E fake | `016` |
-| `checks.*.blocking` | `ProjectConfig.checks` | partial | Falta E2E fake | `016` |
-| `checks.*.command` | `CommandOverride` | partial | Unit test cobre override | `016` |
-| `checks.*.auto_fix` | `ToolCommand.auto_fix` | partial | Falta E2E fake | `016` |
+| `checks.*.enabled` | `ProjectConfig.checks` | ported | E2E cobre habilitado e desabilitado | - |
+| `checks.*.blocking` | `ProjectConfig.checks` | ported | E2E cobre bloqueante e nao bloqueante | - |
+| `checks.*.command` | `CheckConfig.command` / `CommandOverride` | ported | Unit cobre override; E2E executa comando fake | - |
+| `checks.*.extensions` | `ToolCommand.extensions` | ported | E2E cobre skip por arquivo irrelevante | - |
+| `checks.*.pass_files` | `ToolCommand.pass_files` | ported | E2E cobre `true` e `false` | - |
+| `checks.*.fix_command` | `ToolCommand.fix_command` | ported | E2E cobre `fix` e `auto_fix` | - |
+| `checks.*.auto_fix` | `ToolCommand.auto_fix` | ported | E2E cobre uso do `fix_command` no check | - |
 | `code_review.enabled` | `CodeReviewConfig.enabled` | ported | Ativa review e respeita `--no-review` | - |
 | `code_review.blocking` | `CodeReviewConfig.blocking` | ported | Aciona parada, continuar ou JUDGE em BUG/SECURITY | - |
 | `code_review.prompt` | `get_review_prompt` | ported | Usado pelo review principal e JUDGE | - |
 | `code_review.extensions` | `filter_diff_by_extensions` | ported | Unit tests cobrem filtros default/custom e exclusoes | - |
 | `code_review.log_dir` | `save_review_to_log` | ported | Unit tests cobrem agrupamento, paths e unknown | - |
-| `ui` | Parcial | partial | Template existe; aplicacao incompleta | `017` |
+| `ui.force_rich` / `ui.icons` | `ui::apply_config` | ported | Aplicado em `commit`, `fix` e `flow`; `theme` fica documentado como futuro | - |
 
 ## Arquivos Lidos e Escritos
 
@@ -195,24 +198,25 @@ Status:
 | `flow` faz `git add -- <file>` | Sim | Sim via `GitClient` | ported | `003` |
 | `flow` faz `git commit --only -- <file>` | Sim | Sim via `GitClient` | ported | `003` |
 | `flow --path` usa repo alvo | Sim esperado | Sim testado | ported | `002`, `003` |
-| GPG prewarm antes de provider | Sim | Sim | partial | `019` |
+| GPG prewarm antes de provider | Sim | Sim | ported | E2E cobre `commit` e `flow` antes da IA | - |
 
 ## Testes de Referencia
 
 | Python | Rust atual | Status | Gap/Card |
 | --- | --- | --- | --- |
-| `tests/test_cli.py` commit/config/init | Unit + E2E parcial | partial | `016`, `018` |
+| `tests/test_cli.py` commit/config/init | Unit + E2E Rust para commit/config/init/fix/json | ported | - |
 | `tests/test_core.py` fast paths/review | Unit + E2E no-AI/review | ported | - |
-| `tests/test_config.py` config/keyring/dotenv | Unit de config/keyring/dotenv | partial | Falta E2E de keyring real por ambiente | `020` |
+| `tests/test_config.py` config/keyring/dotenv | Unit de config/keyring/dotenv | ported | Keyring real fica como smoke manual de release por depender do ambiente | - |
 | `tests/test_providers.py` providers | Unit de providers HTTP e CLI com fakes offline | ported | - |
-| `tests/test_tooling.py` discovery | Unit Rust | partial | `015`, `016` |
-| `tests/test_tooling_fix.py` fix | E2E com `ruff` fake | partial | `016` aprofunda estrategias |
+| `tests/test_tooling.py` discovery | Unit Rust + E2E fake commands | ported | - |
+| `tests/test_tooling_fix.py` fix | E2E com `ruff` fake e `fix_command` configurado | ported | - |
 | `tests/test_code_review.py` review | Unit parser/filtro/logs/JUDGE | ported | - |
-| `tests/test_ui.py` UI | Ausente contrato completo | missing | `017`, `018` |
+| `tests/test_ui.py` UI | Unit tests de contrato textual em `src/ui.rs`; JSONL em E2E | ported | - |
 
 ## Decisoes `changed`
 
 | Item | Diferenca | Motivo | Card |
 | --- | --- | --- | --- |
-| `commit` sem `.seshat` | Rust falha direto; Python oferece `init` interativo | Reduz surpresa em automacao; UX pendente | `017` |
+| `commit` sem `.seshat` | Rust falha direto; Python oferece `init` interativo | Reduz surpresa em automacao; decisao mantida | - |
+| UI `theme` | Rust nao aplica tema customizado ainda | Contrato documenta tema como futuro; `force_rich` e `icons` ja funcionam | `020` |
 | Suporte Rust em tooling/init | Rust detecta `Cargo.toml`; Python original focava Python/TS | Necessario para manter o port Rust | `015` |
