@@ -1,6 +1,6 @@
 # 019 - Endurecer Fluxo de GPG
 
-Status: todo
+Status: done
 Priority: P1
 Type: refactor
 Milestone: CLI Pronta para Uso Diario
