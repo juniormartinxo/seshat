@@ -1,11 +1,13 @@
-use crate::config::ProjectConfig;
+use crate::config::{default_models, valid_providers, ProjectConfig};
 use crate::git::{self, GitClient};
-use crate::providers::get_provider;
+use crate::providers::{get_provider, Provider};
 use crate::review::{self, CodeReviewResult};
 use crate::tooling::{ToolResult, ToolingRunner};
 use crate::ui;
 use crate::utils::{is_valid_conventional_commit, normalize_commit_subject_case};
 use anyhow::{anyhow, Result};
+use std::env;
+use std::ffi::OsString;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -69,6 +71,21 @@ pub fn run_pre_commit_checks(
 }
 
 pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeReviewResult>)> {
+    commit_with_ai_with_provider_factory(options, &|provider| get_provider(provider))
+}
+
+fn commit_with_ai_with_provider_factory(
+    options: &CommitOptions,
+    provider_factory: &dyn Fn(&str) -> Result<Box<dyn Provider>>,
+) -> Result<(String, Option<CodeReviewResult>)> {
+    commit_with_ai_with_provider_factory_and_action(options, provider_factory, None)
+}
+
+fn commit_with_ai_with_provider_factory_and_action(
+    options: &CommitOptions,
+    provider_factory: &dyn Fn(&str) -> Result<Box<dyn Provider>>,
+    forced_blocking_action: Option<BlockingIssueAction>,
+) -> Result<(String, Option<CodeReviewResult>)> {
     let git = GitClient::new(&options.repo_path);
     let project_config = ProjectConfig::load(git.repo_path());
     let paths = options.paths_ref();
@@ -248,12 +265,18 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         );
     }
 
-    let provider = get_provider(&options.provider)
+    let provider = provider_factory(&options.provider)
         .map_err(|error| anyhow!("Provedor não suportado: {} ({error})", options.provider))?;
+    let mut commit_provider = provider;
+    let mut commit_provider_name = commit_provider.name().to_string();
+    let mut commit_model = options.model.clone();
     let mut review_result = None;
 
     if code_review {
-        ui::info(format!("IA: executando code review ({})", provider.name()));
+        ui::info(format!(
+            "IA: executando code review ({})",
+            commit_provider.name()
+        ));
         let custom_prompt = review::get_review_prompt(
             project_config.project_type.as_deref(),
             project_config.code_review.prompt.as_deref(),
@@ -271,7 +294,7 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
                 summary: "Nenhum arquivo de código para revisar.".to_string(),
             }
         } else {
-            let raw = provider.generate_code_review(
+            let raw = commit_provider.generate_code_review(
                 &filtered_diff,
                 options.model.as_deref(),
                 Some(&custom_prompt),
@@ -282,9 +305,10 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
             "{}",
             review::format_review_for_display(&result, options.verbose)
         );
+        let mut skip_issue_confirmation = false;
         if result.has_issues {
             if let Some(log_dir) = project_config.code_review.log_dir.as_deref() {
-                let created = review::save_review_to_log(&result, log_dir, provider.name())?;
+                let created = review::save_review_to_log(&result, log_dir, commit_provider.name())?;
                 if !created.is_empty() {
                     ui::info(format!(
                         "Logs salvos em: {}",
@@ -296,16 +320,71 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
                     ));
                 }
             }
-            if project_config.code_review.blocking && result.has_blocking_issues("error") {
-                return Err(anyhow!("Code review encontrou problemas bloqueantes."));
+            if project_config.code_review.blocking && has_blocking_review_issues(&result) {
+                let action =
+                    forced_blocking_action.unwrap_or(prompt_blocking_issue_action(&result)?);
+                match action {
+                    BlockingIssueAction::Continue => {
+                        ui::warning("Code review encontrou problema bloqueante, mas continuando por decisão explícita.");
+                        skip_issue_confirmation = true;
+                    }
+                    BlockingIssueAction::Stop => {
+                        return Err(anyhow!(
+                            "Commit cancelado para investigar problema apontado pela IA."
+                        ));
+                    }
+                    BlockingIssueAction::Judge => {
+                        let judge = selected_judge_config(commit_provider.name())?;
+                        ui::info(format!("IA: JUDGE ({})", judge.provider));
+                        let (judge_provider, judge_result) = run_judge_review(
+                            &judge,
+                            &filtered_diff,
+                            Some(&custom_prompt),
+                            options.verbose,
+                            project_config.project_type.as_deref(),
+                            project_config.code_review.extensions.as_deref(),
+                            provider_factory,
+                        )
+                        .map_err(|error| anyhow!("Falha ao obter JUDGE: {error}"))?;
+
+                        println!(
+                            "{}",
+                            review::format_review_for_display(&judge_result, options.verbose)
+                        );
+                        if has_blocking_review_issues(&judge_result) {
+                            return Err(anyhow!(
+                                "JUDGE bloqueou o commit por apontar BUG ou SECURITY."
+                            ));
+                        }
+                        commit_provider = judge_provider;
+                        commit_provider_name = judge.provider;
+                        commit_model = judge.model;
+                        review_result = Some(judge_result);
+                        skip_issue_confirmation = true;
+                    }
+                }
+            }
+
+            let result_for_confirmation = review_result.as_ref().unwrap_or(&result);
+            if result_for_confirmation.has_issues && !skip_issue_confirmation {
+                if options.skip_confirmation {
+                    ui::warning("Code review encontrou issues, mas continuando (--yes flag).");
+                } else if !ui::confirm(
+                    "Code review encontrou issues. Deseja continuar com o commit?",
+                    false,
+                )? {
+                    return Err(anyhow!("Commit cancelado pelo usuário após code review."));
+                }
             }
         }
-        review_result = Some(result);
+        if review_result.is_none() {
+            review_result = Some(result);
+        }
     }
 
-    ui::info(format!("IA: gerando mensagem ({})", provider.name()));
+    ui::info(format!("IA: gerando mensagem ({commit_provider_name})"));
     let raw_message =
-        provider.generate_commit_message(&diff, options.model.as_deref(), code_review)?;
+        commit_provider.generate_commit_message(&diff, commit_model.as_deref(), false)?;
     let message = normalize_commit_subject_case(Some(&raw_message));
     if !is_valid_conventional_commit(&message) {
         return Err(anyhow!("Mensagem gerada inválida: {message}"));
@@ -313,10 +392,537 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
     Ok((message, review_result))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockingIssueAction {
+    Continue,
+    Stop,
+    Judge,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct JudgeConfig {
+    provider: String,
+    model: Option<String>,
+    api_key: Option<String>,
+}
+
+fn has_bug_issues(result: &CodeReviewResult) -> bool {
+    result.issues.iter().any(|issue| issue.issue_type == "bug")
+}
+
+fn has_security_issues(result: &CodeReviewResult) -> bool {
+    result
+        .issues
+        .iter()
+        .any(|issue| issue.issue_type == "security")
+}
+
+fn has_blocking_review_issues(result: &CodeReviewResult) -> bool {
+    has_bug_issues(result) || has_security_issues(result)
+}
+
+fn prompt_blocking_issue_action(result: &CodeReviewResult) -> Result<BlockingIssueAction> {
+    let label = if has_security_issues(result) {
+        "SECURITY"
+    } else {
+        "BUG"
+    };
+    ui::section(format!("{label} encontrado no code review"));
+    ui::info("Escolha o que deseja fazer:");
+    ui::info("  1. Continuar o commit (falso positivo)");
+    ui::info("  2. Parar e não commitar para investigar");
+    ui::info("  3. Enviar para outra IA (JUDGE)");
+    let choice = ui::prompt("Opção", Some("2"))?;
+    Ok(blocking_issue_action_from_choice(&choice))
+}
+
+fn blocking_issue_action_from_choice(choice: &str) -> BlockingIssueAction {
+    match choice.trim() {
+        "1" => BlockingIssueAction::Continue,
+        "3" => BlockingIssueAction::Judge,
+        _ => BlockingIssueAction::Stop,
+    }
+}
+
+fn selected_judge_config(current_provider: &str) -> Result<JudgeConfig> {
+    let configured_provider = env::var("JUDGE_PROVIDER").ok();
+    let provider = select_judge_provider(current_provider, configured_provider.as_deref())?;
+    let model = env::var("JUDGE_MODEL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            default_models()
+                .get(provider.as_str())
+                .map(|model| (*model).to_string())
+        });
+    let api_key = env::var("JUDGE_API_KEY")
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    Ok(JudgeConfig {
+        provider,
+        model,
+        api_key,
+    })
+}
+
+fn select_judge_provider(
+    current_provider: &str,
+    configured_provider: Option<&str>,
+) -> Result<String> {
+    if let Some(provider) = configured_provider.filter(|value| !value.trim().is_empty()) {
+        return Ok(provider.to_string());
+    }
+    let providers = valid_providers()
+        .into_iter()
+        .filter(|provider| *provider != current_provider)
+        .collect::<Vec<_>>();
+    if providers.is_empty() {
+        return Err(anyhow!("Nenhum outro provedor disponível para o JUDGE."));
+    }
+    if !ui::is_interactive() {
+        return Err(anyhow!(
+            "JUDGE_PROVIDER não configurado. Configure via 'seshat config --judge-provider' ou execute em modo interativo."
+        ));
+    }
+    let default = providers[0];
+    let choice = ui::prompt(
+        &format!("Provedor para o JUDGE ({})", providers.join(", ")),
+        Some(default),
+    )?;
+    let choice = choice.trim();
+    if providers.contains(&choice) {
+        Ok(choice.to_string())
+    } else {
+        Err(anyhow!("Provedor inválido para JUDGE: {choice}."))
+    }
+}
+
+fn run_judge_review(
+    judge: &JudgeConfig,
+    diff: &str,
+    custom_prompt: Option<&str>,
+    verbose: bool,
+    project_type: Option<&str>,
+    review_extensions: Option<&[String]>,
+    provider_factory: &dyn Fn(&str) -> Result<Box<dyn Provider>>,
+) -> Result<(Box<dyn Provider>, CodeReviewResult)> {
+    let env_overrides = judge_env_overrides(judge);
+    let _guard = TempEnv::apply(&env_overrides);
+    let provider = provider_factory(&judge.provider)?;
+    let raw = provider.generate_code_review(diff, judge.model.as_deref(), custom_prompt)?;
+    let result = review::parse_standalone_review(&raw);
+    if verbose {
+        let extensions = review_extensions
+            .map(|values| format!("{values:?}"))
+            .unwrap_or_else(|| format!("padrão para {}", project_type.unwrap_or("generic")));
+        ui::info(format!("JUDGE usando extensões: {extensions}"));
+    }
+    Ok((provider, result))
+}
+
+fn judge_env_overrides(judge: &JudgeConfig) -> Vec<(String, Option<String>)> {
+    let mut overrides = vec![
+        ("AI_PROVIDER".to_string(), Some(judge.provider.clone())),
+        ("AI_MODEL".to_string(), judge.model.clone()),
+        ("API_KEY".to_string(), judge.api_key.clone()),
+    ];
+    if judge.provider == "codex" {
+        overrides.push(("CODEX_MODEL".to_string(), judge.model.clone()));
+    }
+    if judge.provider == "claude-cli" {
+        overrides.push(("CLAUDE_MODEL".to_string(), judge.model.clone()));
+    }
+    overrides
+}
+
+struct TempEnv {
+    previous: Vec<(String, Option<OsString>)>,
+}
+
+impl TempEnv {
+    fn apply(overrides: &[(String, Option<String>)]) -> Self {
+        let previous = overrides
+            .iter()
+            .map(|(key, _)| (key.clone(), env::var_os(key)))
+            .collect::<Vec<_>>();
+        for (key, value) in overrides {
+            if let Some(value) = value {
+                env::set_var(key, value);
+            } else {
+                env::remove_var(key);
+            }
+        }
+        Self { previous }
+    }
+}
+
+impl Drop for TempEnv {
+    fn drop(&mut self) {
+        for (key, value) in self.previous.drain(..) {
+            if let Some(value) = value {
+                env::set_var(key, value);
+            } else {
+                env::remove_var(key);
+            }
+        }
+    }
+}
+
 fn generate_no_ai_commit_message(files: &[String]) -> String {
     if files.iter().all(|file| git::is_markdown_file(file)) {
         git::generate_markdown_commit_message(files)
     } else {
         git::generate_generic_update_commit_message(files)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::process::Command;
+    use std::sync::{Arc, Mutex};
+    use tempfile::TempDir;
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct ProviderCall {
+        provider: String,
+        kind: &'static str,
+        diff: String,
+        model: Option<String>,
+        api_key_env: Option<String>,
+        ai_model_env: Option<String>,
+    }
+
+    #[derive(Clone)]
+    struct FakeProvider {
+        name: &'static str,
+        review_response: String,
+        commit_response: String,
+        calls: Arc<Mutex<Vec<ProviderCall>>>,
+    }
+
+    impl Provider for FakeProvider {
+        fn name(&self) -> &'static str {
+            self.name
+        }
+
+        fn generate_commit_message(
+            &self,
+            diff: &str,
+            model: Option<&str>,
+            _code_review: bool,
+        ) -> Result<String> {
+            self.calls.lock().unwrap().push(ProviderCall {
+                provider: self.name.to_string(),
+                kind: "commit",
+                diff: diff.to_string(),
+                model: model.map(ToOwned::to_owned),
+                api_key_env: env::var("API_KEY").ok(),
+                ai_model_env: env::var("AI_MODEL").ok(),
+            });
+            Ok(self.commit_response.clone())
+        }
+
+        fn generate_code_review(
+            &self,
+            diff: &str,
+            model: Option<&str>,
+            _custom_prompt: Option<&str>,
+        ) -> Result<String> {
+            self.calls.lock().unwrap().push(ProviderCall {
+                provider: self.name.to_string(),
+                kind: "review",
+                diff: diff.to_string(),
+                model: model.map(ToOwned::to_owned),
+                api_key_env: env::var("API_KEY").ok(),
+                ai_model_env: env::var("AI_MODEL").ok(),
+            });
+            Ok(self.review_response.clone())
+        }
+    }
+
+    fn review_result_with(issue_type: &str) -> CodeReviewResult {
+        CodeReviewResult {
+            has_issues: true,
+            issues: vec![review::CodeIssue::new(
+                issue_type,
+                "src/app.rs:1 issue",
+                "fix it",
+                "error",
+            )],
+            summary: "Found 1 issue(s)".to_string(),
+        }
+    }
+
+    #[test]
+    fn judge_detects_bug_and_security_issues() {
+        let bug = review_result_with("bug");
+        let security = review_result_with("security");
+        let smell = review_result_with("code_smell");
+
+        assert!(has_bug_issues(&bug));
+        assert!(has_security_issues(&security));
+        assert!(has_blocking_review_issues(&bug));
+        assert!(has_blocking_review_issues(&security));
+        assert!(!has_blocking_review_issues(&smell));
+    }
+
+    #[test]
+    fn judge_blocking_action_maps_three_choices() {
+        assert_eq!(
+            blocking_issue_action_from_choice("1"),
+            BlockingIssueAction::Continue
+        );
+        assert_eq!(
+            blocking_issue_action_from_choice("2"),
+            BlockingIssueAction::Stop
+        );
+        assert_eq!(
+            blocking_issue_action_from_choice("3"),
+            BlockingIssueAction::Judge
+        );
+        assert_eq!(
+            blocking_issue_action_from_choice("invalid"),
+            BlockingIssueAction::Stop
+        );
+    }
+
+    #[test]
+    fn judge_selects_configured_provider_and_requires_config_when_noninteractive() {
+        assert_eq!(
+            select_judge_provider("openai", Some("gemini")).unwrap(),
+            "gemini"
+        );
+        assert!(select_judge_provider("openai", None)
+            .unwrap_err()
+            .to_string()
+            .contains("JUDGE_PROVIDER não configurado"));
+    }
+
+    #[test]
+    fn judge_config_uses_default_model_and_dedicated_key() {
+        let _guard = TempEnv::apply(&[
+            ("JUDGE_PROVIDER".to_string(), Some("gemini".to_string())),
+            ("JUDGE_MODEL".to_string(), None),
+            ("JUDGE_API_KEY".to_string(), Some("judge-key".to_string())),
+        ]);
+
+        let judge = selected_judge_config("openai").unwrap();
+
+        assert_eq!(judge.provider, "gemini");
+        assert_eq!(judge.model.as_deref(), Some("gemini-2.0-flash"));
+        assert_eq!(judge.api_key.as_deref(), Some("judge-key"));
+    }
+
+    #[test]
+    fn judge_review_uses_separate_provider_model_and_api_key_without_env_leak() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let previous = TempEnv::apply(&[
+            ("API_KEY".to_string(), Some("main-key".to_string())),
+            ("AI_MODEL".to_string(), Some("main-model".to_string())),
+        ]);
+        let judge = JudgeConfig {
+            provider: "openai".to_string(),
+            model: Some("judge-model".to_string()),
+            api_key: Some("judge-key".to_string()),
+        };
+        let calls_for_factory = calls.clone();
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            assert_eq!(provider, "openai");
+            Ok(Box::new(FakeProvider {
+                name: "openai",
+                review_response: "OK".to_string(),
+                commit_response: "feat: unused".to_string(),
+                calls: calls_for_factory.clone(),
+            }))
+        };
+
+        let (_provider, result) = run_judge_review(
+            &judge,
+            "diff-body",
+            Some("prompt"),
+            true,
+            Some("rust"),
+            Some(&[".rs".to_string()]),
+            &factory,
+        )
+        .unwrap();
+
+        assert!(!result.has_issues);
+        assert_eq!(env::var("API_KEY").ok().as_deref(), Some("main-key"));
+        assert_eq!(env::var("AI_MODEL").ok().as_deref(), Some("main-model"));
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].provider, "openai");
+        assert_eq!(calls[0].kind, "review");
+        assert_eq!(calls[0].diff, "diff-body");
+        assert_eq!(calls[0].model.as_deref(), Some("judge-model"));
+        assert_eq!(calls[0].api_key_env.as_deref(), Some("judge-key"));
+        assert_eq!(calls[0].ai_model_env.as_deref(), Some("judge-model"));
+        drop(previous);
+    }
+
+    #[test]
+    fn judge_approved_flow_uses_judge_provider_for_final_commit_message() {
+        let _env_lock = ENV_LOCK.lock().unwrap();
+        let repo = staged_rust_repo(
+            "\
+project_type: rust
+commit:
+  provider: openai
+  model: main-model
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: true
+",
+        );
+        let _env = TempEnv::apply(&[
+            ("JUDGE_PROVIDER".to_string(), Some("deepseek".to_string())),
+            ("JUDGE_MODEL".to_string(), Some("judge-model".to_string())),
+            ("JUDGE_API_KEY".to_string(), Some("judge-key".to_string())),
+        ]);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let calls_for_factory = calls.clone();
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            let provider = match provider {
+                "openai" => FakeProvider {
+                    name: "openai",
+                    review_response: "- [BUG] src/main.rs:1 bug | fix".to_string(),
+                    commit_response: "feat: primary should not be used".to_string(),
+                    calls: calls_for_factory.clone(),
+                },
+                "deepseek" => FakeProvider {
+                    name: "deepseek",
+                    review_response: "OK".to_string(),
+                    commit_response: "feat: judge approved".to_string(),
+                    calls: calls_for_factory.clone(),
+                },
+                other => return Err(anyhow!("unexpected provider {other}")),
+            };
+            Ok(Box::new(provider))
+        };
+        let options = CommitOptions {
+            repo_path: repo.path().to_path_buf(),
+            provider: "openai".to_string(),
+            model: Some("main-model".to_string()),
+            verbose: false,
+            skip_confirmation: true,
+            paths: None,
+            check: None,
+            code_review: false,
+            no_review: false,
+            no_check: true,
+            max_diff_size: 10_000,
+            warn_diff_size: 9_000,
+            language: "PT-BR".to_string(),
+        };
+
+        let (message, review) = commit_with_ai_with_provider_factory_and_action(
+            &options,
+            &factory,
+            Some(BlockingIssueAction::Judge),
+        )
+        .unwrap();
+
+        assert_eq!(message, "feat: judge approved");
+        assert!(review.is_some_and(|review| !review.has_issues));
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 3);
+        assert_eq!(calls[0].provider, "openai");
+        assert_eq!(calls[0].kind, "review");
+        assert_eq!(calls[0].model.as_deref(), Some("main-model"));
+        assert_eq!(calls[1].provider, "deepseek");
+        assert_eq!(calls[1].kind, "review");
+        assert_eq!(calls[1].model.as_deref(), Some("judge-model"));
+        assert_eq!(calls[1].api_key_env.as_deref(), Some("judge-key"));
+        assert_eq!(calls[2].provider, "deepseek");
+        assert_eq!(calls[2].kind, "commit");
+        assert_eq!(calls[2].model.as_deref(), Some("judge-model"));
+    }
+
+    #[test]
+    fn judge_no_review_flag_disables_configured_review() {
+        let repo = staged_rust_repo(
+            "\
+project_type: rust
+commit:
+  provider: openai
+  model: main-model
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: true
+",
+        );
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let calls_for_factory = calls.clone();
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            assert_eq!(provider, "openai");
+            Ok(Box::new(FakeProvider {
+                name: "openai",
+                review_response: "- [BUG] src/main.rs:1 bug | fix".to_string(),
+                commit_response: "feat: skip review".to_string(),
+                calls: calls_for_factory.clone(),
+            }))
+        };
+        let options = CommitOptions {
+            repo_path: repo.path().to_path_buf(),
+            provider: "openai".to_string(),
+            model: Some("main-model".to_string()),
+            verbose: false,
+            skip_confirmation: true,
+            paths: None,
+            check: None,
+            code_review: false,
+            no_review: true,
+            no_check: true,
+            max_diff_size: 10_000,
+            warn_diff_size: 9_000,
+            language: "PT-BR".to_string(),
+        };
+
+        let (message, review) = commit_with_ai_with_provider_factory(&options, &factory).unwrap();
+
+        assert_eq!(message, "feat: skip review");
+        assert!(review.is_none());
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].kind, "commit");
+    }
+
+    fn staged_rust_repo(config: &str) -> TempDir {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        git(repo.path(), &["config", "commit.gpgsign", "false"]);
+        fs::write(repo.path().join(".seshat"), config).unwrap();
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        fs::write(repo.path().join("src/main.rs"), "fn main() {}\n").unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+        repo
+    }
+
+    fn git(repo: &std::path::Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }
