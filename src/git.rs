@@ -1,8 +1,303 @@
 use crate::ui;
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
+use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use std::process::Command;
+use std::path::PathBuf;
+use std::process::{Command, ExitStatus, Output};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitClient {
+    repo_path: PathBuf,
+}
+
+impl GitClient {
+    pub fn new(repo_path: impl Into<PathBuf>) -> Self {
+        let repo_path = repo_path.into();
+        let repo_path = repo_path.canonicalize().unwrap_or(repo_path);
+        Self { repo_path }
+    }
+
+    pub fn repo_path(&self) -> &Path {
+        &self.repo_path
+    }
+
+    pub fn command_line_for_display(&self, args: &[&str]) -> Vec<String> {
+        let mut command = vec!["-C".to_string(), self.repo_path.display().to_string()];
+        command.extend(args.iter().map(|arg| (*arg).to_string()));
+        command
+    }
+
+    pub fn run_output<I, S>(&self, args: I) -> Result<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let args = collect_args(args);
+        let output = self.raw_output(args.iter())?;
+        if !output.status.success() {
+            return Err(self.git_error(&args, &output));
+        }
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    pub fn raw_output<I, S>(&self, args: I) -> Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.raw_output_with_env(args, None)
+    }
+
+    pub fn raw_output_with_env<I, S>(
+        &self,
+        args: I,
+        envs: Option<&HashMap<OsString, OsString>>,
+    ) -> Result<Output>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let args = collect_args(args);
+        let mut command = self.command();
+        command.args(&args);
+        if let Some(envs) = envs {
+            command.env_clear();
+            command.envs(envs.iter());
+        }
+        command.output().with_context(|| {
+            format!(
+                "falha ao executar git -C {} {}",
+                self.repo_path.display(),
+                display_args(&args)
+            )
+        })
+    }
+
+    pub fn status_with_env<I, S>(
+        &self,
+        args: I,
+        envs: Option<&HashMap<OsString, OsString>>,
+    ) -> Result<ExitStatus>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let args = collect_args(args);
+        let mut command = self.command();
+        command.args(&args);
+        if let Some(envs) = envs {
+            command.env_clear();
+            command.envs(envs.iter());
+        }
+        command.status().with_context(|| {
+            format!(
+                "falha ao executar git -C {} {}",
+                self.repo_path.display(),
+                display_args(&args)
+            )
+        })
+    }
+
+    pub fn check_staged_files(&self, paths: Option<&[String]>) -> Result<()> {
+        let files = self.staged_files(paths, false)?;
+        if files.is_empty() {
+            return Err(anyhow!(
+                "Nenhum arquivo em stage encontrado!\nUse 'git add <arquivo>' para adicionar arquivos ao stage antes de fazer commit."
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn git_diff(
+        &self,
+        skip_confirmation: bool,
+        paths: Option<&[String]>,
+        max_size: usize,
+        warn_size: usize,
+        language: &str,
+    ) -> Result<String> {
+        self.check_staged_files(paths)?;
+        let mut args = vec!["diff".to_string(), "--staged".to_string()];
+        append_paths(&mut args, paths);
+        let diff = self.run_output(args)?;
+        validate_diff_size(&diff, skip_confirmation, max_size, warn_size, language)?;
+        Ok(diff)
+    }
+
+    pub fn staged_files(
+        &self,
+        paths: Option<&[String]>,
+        exclude_deleted: bool,
+    ) -> Result<Vec<String>> {
+        let mut args = vec![
+            "diff".to_string(),
+            "--cached".to_string(),
+            "--name-only".to_string(),
+        ];
+        if exclude_deleted {
+            args.push("--diff-filter=d".to_string());
+        }
+        append_paths(&mut args, paths);
+        parse_lines(&self.run_output(args)?)
+    }
+
+    pub fn deleted_staged_files(&self, paths: Option<&[String]>) -> Result<Vec<String>> {
+        let mut args = vec![
+            "diff".to_string(),
+            "--cached".to_string(),
+            "--name-only".to_string(),
+            "--diff-filter=D".to_string(),
+        ];
+        append_paths(&mut args, paths);
+        parse_lines(&self.run_output(args)?)
+    }
+
+    pub fn is_deletion_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        Ok(!self.deleted_staged_files(paths)?.is_empty()
+            && self.staged_files(paths, true)?.is_empty())
+    }
+
+    pub fn is_markdown_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        let files = self.staged_files(paths, true)?;
+        Ok(!files.is_empty() && files.iter().all(|file| is_markdown_file(file)))
+    }
+
+    pub fn is_image_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        let files = self.staged_files(paths, true)?;
+        Ok(!files.is_empty() && files.iter().all(|file| is_image_file(file)))
+    }
+
+    pub fn is_lock_file_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        let files = self.staged_files(paths, true)?;
+        Ok(!files.is_empty() && files.iter().all(|file| is_lock_file(file)))
+    }
+
+    pub fn is_dotfile_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        let files = self.staged_files(paths, true)?;
+        Ok(!files.is_empty() && files.iter().all(|file| is_dotfile_path(file)))
+    }
+
+    pub fn is_builtin_no_ai_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
+        let files = self.staged_files(paths, true)?;
+        Ok(!files.is_empty() && files.iter().all(|file| is_builtin_no_ai_file(file)))
+    }
+
+    pub fn modified_files(&self) -> Vec<String> {
+        let mut files = Vec::new();
+        files.extend(self.lines_or_default(["diff", "--name-only"]));
+        files.extend(self.lines_or_default(["ls-files", "--others", "--exclude-standard"]));
+        files.extend(self.lines_or_default(["diff", "--cached", "--name-only"]));
+        files.sort();
+        files.dedup();
+        files
+    }
+
+    pub fn add_path(&self, file: &str) -> Result<Output> {
+        self.raw_output(["add", "--", file])
+    }
+
+    pub fn reset_head(&self, file: &str) -> Result<Output> {
+        self.raw_output(["reset", "HEAD", file])
+    }
+
+    pub fn file_has_changes(&self, file: &str) -> bool {
+        self.raw_output(["status", "--porcelain", "--", file])
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| {
+                String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+                    line.starts_with("??")
+                        || (line.len() >= 2 && (&line[0..1] != " " || &line[1..2] != " "))
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn has_staged_changes_for_file(&self, file: &str) -> bool {
+        self.raw_output(["diff", "--cached", "--name-only", "--", file])
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| !String::from_utf8_lossy(&output.stdout).trim().is_empty())
+            .unwrap_or(false)
+    }
+
+    pub fn git_dir(&self) -> Option<PathBuf> {
+        let output = self.run_output(["rev-parse", "--git-dir"]).ok()?;
+        let path = PathBuf::from(output.trim());
+        if path.is_absolute() {
+            Some(path)
+        } else {
+            Some(self.repo_path.join(path))
+        }
+    }
+
+    pub fn config_get(
+        &self,
+        key: &str,
+        bool_mode: bool,
+        envs: Option<&HashMap<OsString, OsString>>,
+    ) -> Option<String> {
+        let mut args = vec!["config".to_string()];
+        if bool_mode {
+            args.push("--bool".to_string());
+        }
+        args.extend(["--get".to_string(), key.to_string()]);
+        let output = self.raw_output_with_env(args, envs).ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!value.is_empty()).then_some(value)
+    }
+
+    pub fn last_commit_summary(&self) -> Option<String> {
+        let output = self.raw_output(["log", "-1", "--pretty=%h %s"]).ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let summary = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        (!summary.is_empty()).then_some(summary)
+    }
+
+    fn lines_or_default<I, S>(&self, args: I) -> Vec<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        self.run_output(args)
+            .ok()
+            .and_then(|output| parse_lines(&output).ok())
+            .unwrap_or_default()
+    }
+
+    fn command(&self) -> Command {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&self.repo_path);
+        command
+    }
+
+    fn git_error(&self, args: &[OsString], output: &Output) -> anyhow::Error {
+        let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
+            &output.stdout
+        } else {
+            &output.stderr
+        });
+        anyhow!(
+            "git -C {} {} falhou: {}",
+            self.repo_path.display(),
+            display_args(args),
+            detail.trim()
+        )
+    }
+}
+
+impl Default for GitClient {
+    fn default() -> Self {
+        Self::new(".")
+    }
+}
 
 pub const IMAGE_EXTENSIONS: &[&str] = &[
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".bmp", ".ico", ".tif", ".tiff",
@@ -28,13 +323,7 @@ pub const LOCK_FILE_NAMES: &[&str] = &[
 ];
 
 pub fn check_staged_files(paths: Option<&[String]>) -> Result<()> {
-    let files = staged_files(paths, false)?;
-    if files.is_empty() {
-        return Err(anyhow!(
-            "Nenhum arquivo em stage encontrado!\nUse 'git add <arquivo>' para adicionar arquivos ao stage antes de fazer commit."
-        ));
-    }
-    Ok(())
+    GitClient::default().check_staged_files(paths)
 }
 
 pub fn git_diff(
@@ -44,12 +333,7 @@ pub fn git_diff(
     warn_size: usize,
     language: &str,
 ) -> Result<String> {
-    check_staged_files(paths)?;
-    let mut args = vec!["diff".to_string(), "--staged".to_string()];
-    append_paths(&mut args, paths);
-    let diff = run_git_output(&args)?;
-    validate_diff_size(&diff, skip_confirmation, max_size, warn_size, language)?;
-    Ok(diff)
+    GitClient::default().git_diff(skip_confirmation, paths, max_size, warn_size, language)
 }
 
 pub fn validate_diff_size(
@@ -88,27 +372,11 @@ pub fn validate_diff_size(
 }
 
 pub fn staged_files(paths: Option<&[String]>, exclude_deleted: bool) -> Result<Vec<String>> {
-    let mut args = vec![
-        "diff".to_string(),
-        "--cached".to_string(),
-        "--name-only".to_string(),
-    ];
-    if exclude_deleted {
-        args.push("--diff-filter=d".to_string());
-    }
-    append_paths(&mut args, paths);
-    parse_lines(&run_git_output(&args)?)
+    GitClient::default().staged_files(paths, exclude_deleted)
 }
 
 pub fn deleted_staged_files(paths: Option<&[String]>) -> Result<Vec<String>> {
-    let mut args = vec![
-        "diff".to_string(),
-        "--cached".to_string(),
-        "--name-only".to_string(),
-        "--diff-filter=D".to_string(),
-    ];
-    append_paths(&mut args, paths);
-    parse_lines(&run_git_output(&args)?)
+    GitClient::default().deleted_staged_files(paths)
 }
 
 fn append_paths(args: &mut Vec<String>, paths: Option<&[String]>) {
@@ -128,48 +396,48 @@ fn parse_lines(output: &str) -> Result<Vec<String>> {
 }
 
 pub fn run_git_output(args: &[String]) -> Result<String> {
-    let output = Command::new("git")
-        .args(args)
-        .output()
-        .with_context(|| format!("falha ao executar git {}", args.join(" ")))?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
-            &output.stdout
-        } else {
-            &output.stderr
-        });
-        return Err(anyhow!("git {} falhou: {}", args.join(" "), detail.trim()));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    GitClient::default().run_output(args)
 }
 
 pub fn is_deletion_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    Ok(!deleted_staged_files(paths)?.is_empty() && staged_files(paths, true)?.is_empty())
+    GitClient::default().is_deletion_only_commit(paths)
 }
 
 pub fn is_markdown_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    let files = staged_files(paths, true)?;
-    Ok(!files.is_empty() && files.iter().all(|file| is_markdown_file(file)))
+    GitClient::default().is_markdown_only_commit(paths)
 }
 
 pub fn is_image_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    let files = staged_files(paths, true)?;
-    Ok(!files.is_empty() && files.iter().all(|file| is_image_file(file)))
+    GitClient::default().is_image_only_commit(paths)
 }
 
 pub fn is_lock_file_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    let files = staged_files(paths, true)?;
-    Ok(!files.is_empty() && files.iter().all(|file| is_lock_file(file)))
+    GitClient::default().is_lock_file_only_commit(paths)
 }
 
 pub fn is_dotfile_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    let files = staged_files(paths, true)?;
-    Ok(!files.is_empty() && files.iter().all(|file| is_dotfile_path(file)))
+    GitClient::default().is_dotfile_only_commit(paths)
 }
 
 pub fn is_builtin_no_ai_only_commit(paths: Option<&[String]>) -> Result<bool> {
-    let files = staged_files(paths, true)?;
-    Ok(!files.is_empty() && files.iter().all(|file| is_builtin_no_ai_file(file)))
+    GitClient::default().is_builtin_no_ai_only_commit(paths)
+}
+
+fn collect_args<I, S>(args: I) -> Vec<OsString>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    args.into_iter()
+        .map(|arg| arg.as_ref().to_os_string())
+        .collect()
+}
+
+fn display_args(args: &[OsString]) -> String {
+    args.iter()
+        .map(|arg| arg.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 pub fn is_markdown_file(file_path: &str) -> bool {
@@ -401,5 +669,14 @@ mod tests {
         let result = filter_non_ai_files_from_diff(diff);
         assert!(!result.contains("docs/a.md"));
         assert!(result.contains("src/app.rs"));
+    }
+
+    #[test]
+    fn git_client_builds_command_with_repo_path() {
+        let client = GitClient::new("/tmp/seshat-repo");
+        assert_eq!(
+            client.command_line_for_display(&["diff", "--cached"]),
+            vec!["-C", "/tmp/seshat-repo", "diff", "--cached"]
+        );
     }
 }
