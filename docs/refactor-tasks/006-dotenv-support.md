@@ -1,6 +1,6 @@
 # 006 - Implementar Suporte a .env
 
-Status: todo
+Status: done
 Priority: P1
 Type: feature
 Milestone: Config Confiavel
