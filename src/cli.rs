@@ -596,6 +596,7 @@ fn run_init(args: InitArgs) -> Result<()> {
         "code_review:".to_string(),
         "  enabled: true".to_string(),
         "  blocking: true".to_string(),
+        "  max_diff_size: 16000".to_string(),
         "  prompt: .seshat/review.md".to_string(),
         format!("  extensions: {extensions}"),
         String::new(),
