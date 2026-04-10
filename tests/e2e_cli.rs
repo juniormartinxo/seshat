@@ -1151,6 +1151,41 @@ fn tooling_e2e_commit_check_respects_pass_files_false() {
 
 #[cfg(unix)]
 #[test]
+fn tooling_e2e_typecheck_inserts_package_args_before_separator() {
+    let repo = init_git_repo();
+    configure_git_author(repo.path());
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_tool = temp.path().join("fake-typecheck");
+    let fake_codex = temp.path().join("fake-codex");
+    let log_path = temp.path().join("fake-typecheck.log");
+    write_fake_tool(&fake_tool);
+    write_fake_codex(&fake_codex);
+    write_project_seshat(
+        repo.path(),
+        format!(
+            "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\nchecks:\n  typecheck:\n    enabled: true\n    blocking: true\n    command:\n      - {}\n      - --\n      - -D\n      - warnings\n    pass_files: true\n    extensions:\n      - .rs\ncode_review:\n  enabled: false\n",
+            fake_tool.display()
+        ),
+    );
+    write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
+    git(repo.path(), &["add", "--", "src/main.rs"]);
+
+    seshat()
+        .current_dir(repo.path())
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: scoped typecheck")
+        .env("FAKE_TOOL_LOG", &log_path)
+        .args(["commit", "--yes", "--check", "typecheck"])
+        .assert()
+        .success();
+
+    let log = fs::read_to_string(log_path).expect("read fake tool log");
+    assert!(log.contains("-p demo -- -D warnings"));
+    assert_eq!(last_subject(repo.path()), "feat: scoped typecheck");
+}
+
+#[cfg(unix)]
+#[test]
 fn tooling_e2e_flow_check_lint_runs_fake_command() {
     let repo = init_git_repo();
     configure_git_author(repo.path());
