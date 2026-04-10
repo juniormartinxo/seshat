@@ -1241,3 +1241,41 @@ fn bench_agents_pt_br_report_runs_fake_codex() {
         .stdout(predicate::str::contains("codex"))
         .stdout(predicate::str::contains("ok"));
 }
+
+#[cfg(unix)]
+#[test]
+fn bench_agents_report_flag_creates_html_file() {
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    write_fake_codex(&fake_codex);
+    let report_path = temp.path().join("bench-report.html");
+
+    seshat()
+        .env("HOME", home.path())
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: add calculator fixture")
+        .args([
+            "bench",
+            "agents",
+            "--agents",
+            "codex",
+            "--fixtures",
+            "rust",
+            "--iterations",
+            "1",
+            "--report",
+            report_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("HTML report:"));
+
+    assert!(report_path.exists(), "HTML report file should be created");
+    let html = std::fs::read_to_string(&report_path).expect("read report");
+    assert!(html.contains("<!DOCTYPE html>"));
+    assert!(html.contains("chart.js"));
+    assert!(html.contains("codex"));
+    assert!(html.contains("Rust"));
+    assert!(html.contains("perfChart"));
+}
