@@ -1,7 +1,8 @@
-use super::runner::{tool_from_default, LanguageStrategy};
+use super::runner::{apply_overrides, tool_from_default, LanguageStrategy};
 use super::types::{ToolCommand, ToolingConfig};
 use crate::config::ProjectConfig;
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy)]
@@ -79,11 +80,6 @@ impl LanguageStrategy for RustStrategy {
     fn default_tools(&self) -> BTreeMap<&'static str, ToolCommand> {
         BTreeMap::from([
             (
-                "rustfmt",
-                ToolCommand::new("rustfmt", &["cargo", "fmt", "--check"], "lint")
-                    .with_fix(&["cargo", "fmt"]),
-            ),
-            (
                 "clippy",
                 ToolCommand::new(
                     "clippy",
@@ -106,13 +102,10 @@ impl LanguageStrategy for RustStrategy {
         ])
     }
 
-    fn discover_tools(&self, _path: &Path, project_config: &ProjectConfig) -> ToolingConfig {
+    fn discover_tools(&self, path: &Path, project_config: &ProjectConfig) -> ToolingConfig {
         let defaults = self.default_tools();
         let mut tools = BTreeMap::new();
-        tools.insert(
-            "lint".to_string(),
-            tool_from_default(&defaults, "rustfmt", "lint", project_config),
-        );
+        tools.insert("lint".to_string(), rustfmt_tool(path, project_config));
         tools.insert(
             "typecheck".to_string(),
             tool_from_default(&defaults, "clippy", "typecheck", project_config),
@@ -126,4 +119,47 @@ impl LanguageStrategy for RustStrategy {
             tools,
         }
     }
+}
+
+fn rustfmt_tool(path: &Path, project_config: &ProjectConfig) -> ToolCommand {
+    let mut command = vec![
+        "rustfmt".to_string(),
+        "--check".to_string(),
+        "--config".to_string(),
+        "skip_children=true".to_string(),
+    ];
+    let mut fix_command = vec![
+        "rustfmt".to_string(),
+        "--config".to_string(),
+        "skip_children=true".to_string(),
+    ];
+    if let Some(edition) = detect_rust_edition(path) {
+        command.extend(["--edition".to_string(), edition.clone()]);
+        fix_command.extend(["--edition".to_string(), edition]);
+    }
+
+    let mut tool = ToolCommand {
+        name: "rustfmt".to_string(),
+        command,
+        check_type: "lint".to_string(),
+        blocking: true,
+        pass_files: true,
+        extensions: None,
+        fix_command: Some(fix_command),
+        auto_fix: false,
+    };
+    apply_overrides(&mut tool, project_config);
+    tool
+}
+
+fn detect_rust_edition(path: &Path) -> Option<String> {
+    let manifest = fs::read_to_string(path.join("Cargo.toml")).ok()?;
+    manifest.lines().find_map(|line| {
+        let trimmed = line.trim();
+        if !trimmed.starts_with("edition") {
+            return None;
+        }
+        let value = trimmed.split_once('=')?.1.trim().trim_matches('"');
+        (!value.is_empty()).then(|| value.to_string())
+    })
 }
