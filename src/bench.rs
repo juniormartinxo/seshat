@@ -480,32 +480,77 @@ const HTML_REPORT_CSS: &str = r#"
 
 const HTML_REPORT_TW_STYLE: &str = r#"
 .badge{@apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold}
-.badge-ok{@apply bg-emerald-100 text-emerald-800}
-.badge-warn{@apply bg-amber-100 text-amber-800}
-.badge-fail{@apply bg-red-100 text-red-800}
+.badge-ok{@apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300}
+.badge-warn{@apply bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300}
+.badge-fail{@apply bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300}
 .text-mono{@apply font-mono text-xs}
 table{@apply w-full text-sm}
-th{@apply bg-gray-50 font-semibold text-left px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap text-gray-500 uppercase text-xs tracking-wider}
-td{@apply px-4 py-3 border-b border-gray-100}
+th{@apply bg-gray-50 dark:bg-gray-800/50 font-semibold text-left px-4 py-3 border-b-2 border-gray-200 dark:border-gray-700 whitespace-nowrap text-gray-500 dark:text-gray-400 uppercase text-xs tracking-wider}
+td{@apply px-4 py-3 border-b border-gray-100 dark:border-gray-700/50}
 tr:last-child td{@apply border-b-0}
-tbody tr:hover td{@apply bg-gray-50/50}
+tbody tr:hover td{@apply bg-gray-50/50 dark:bg-gray-700/30}
 "#;
 
 const TAB_SWITCH_JS: &str = r#"
 document.querySelectorAll('[data-tab]').forEach(function(b){
 b.addEventListener('click',function(){
 document.querySelectorAll('[data-tab]').forEach(function(t){
-t.classList.remove('text-indigo-600','border-indigo-600');
-t.classList.add('text-gray-500','border-transparent');
+t.classList.remove('text-indigo-600','dark:text-indigo-400','border-indigo-600','dark:border-indigo-400');
+t.classList.add('text-gray-500','dark:text-gray-400','border-transparent');
 t.setAttribute('aria-selected','false');
 });
 document.querySelectorAll('.tab-content').forEach(function(p){p.classList.add('hidden')});
-b.classList.remove('text-gray-500','border-transparent');
-b.classList.add('text-indigo-600','border-indigo-600');
+b.classList.remove('text-gray-500','dark:text-gray-400','border-transparent');
+b.classList.add('text-indigo-600','dark:text-indigo-400','border-indigo-600','dark:border-indigo-400');
 b.setAttribute('aria-selected','true');
 document.getElementById('panel-'+b.dataset.tab).classList.remove('hidden');
 });
 });
+"#;
+
+const THEME_INIT_JS: &str = r#"
+(function(){
+var s=localStorage.getItem('seshat-theme');
+if(s==='dark'||((!s)&&window.matchMedia('(prefers-color-scheme:dark)').matches)){
+document.documentElement.classList.add('dark');
+}
+})();
+"#;
+
+const THEME_TOGGLE_BTN: &str = concat!(
+    "<button id=\"theme-toggle\" class=\"absolute top-6 right-6 p-2 rounded-lg ",
+    "bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-colors cursor-pointer\" ",
+    "aria-label=\"Toggle theme\">",
+    "<svg id=\"icon-moon\" class=\"w-5 h-5\" fill=\"none\" viewBox=\"0 0 24 24\" ",
+    "stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" ",
+    "stroke-linejoin=\"round\" d=\"M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 ",
+    "0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 ",
+    "16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z\"/></svg>",
+    "<svg id=\"icon-sun\" class=\"w-5 h-5 hidden\" fill=\"none\" viewBox=\"0 0 24 24\" ",
+    "stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" ",
+    "stroke-linejoin=\"round\" d=\"M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 ",
+    "6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L",
+    "5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z\"/></svg>",
+    "</button>\n",
+);
+
+const THEME_TOGGLE_JS: &str = r#"
+(function(){
+var btn=document.getElementById('theme-toggle');
+var sun=document.getElementById('icon-sun');
+var moon=document.getElementById('icon-moon');
+if(document.documentElement.classList.contains('dark')){
+sun.classList.remove('hidden');moon.classList.add('hidden');
+}
+btn.addEventListener('click',function(){
+document.documentElement.classList.toggle('dark');
+localStorage.setItem('seshat-theme',
+document.documentElement.classList.contains('dark')?'dark':'light');
+sun.classList.toggle('hidden');
+moon.classList.toggle('hidden');
+if(typeof updateChartsTheme==='function') updateChartsTheme();
+});
+})();
 "#;
 
 fn html_escape(s: &str) -> String {
@@ -540,24 +585,29 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     h.push_str(
         "</title>\n\
                 <script src=\"https://cdn.tailwindcss.com\"></script>\n\
+                <script>tailwind.config={darkMode:'class'}</script>\n\
                 <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>\n\
-                <style>",
+                <script>",
     );
+    h.push_str(THEME_INIT_JS);
+    h.push_str("</script>\n<style>");
     h.push_str(HTML_REPORT_CSS);
     h.push_str("</style>\n<style type=\"text/tailwindcss\">");
     h.push_str(HTML_REPORT_TW_STYLE);
     h.push_str(
         "</style>\n</head>\n\
-                <body class=\"bg-gray-50 min-h-screen antialiased\">\n\
+                <body class=\"bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 \
+                min-h-screen antialiased transition-colors\">\n\
                 <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8\">\n",
     );
 
     // --- header ---
     h.push_str(
         "<header class=\"relative overflow-hidden bg-gradient-to-br from-indigo-600 \
-                via-purple-600 to-indigo-800 text-white rounded-2xl p-8 mb-8 shadow-xl\">\n\
-                <h1 class=\"text-3xl font-bold tracking-tight mb-4\">",
+                via-purple-600 to-indigo-800 text-white rounded-2xl p-8 mb-8 shadow-xl\">\n",
     );
+    h.push_str(THEME_TOGGLE_BTN);
+    h.push_str("<h1 class=\"text-3xl font-bold tracking-tight mb-4\">");
     h.push_str(if is_pt {
         "Benchmark de Agentes"
     } else {
@@ -602,9 +652,10 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     // --- charts ---
     h.push_str(
         "<div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 mb-8\">\n\
-                <div class=\"bg-white rounded-2xl border border-gray-200 p-6 shadow-sm \
-                hover:shadow-md transition-shadow\">\n\
-                <h2 class=\"text-sm font-medium text-gray-500 mb-4 uppercase tracking-wide\">",
+                <div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
+                dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow\">\n\
+                <h2 class=\"text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 \
+                uppercase tracking-wide\">",
     );
     h.push_str(if is_pt {
         "Tempo Médio de Resposta (ms)"
@@ -613,9 +664,10 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     });
     h.push_str(
         "</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
-                <div class=\"bg-white rounded-2xl border border-gray-200 p-6 shadow-sm \
-                hover:shadow-md transition-shadow\">\n\
-                <h2 class=\"text-sm font-medium text-gray-500 mb-4 uppercase tracking-wide\">",
+                <div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
+                dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow\">\n\
+                <h2 class=\"text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 \
+                uppercase tracking-wide\">",
     );
     h.push_str(if is_pt {
         "Taxa de Sucesso (%)"
@@ -626,14 +678,17 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
 
     // --- tabs ---
     h.push_str(
-        "<div class=\"bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8\">\n\
-                <div class=\"border-b border-gray-200 bg-gray-50/80\">\n\
+        "<div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
+                dark:border-gray-700 shadow-sm overflow-hidden mb-8\">\n\
+                <div class=\"border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 \
+                dark:bg-gray-800/80\">\n\
                 <nav class=\"flex\" role=\"tablist\">\n",
     );
     h.push_str(
         "<button role=\"tab\" aria-selected=\"true\" data-tab=\"ranking\" \
                 class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-indigo-600 border-indigo-600\">",
+                transition-colors text-indigo-600 dark:text-indigo-400 border-indigo-600 \
+                dark:border-indigo-400\">",
     );
     h.push_str(if is_pt {
         "Ranking geral"
@@ -644,14 +699,14 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     h.push_str(
         "<button role=\"tab\" aria-selected=\"false\" data-tab=\"summary\" \
                 class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-gray-500 border-transparent\">",
+                transition-colors text-gray-500 dark:text-gray-400 border-transparent\">",
     );
     h.push_str(if is_pt { "Resumo" } else { "Summary" });
     h.push_str("</button>\n");
     h.push_str(
         "<button role=\"tab\" aria-selected=\"false\" data-tab=\"samples\" \
                 class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-gray-500 border-transparent\">",
+                transition-colors text-gray-500 dark:text-gray-400 border-transparent\">",
     );
     h.push_str(if is_pt {
         "Amostras Individuais"
@@ -892,7 +947,8 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     let _ = writeln!(
         h,
-        "<footer class=\"text-center text-gray-400 py-8 text-sm\">{ts} &mdash; Seshat v{}</footer>",
+        "<footer class=\"text-center text-gray-400 dark:text-gray-500 py-8 text-sm\">\
+         {ts} &mdash; Seshat v{}</footer>",
         crate::VERSION,
     );
     h.push_str("</div>\n\n");
@@ -901,6 +957,7 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     h.push_str("<script>\n");
     h.push_str(TAB_SWITCH_JS);
     write_chart_js(&mut h, report, language);
+    h.push_str(THEME_TOGGLE_JS);
     h.push_str("</script>\n</body>\n</html>");
 
     h
@@ -974,20 +1031,29 @@ fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLan
     h.push_str("];\n");
 
     h.push_str(concat!(
-        "new Chart(document.getElementById('perfChart'),{",
-        "type:'bar',",
-        "data:{labels:F,datasets:P},",
-        "options:{responsive:true,",
-        "plugins:{legend:{position:'bottom'}},",
-        "scales:{y:{beginAtZero:true,title:{display:true,text:'ms'}}}}",
-        "});\n",
-        "new Chart(document.getElementById('qualityChart'),{",
-        "type:'bar',",
-        "data:{labels:F,datasets:Q},",
-        "options:{responsive:true,",
-        "plugins:{legend:{position:'bottom'}},",
-        "scales:{y:{beginAtZero:true,max:100,title:{display:true,text:'%'}}}}",
-        "});\n",
+        "var isDk=document.documentElement.classList.contains('dark');",
+        "var gC=isDk?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';",
+        "var tC=isDk?'#9ca3af':'#6b7280';\n",
+        "function mkOpts(t,mx){return {responsive:true,",
+        "plugins:{legend:{position:'bottom',labels:{color:tC}}},",
+        "scales:{y:{beginAtZero:true,max:mx,title:{display:true,text:t,color:tC},",
+        "ticks:{color:tC},grid:{color:gC}},",
+        "x:{ticks:{color:tC},grid:{color:gC}}}};}\n",
+        "var c1=new Chart(document.getElementById('perfChart'),",
+        "{type:'bar',data:{labels:F,datasets:P},options:mkOpts('ms',undefined)});\n",
+        "var c2=new Chart(document.getElementById('qualityChart'),",
+        "{type:'bar',data:{labels:F,datasets:Q},options:mkOpts('%',100)});\n",
+        "window.updateChartsTheme=function(){",
+        "var d=document.documentElement.classList.contains('dark');",
+        "var gc=d?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';",
+        "var tc=d?'#9ca3af':'#6b7280';",
+        "[c1,c2].forEach(function(c){",
+        "c.options.plugins.legend.labels.color=tc;",
+        "c.options.scales.y.title.color=tc;c.options.scales.y.ticks.color=tc;",
+        "c.options.scales.y.grid.color=gc;",
+        "c.options.scales.x.ticks.color=tc;c.options.scales.x.grid.color=gc;",
+        "c.update();});",
+        "};\n",
     ));
 }
 
@@ -1605,6 +1671,12 @@ mod tests {
         assert!(html.contains("panel-summary"));
         assert!(html.contains("panel-samples"));
         assert!(html.contains("tab-content"));
+        // dark mode
+        assert!(html.contains("darkMode:'class'"));
+        assert!(html.contains("dark:bg-gray-900"));
+        assert!(html.contains("theme-toggle"));
+        assert!(html.contains("seshat-theme"));
+        assert!(html.contains("updateChartsTheme"));
     }
 
     #[test]
