@@ -1,6 +1,6 @@
 use crate::config::{
-    apply_project_overrides, load_config, load_config_for_path, mask_api_key, normalize_config,
-    save_config, valid_providers, AppConfig, ProjectConfig,
+    load_config, load_config_for_path, mask_api_key, resolve_effective_config, save_config,
+    valid_providers, AppConfig, CliConfigOverrides, ProjectConfig,
 };
 use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
@@ -188,27 +188,18 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     }
 
     let project_config = ProjectConfig::load(git.repo_path());
-    let mut config = apply_project_overrides(
-        load_config_for_path(git.repo_path()),
-        &project_config.commit,
-    );
-    if let Some(provider) = args.provider {
-        config.ai_provider = Some(provider);
-    }
-    if let Some(model) = args.model {
-        config.ai_model = Some(model);
-    }
-    if let Some(max_diff) = args.max_diff {
-        config.max_diff_size = max_diff;
-    }
-    config = normalize_config(config);
-    crate::config::validate_config(&config)?;
-    set_provider_env(&config);
-
-    let provider = config
-        .ai_provider
-        .clone()
-        .unwrap_or_else(|| "openai".to_string());
+    let effective = resolve_effective_config(
+        git.repo_path(),
+        &project_config,
+        CliConfigOverrides {
+            provider: args.provider,
+            model: args.model,
+            max_diff_size: args.max_diff,
+        },
+    )?;
+    effective.apply_to_env();
+    let config = effective.config;
+    let provider = effective.provider;
     let mut date = args.date.or(config.default_date.clone());
 
     let mut summary = BTreeMap::from([
@@ -555,25 +546,20 @@ fn run_fix(args: FixArgs) -> Result<()> {
 fn run_flow(args: FlowArgs) -> Result<()> {
     let git = GitClient::new(&args.path);
     let project_config = ProjectConfig::load(git.repo_path());
-    let mut config = apply_project_overrides(
-        load_config_for_path(git.repo_path()),
-        &project_config.commit,
-    );
-    if let Some(provider) = args.provider {
-        config.ai_provider = Some(provider);
-    }
-    if let Some(model) = args.model {
-        config.ai_model = Some(model);
-    }
-    config = normalize_config(config);
-    crate::config::validate_config(&config)?;
-    set_provider_env(&config);
+    let effective = resolve_effective_config(
+        git.repo_path(),
+        &project_config,
+        CliConfigOverrides {
+            provider: args.provider,
+            model: args.model,
+            max_diff_size: None,
+        },
+    )?;
+    effective.apply_to_env();
+    let config = effective.config;
+    let provider = effective.provider;
 
     let date = args.date.or(config.default_date.clone());
-    let provider = config
-        .ai_provider
-        .clone()
-        .unwrap_or_else(|| "openai".to_string());
     let service = BatchCommitService::new(
         git.repo_path(),
         provider,
@@ -643,11 +629,5 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         Err(anyhow!("Flow finalizado com falhas"))
     } else {
         Ok(())
-    }
-}
-
-fn set_provider_env(config: &AppConfig) {
-    for (key, value) in config.as_env() {
-        std::env::set_var(key, value);
     }
 }
