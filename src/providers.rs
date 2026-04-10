@@ -14,6 +14,7 @@ use std::time::Duration;
 use tempfile::TempDir;
 
 const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
+const DEFAULT_CODE_REVIEW_TIMEOUT_SECONDS: u64 = 180;
 const CLI_TIMEOUT_SECONDS: u64 = 300;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -158,14 +159,34 @@ fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
         match f() {
             Ok(value) => return Ok(value),
             Err(error) => {
+                let retryable = !is_timeout_error(&error);
                 last = Some(error);
-                if attempt < 2 {
+                if !retryable {
+                    break;
+                }
+                if retryable && attempt < 2 {
                     std::thread::sleep(Duration::from_millis(250 * (1 << attempt)));
                 }
             }
         }
     }
     Err(last.unwrap_or_else(|| anyhow!("retry failed without error")))
+}
+
+fn is_timeout_error(error: &anyhow::Error) -> bool {
+    if error
+        .downcast_ref::<reqwest::Error>()
+        .is_some_and(reqwest::Error::is_timeout)
+    {
+        return true;
+    }
+    error.chain().any(|cause| {
+        let message = cause.to_string().to_ascii_lowercase();
+        message.contains("timed out")
+            || message.contains("timeout")
+            || message.contains("deadline has elapsed")
+            || message.contains("excedeu o timeout")
+    })
 }
 
 #[derive(Clone)]
@@ -262,7 +283,13 @@ impl OpenAICompatibleProvider {
             .ok_or_else(|| anyhow!("API_KEY não configurada para {}", self.name))
     }
 
-    fn request(&self, diff: &str, model: Option<&str>, system: String) -> Result<String> {
+    fn request(
+        &self,
+        diff: &str,
+        model: Option<&str>,
+        system: String,
+        timeout: Duration,
+    ) -> Result<String> {
         let api_key = self.validate()?;
         let model = model.unwrap_or(&self.model);
         let payload = json!({
@@ -279,7 +306,7 @@ impl OpenAICompatibleProvider {
             query: Vec::new(),
             bearer_auth: Some(api_key.to_string()),
             payload,
-            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+            timeout,
         })?;
         required_response_text(
             response["choices"][0]["message"]["content"].as_str(),
@@ -305,8 +332,9 @@ impl Provider for OpenAICompatibleProvider {
         model: Option<&str>,
         code_review: bool,
     ) -> Result<String> {
+        let timeout = http_timeout(false)?;
         retry(|| {
-            self.request(diff, model, system_prompt(code_review))
+            self.request(diff, model, system_prompt(code_review), timeout)
                 .map(|content| clean_provider_response(Some(&content)))
         })
     }
@@ -317,8 +345,9 @@ impl Provider for OpenAICompatibleProvider {
         model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String> {
+        let timeout = http_timeout(true)?;
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt))
+            self.request(diff, model, review_prompt(custom_prompt), timeout)
                 .map(|content| clean_review_response(Some(&content)))
         })
     }
@@ -356,6 +385,7 @@ impl AnthropicProvider {
         model: Option<&str>,
         system: String,
         max_tokens: usize,
+        timeout: Duration,
     ) -> Result<String> {
         let api_key = self
             .api_key
@@ -377,7 +407,7 @@ impl AnthropicProvider {
                 "system": system,
                 "messages": [{"role": "user", "content": format!("Diff:\n{diff}")}],
             }),
-            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+            timeout,
         })?;
         required_response_text(response["content"][0]["text"].as_str(), "claude")
     }
@@ -400,8 +430,9 @@ impl Provider for AnthropicProvider {
         model: Option<&str>,
         code_review: bool,
     ) -> Result<String> {
+        let timeout = http_timeout(false)?;
         retry(|| {
-            self.request(diff, model, system_prompt(code_review), 1000)
+            self.request(diff, model, system_prompt(code_review), 1000, timeout)
                 .map(|content| clean_provider_response(Some(&content)))
         })
     }
@@ -412,8 +443,9 @@ impl Provider for AnthropicProvider {
         model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String> {
+        let timeout = http_timeout(true)?;
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt), 2000)
+            self.request(diff, model, review_prompt(custom_prompt), 2000, timeout)
                 .map(|content| clean_review_response(Some(&content)))
         })
     }
@@ -444,7 +476,13 @@ impl GeminiProvider {
         }
     }
 
-    fn request(&self, diff: &str, model: Option<&str>, prompt: String) -> Result<String> {
+    fn request(
+        &self,
+        diff: &str,
+        model: Option<&str>,
+        prompt: String,
+        timeout: Duration,
+    ) -> Result<String> {
         let api_key = self
             .api_key
             .as_deref()
@@ -462,7 +500,7 @@ impl GeminiProvider {
             payload: json!({
                 "contents": [{"parts": [{"text": format!("{prompt}\n\nDiff:\n{diff}")}]}]
             }),
-            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+            timeout,
         })?;
         required_response_text(
             response["candidates"][0]["content"]["parts"][0]["text"].as_str(),
@@ -488,8 +526,9 @@ impl Provider for GeminiProvider {
         model: Option<&str>,
         code_review: bool,
     ) -> Result<String> {
+        let timeout = http_timeout(false)?;
         retry(|| {
-            self.request(diff, model, system_prompt(code_review))
+            self.request(diff, model, system_prompt(code_review), timeout)
                 .map(|content| clean_provider_response(Some(&content)))
         })
     }
@@ -500,8 +539,9 @@ impl Provider for GeminiProvider {
         model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String> {
+        let timeout = http_timeout(true)?;
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt))
+            self.request(diff, model, review_prompt(custom_prompt), timeout)
                 .map(|content| clean_review_response(Some(&content)))
         })
     }
@@ -528,11 +568,11 @@ impl OllamaProvider {
         }
     }
 
-    fn check_running(&self) -> Result<()> {
+    fn check_running(&self, timeout: Duration) -> Result<()> {
         self.transport
             .get(
                 &format!("{}/api/version", self.base_url.trim_end_matches('/')),
-                Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+                timeout,
             )
             .map_err(|error| anyhow!("Ollama respondeu com erro: {error}"))
     }
@@ -543,8 +583,9 @@ impl OllamaProvider {
         model: Option<&str>,
         prompt: String,
         task: &str,
+        timeout: Duration,
     ) -> Result<String> {
-        self.check_running()?;
+        self.check_running(timeout)?;
         let response = self.transport.post_json(HttpJsonRequest {
             url: format!("{}/api/generate", self.base_url.trim_end_matches('/')),
             headers: Vec::new(),
@@ -556,7 +597,7 @@ impl OllamaProvider {
                 "stream": false,
                 "options": {"temperature": 0.2},
             }),
-            timeout: Duration::from_secs(DEFAULT_TIMEOUT_SECONDS),
+            timeout,
         })?;
         required_response_text(response["response"].as_str(), "ollama")
     }
@@ -579,9 +620,16 @@ impl Provider for OllamaProvider {
         model: Option<&str>,
         code_review: bool,
     ) -> Result<String> {
+        let timeout = http_timeout(false)?;
         retry(|| {
-            self.request(diff, model, system_prompt(code_review), "Commit Message")
-                .map(|content| clean_provider_response(Some(&content)))
+            self.request(
+                diff,
+                model,
+                system_prompt(code_review),
+                "Commit Message",
+                timeout,
+            )
+            .map(|content| clean_provider_response(Some(&content)))
         })
     }
 
@@ -591,9 +639,16 @@ impl Provider for OllamaProvider {
         model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String> {
+        let timeout = http_timeout(true)?;
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt), "Code Review")
-                .map(|content| clean_review_response(Some(&content)))
+            self.request(
+                diff,
+                model,
+                review_prompt(custom_prompt),
+                "Code Review",
+                timeout,
+            )
+            .map(|content| clean_review_response(Some(&content)))
         })
     }
 }
@@ -625,7 +680,12 @@ impl CodexCliProvider {
         format!("{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}")
     }
 
-    fn run_codex(&self, prompt: &str, requested_model: Option<&str>) -> Result<String> {
+    fn run_codex(
+        &self,
+        prompt: &str,
+        requested_model: Option<&str>,
+        timeout: Duration,
+    ) -> Result<String> {
         validate_executable(
             &self.codex_bin,
             "Codex CLI não encontrada. Instale a CLI do Codex ou defina CODEX_BIN.",
@@ -633,7 +693,7 @@ impl CodexCliProvider {
         let temp_dir = TempDir::new()?;
         let output_path = temp_dir.path().join("last-message.txt");
         let args = self.build_args(&output_path, requested_model);
-        let completed = run_cli(&self.codex_bin, &args, prompt, self.timeout, None)?;
+        let completed = run_cli(&self.codex_bin, &args, prompt, timeout, None)?;
         if !completed.status.success() {
             return Err(anyhow!("Codex CLI falhou: {}", tail_error(&completed)));
         }
@@ -732,7 +792,7 @@ impl Provider for CodexCliProvider {
             diff,
             "Return only the final Conventional Commit message.",
         );
-        self.run_codex(&prompt, model)
+        self.run_codex(&prompt, model, self.timeout)
             .map(|content| clean_provider_response(Some(&content)))
     }
 
@@ -747,7 +807,7 @@ impl Provider for CodexCliProvider {
             diff,
             "Return only the code review in the requested format.",
         );
-        self.run_codex(&prompt, model)
+        self.run_codex(&prompt, model, code_review_timeout(self.timeout)?)
             .map(|content| clean_review_response(Some(&content)))
     }
 }
@@ -783,7 +843,7 @@ impl ClaudeCliProvider {
         format!("{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}")
     }
 
-    fn run_claude(&self, prompt: &str) -> Result<String> {
+    fn run_claude(&self, prompt: &str, timeout: Duration) -> Result<String> {
         validate_executable(
             &self.claude_bin,
             "Claude CLI não encontrada. Instale a CLI do Claude ou defina CLAUDE_BIN.",
@@ -793,7 +853,7 @@ impl ClaudeCliProvider {
             &self.claude_bin,
             &args,
             prompt,
-            self.timeout,
+            timeout,
             env::current_dir().ok().as_deref(),
         )?;
         if !completed.status.success() {
@@ -852,7 +912,7 @@ impl Provider for ClaudeCliProvider {
             diff,
             "Return only the final Conventional Commit message.",
         );
-        self.run_claude(&prompt)
+        self.run_claude(&prompt, self.timeout)
             .map(|content| clean_provider_response(Some(&content)))
     }
 
@@ -867,7 +927,7 @@ impl Provider for ClaudeCliProvider {
             diff,
             "Return only the code review in the requested format.",
         );
-        self.run_claude(&prompt)
+        self.run_claude(&prompt, code_review_timeout(self.timeout)?)
             .map(|content| clean_review_response(Some(&content)))
     }
 }
@@ -888,7 +948,27 @@ pub fn get_provider(provider_name: &str) -> Result<Box<dyn Provider>> {
     }
 }
 
+fn http_timeout(code_review: bool) -> Result<Duration> {
+    let seconds = if code_review {
+        parse_optional_timeout("CODE_REVIEW_TIMEOUT")?
+            .or(parse_optional_timeout("AI_TIMEOUT")?)
+            .unwrap_or(DEFAULT_CODE_REVIEW_TIMEOUT_SECONDS)
+    } else {
+        parse_optional_timeout("AI_TIMEOUT")?.unwrap_or(DEFAULT_TIMEOUT_SECONDS)
+    };
+    Ok(Duration::from_secs(seconds))
+}
+
+fn code_review_timeout(default: Duration) -> Result<Duration> {
+    parse_optional_timeout("CODE_REVIEW_TIMEOUT")
+        .map(|value| value.map(Duration::from_secs).unwrap_or(default))
+}
+
 fn parse_timeout(env_key: &str) -> Result<u64> {
+    parse_optional_timeout(env_key).map(|value| value.unwrap_or(CLI_TIMEOUT_SECONDS))
+}
+
+fn parse_optional_timeout(env_key: &str) -> Result<Option<u64>> {
     env::var(env_key)
         .ok()
         .map(|value| {
@@ -897,7 +977,6 @@ fn parse_timeout(env_key: &str) -> Result<u64> {
                 .with_context(|| format!("{env_key} deve ser um número inteiro"))
         })
         .transpose()
-        .map(|value| value.unwrap_or(CLI_TIMEOUT_SECONDS))
 }
 
 fn validate_executable(executable: &str, message: &str) -> Result<()> {
@@ -1173,6 +1252,50 @@ mod tests {
             request.payload["messages"][0]["content"].as_str().unwrap(),
             "Custom review prompt"
         );
+    }
+
+    #[test]
+    fn code_review_uses_dedicated_http_timeout() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        env::set_var("CODE_REVIEW_TIMEOUT", "123");
+        let transport = Arc::new(RecordingTransport::responding(chat_response("OK")));
+        let provider = OpenAICompatibleProvider::with_transport(
+            "openai",
+            Some("test-key".to_string()),
+            "gpt-default",
+            "https://example.test/v1/",
+            transport.clone(),
+        );
+
+        provider
+            .generate_code_review("diff-body", None, Some("Custom review prompt"))
+            .unwrap();
+
+        assert_eq!(transport.last_post().timeout, Duration::from_secs(123));
+    }
+
+    #[test]
+    fn code_review_timeout_errors_are_not_retried() {
+        let transport = Arc::new(RecordingTransport::failing_post(
+            "request timed out while waiting for provider",
+        ));
+        let provider = OpenAICompatibleProvider::with_transport(
+            "openai",
+            Some("test-key".to_string()),
+            "gpt-default",
+            "https://example.test/v1/",
+            transport.clone(),
+        );
+
+        let error = provider
+            .generate_code_review("diff-body", None, Some("Custom review prompt"))
+            .unwrap_err();
+
+        assert!(error.to_string().contains("timed out"));
+        assert_eq!(transport.post_count(), 1);
     }
 
     #[test]
@@ -1860,6 +1983,28 @@ mod tests {
         assert!(error.to_string().contains("CLI excedeu o timeout de 0s"));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn claude_cli_code_review_uses_code_review_timeout_override() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("claude-slow-review-fake");
+        write_fake_executable(&bin_path, fake_sleeping_cli_script());
+        env::set_var("CLAUDE_BIN", &bin_path);
+        env::set_var("CLAUDE_TIMEOUT", "300");
+        env::set_var("CODE_REVIEW_TIMEOUT", "0");
+
+        let provider = ClaudeCliProvider::new().unwrap();
+        let error = provider
+            .generate_code_review("diff-body", None, Some("Claude review prompt"))
+            .unwrap_err();
+
+        assert!(error.to_string().contains("CLI excedeu o timeout de 0s"));
+    }
+
     struct ProviderEnvGuard(Option<Vec<(&'static str, Option<OsString>)>>);
 
     impl Drop for ProviderEnvGuard {
@@ -1883,6 +2028,8 @@ mod tests {
             "ANTHROPIC_API_KEY",
             "CLAUDE_API_KEY",
             "AI_MODEL",
+            "AI_TIMEOUT",
+            "CODE_REVIEW_TIMEOUT",
             "ZAI_API_KEY",
             "ZHIPU_API_KEY",
             "ZAI_BASE_URL",
