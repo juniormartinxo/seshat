@@ -6,6 +6,7 @@ use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
 use std::env;
 use std::ffi::OsString;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -312,6 +313,384 @@ fn fixture_label(value: &str, language: ReportLanguage) -> String {
         "typescript" => AgentFixture::TypeScript.label(language).to_string(),
         other => other.to_string(),
     }
+}
+
+const CHART_PALETTE: &[(&str, &str)] = &[
+    ("#4f46e5", "rgba(79,70,229,0.7)"),
+    ("#059669", "rgba(5,150,105,0.7)"),
+    ("#d97706", "rgba(217,119,6,0.7)"),
+    ("#dc2626", "rgba(220,38,38,0.7)"),
+    ("#7c3aed", "rgba(124,58,237,0.7)"),
+    ("#0891b2", "rgba(8,145,178,0.7)"),
+    ("#ea580c", "rgba(234,88,12,0.7)"),
+    ("#65a30d", "rgba(101,163,13,0.7)"),
+];
+
+const HTML_REPORT_CSS: &str = r#"
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.6}
+.container{max-width:1200px;margin:0 auto;padding:2rem}
+header{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:#fff;padding:2.5rem;border-radius:16px;margin-bottom:2rem;box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1)}
+header h1{font-size:1.875rem;margin-bottom:.75rem;font-weight:700}
+.meta{display:flex;gap:1rem;flex-wrap:wrap;font-size:.9375rem}
+.meta span{background:rgba(255,255,255,.15);padding:.375rem .875rem;border-radius:8px}
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2rem}
+.chart-box{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.chart-box h2{font-size:.9375rem;color:#64748b;margin-bottom:1rem;font-weight:500}
+section{margin-bottom:2rem}
+section>h2{font-size:1.25rem;margin-bottom:1rem}
+.table-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.table-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{background:#f8fafc;font-weight:600;text-align:left;padding:.75rem 1rem;border-bottom:2px solid #e2e8f0;white-space:nowrap;color:#475569;text-transform:uppercase;font-size:.75rem;letter-spacing:.05em}
+td{padding:.75rem 1rem;border-bottom:1px solid #f1f5f9}
+tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:.125rem .625rem;border-radius:9999px;font-size:.75rem;font-weight:600;letter-spacing:.025em}
+.badge-ok{background:#dcfce7;color:#166534}
+.badge-warn{background:#fef9c3;color:#854d0e}
+.badge-fail{background:#fee2e2;color:#991b1b}
+.text-right{text-align:right}
+.text-mono{font-family:'SF Mono',ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8125rem}
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:'▶ ';font-size:.75rem;display:inline-block}
+details[open] summary::before{content:'▼ '}
+details summary h2{display:inline;color:#4f46e5}
+details summary h2:hover{text-decoration:underline}
+details .table-wrap{margin-top:1rem}
+footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
+@media(max-width:768px){.charts{grid-template-columns:1fr}.meta{flex-direction:column;gap:.5rem}.container{padding:1rem}}
+"#;
+
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage) -> String {
+    let is_pt = matches!(language, ReportLanguage::Portuguese);
+    let mut h = String::with_capacity(32_768);
+
+    h.push_str("<!DOCTYPE html>\n<html lang=\"");
+    h.push_str(if is_pt { "pt-BR" } else { "en" });
+    h.push_str("\">\n<head>\n<meta charset=\"UTF-8\">\n\
+                <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n<title>");
+    h.push_str(if is_pt {
+        "Relatório Benchmark — Seshat"
+    } else {
+        "Benchmark Report — Seshat"
+    });
+    h.push_str("</title>\n\
+                <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>\n\
+                <style>");
+    h.push_str(HTML_REPORT_CSS);
+    h.push_str("</style>\n</head>\n<body>\n<div class=\"container\">\n");
+
+    // --- header ---
+    h.push_str("<header>\n<h1>");
+    h.push_str(if is_pt {
+        "Benchmark de Agentes"
+    } else {
+        "Agent Benchmark"
+    });
+    h.push_str("</h1>\n<div class=\"meta\">\n");
+    let _ = writeln!(
+        h,
+        "<span><strong>{}:</strong> {}</span>",
+        if is_pt { "Agentes" } else { "Agents" },
+        html_escape(&report.agents.join(", "))
+    );
+    let _ = writeln!(
+        h,
+        "<span><strong>Fixtures:</strong> {}</span>",
+        html_escape(&report.fixtures.join(", "))
+    );
+    let _ = writeln!(
+        h,
+        "<span><strong>{}:</strong> {}</span>",
+        if is_pt { "Iterações" } else { "Iterations" },
+        report.iterations
+    );
+    h.push_str("</div>\n</header>\n\n");
+
+    // --- charts ---
+    h.push_str("<section class=\"charts\">\n<div class=\"chart-box\">\n<h2>");
+    h.push_str(if is_pt {
+        "Tempo Médio de Resposta (ms)"
+    } else {
+        "Average Response Time (ms)"
+    });
+    h.push_str("</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
+                <div class=\"chart-box\">\n<h2>");
+    h.push_str(if is_pt {
+        "Taxa de Sucesso (%)"
+    } else {
+        "Success Rate (%)"
+    });
+    h.push_str("</h2>\n<canvas id=\"qualityChart\"></canvas>\n</div>\n</section>\n\n");
+
+    // --- summary table ---
+    h.push_str("<section>\n<h2>");
+    h.push_str(if is_pt { "Resumo" } else { "Summary" });
+    h.push_str("</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+                <table>\n<thead><tr>");
+    let summary_headers: &[&str] = if is_pt {
+        &[
+            "Fixture",
+            "Agente",
+            "Sucesso",
+            "Conv. Válido",
+            "Média (ms)",
+            "P95 (ms)",
+            "Min (ms)",
+            "Max (ms)",
+            "Resultado",
+        ]
+    } else {
+        &[
+            "Fixture",
+            "Agent",
+            "Success",
+            "Conv. Valid",
+            "Avg (ms)",
+            "P95 (ms)",
+            "Min (ms)",
+            "Max (ms)",
+            "Result",
+        ]
+    };
+    for hdr in summary_headers {
+        let _ = write!(h, "<th>{hdr}</th>");
+    }
+    h.push_str("</tr></thead>\n<tbody>\n");
+
+    for s in &report.summaries {
+        let (badge_cls, badge_lbl) = if s.success < s.total {
+            ("badge-fail", if is_pt { "falha" } else { "failed" })
+        } else if s.conventional_valid < s.total {
+            (
+                "badge-warn",
+                if is_pt {
+                    "conv. inválido"
+                } else {
+                    "invalid conv."
+                },
+            )
+        } else {
+            ("badge-ok", "ok")
+        };
+        let _ = writeln!(
+            h,
+            "<tr>\
+             <td>{}</td><td>{}</td>\
+             <td class=\"text-right\">{}/{}</td>\
+             <td class=\"text-right\">{}/{}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td><span class=\"badge {badge_cls}\">{badge_lbl}</span></td>\
+             </tr>",
+            html_escape(&fixture_label(&s.fixture, language)),
+            html_escape(&s.agent),
+            s.success,
+            s.total,
+            s.conventional_valid,
+            s.total,
+            s.avg_ms,
+            s.p95_ms,
+            s.min_ms,
+            s.max_ms,
+        );
+    }
+    h.push_str("</tbody>\n</table>\n</div></div>\n</section>\n\n");
+
+    // --- individual samples (collapsible) ---
+    h.push_str("<section>\n<details>\n<summary><h2>");
+    h.push_str(if is_pt {
+        "Amostras Individuais"
+    } else {
+        "Individual Samples"
+    });
+    h.push_str("</h2></summary>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+                <table>\n<thead><tr>");
+    let sample_headers: &[&str] = if is_pt {
+        &[
+            "Fixture",
+            "Agente",
+            "#",
+            "Duração (ms)",
+            "Sucesso",
+            "Conv.",
+            "Mensagem",
+        ]
+    } else {
+        &[
+            "Fixture",
+            "Agent",
+            "#",
+            "Duration (ms)",
+            "Success",
+            "Conv.",
+            "Message",
+        ]
+    };
+    for hdr in sample_headers {
+        let _ = write!(h, "<th>{hdr}</th>");
+    }
+    h.push_str("</tr></thead>\n<tbody>\n");
+
+    let ok_badge = "<span class=\"badge badge-ok\">✓</span>";
+    let fail_badge = "<span class=\"badge badge-fail\">✗</span>";
+    for sample in &report.samples {
+        let msg = sample
+            .message
+            .as_deref()
+            .or(sample.error.as_deref())
+            .unwrap_or("-");
+        let display_msg = if msg.len() > 80 {
+            let mut end = 80;
+            while !msg.is_char_boundary(end) && end > 0 {
+                end -= 1;
+            }
+            format!("{}…", &msg[..end])
+        } else {
+            msg.to_string()
+        };
+        let _ = writeln!(
+            h,
+            "<tr>\
+             <td>{}</td><td>{}</td>\
+             <td class=\"text-right\">{}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td>{}</td><td>{}</td>\
+             <td class=\"text-mono\">{}</td>\
+             </tr>",
+            html_escape(&fixture_label(&sample.fixture, language)),
+            html_escape(&sample.agent),
+            sample.iteration,
+            sample.duration_ms,
+            if sample.success { ok_badge } else { fail_badge },
+            if sample.conventional_valid {
+                ok_badge
+            } else {
+                fail_badge
+            },
+            html_escape(&display_msg),
+        );
+    }
+    h.push_str("</tbody>\n</table>\n</div></div>\n</details>\n</section>\n\n");
+
+    // --- footer ---
+    let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+    let _ = writeln!(
+        h,
+        "<footer>{ts} &mdash; Seshat v{}</footer>",
+        crate::VERSION,
+    );
+    h.push_str("</div>\n\n");
+
+    // --- chart.js script ---
+    h.push_str("<script>\n");
+    write_chart_js(&mut h, report, language);
+    h.push_str("</script>\n</body>\n</html>");
+
+    h
+}
+
+fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLanguage) {
+    let labels: Vec<String> = report
+        .fixtures
+        .iter()
+        .map(|f| {
+            let lbl = fixture_label(f, language).replace('\'', "\\'");
+            format!("'{lbl}'")
+        })
+        .collect();
+    let _ = writeln!(h, "const F=[{}];", labels.join(","));
+
+    // perf datasets (avg_ms)
+    h.push_str("const P=[\n");
+    for (i, agent) in report.agents.iter().enumerate() {
+        let (border, bg) = CHART_PALETTE[i % CHART_PALETTE.len()];
+        let vals: Vec<String> = report
+            .fixtures
+            .iter()
+            .map(|fix| {
+                report
+                    .summaries
+                    .iter()
+                    .find(|s| s.fixture == *fix && s.agent == *agent)
+                    .map(|s| format!("{:.1}", s.avg_ms))
+                    .unwrap_or_else(|| "0".to_string())
+            })
+            .collect();
+        let safe = agent.replace('\'', "\\'");
+        let joined = vals.join(",");
+        let _ = writeln!(
+            h,
+            "{{label:'{safe}',data:[{joined}],backgroundColor:'{bg}',borderColor:'{border}',borderWidth:1}},",
+        );
+    }
+    h.push_str("];\n");
+
+    // quality datasets (success %)
+    h.push_str("const Q=[\n");
+    for (i, agent) in report.agents.iter().enumerate() {
+        let (border, bg) = CHART_PALETTE[i % CHART_PALETTE.len()];
+        let vals: Vec<String> = report
+            .fixtures
+            .iter()
+            .map(|fix| {
+                report
+                    .summaries
+                    .iter()
+                    .find(|s| s.fixture == *fix && s.agent == *agent)
+                    .map(|s| {
+                        if s.total == 0 {
+                            "0".to_string()
+                        } else {
+                            format!("{:.1}", s.success as f64 / s.total as f64 * 100.0)
+                        }
+                    })
+                    .unwrap_or_else(|| "0".to_string())
+            })
+            .collect();
+        let safe = agent.replace('\'', "\\'");
+        let joined = vals.join(",");
+        let _ = writeln!(
+            h,
+            "{{label:'{safe}',data:[{joined}],backgroundColor:'{bg}',borderColor:'{border}',borderWidth:1}},",
+        );
+    }
+    h.push_str("];\n");
+
+    h.push_str(concat!(
+        "new Chart(document.getElementById('perfChart'),{",
+        "type:'bar',",
+        "data:{labels:F,datasets:P},",
+        "options:{responsive:true,",
+        "plugins:{legend:{position:'bottom'}},",
+        "scales:{y:{beginAtZero:true,title:{display:true,text:'ms'}}}}",
+        "});\n",
+        "new Chart(document.getElementById('qualityChart'),{",
+        "type:'bar',",
+        "data:{labels:F,datasets:Q},",
+        "options:{responsive:true,",
+        "plugins:{legend:{position:'bottom'}},",
+        "scales:{y:{beginAtZero:true,max:100,title:{display:true,text:'%'}}}}",
+        "});\n",
+    ));
 }
 
 fn normalize_agents(agents: Vec<String>, base_config: &AppConfig) -> Result<Vec<String>> {
@@ -624,5 +1003,107 @@ mod tests {
         assert_eq!(summaries[0].success, 2);
         assert_eq!(summaries[0].conventional_valid, 1);
         assert_eq!(summaries[0].avg_ms, 15.0);
+    }
+
+    #[test]
+    fn html_report_contains_expected_sections() {
+        let report = AgentBenchReport {
+            iterations: 2,
+            agents: vec!["codex".to_string()],
+            fixtures: vec!["rust".to_string()],
+            temp_root: None,
+            summaries: vec![AgentBenchSummary {
+                fixture: "rust".to_string(),
+                agent: "codex".to_string(),
+                total: 2,
+                success: 2,
+                conventional_valid: 1,
+                avg_ms: 150.0,
+                min_ms: 100.0,
+                p95_ms: 190.0,
+                max_ms: 200.0,
+            }],
+            samples: vec![
+                AgentBenchSample {
+                    fixture: "rust".to_string(),
+                    agent: "codex".to_string(),
+                    iteration: 1,
+                    duration_ms: 100.0,
+                    success: true,
+                    conventional_valid: true,
+                    message: Some("feat: add calculator".to_string()),
+                    error: None,
+                },
+                AgentBenchSample {
+                    fixture: "rust".to_string(),
+                    agent: "codex".to_string(),
+                    iteration: 2,
+                    duration_ms: 200.0,
+                    success: true,
+                    conventional_valid: false,
+                    message: Some("invalid message".to_string()),
+                    error: None,
+                },
+            ],
+        };
+
+        let html = generate_html_report(&report, ReportLanguage::English);
+
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("Agent Benchmark"));
+        assert!(html.contains("codex"));
+        assert!(html.contains("Rust"));
+        assert!(html.contains("chart.js@4"));
+        assert!(html.contains("perfChart"));
+        assert!(html.contains("qualityChart"));
+        assert!(html.contains("150.0"));
+        assert!(html.contains("feat: add calculator"));
+        assert!(html.contains("badge-ok"));
+        assert!(html.contains("badge-warn"));
+    }
+
+    #[test]
+    fn html_report_pt_br_uses_portuguese_labels() {
+        let report = AgentBenchReport {
+            iterations: 1,
+            agents: vec!["codex".to_string()],
+            fixtures: vec!["python".to_string()],
+            temp_root: None,
+            summaries: vec![AgentBenchSummary {
+                fixture: "python".to_string(),
+                agent: "codex".to_string(),
+                total: 1,
+                success: 1,
+                conventional_valid: 1,
+                avg_ms: 50.0,
+                min_ms: 50.0,
+                p95_ms: 50.0,
+                max_ms: 50.0,
+            }],
+            samples: vec![AgentBenchSample {
+                fixture: "python".to_string(),
+                agent: "codex".to_string(),
+                iteration: 1,
+                duration_ms: 50.0,
+                success: true,
+                conventional_valid: true,
+                message: Some("feat: add calc".to_string()),
+                error: None,
+            }],
+        };
+
+        let html = generate_html_report(&report, ReportLanguage::Portuguese);
+
+        assert!(html.contains("lang=\"pt-BR\""));
+        assert!(html.contains("Benchmark de Agentes"));
+        assert!(html.contains("Agentes"));
+        assert!(html.contains("Iterações"));
+        assert!(html.contains("Resumo"));
+        assert!(html.contains("Amostras Individuais"));
+    }
+
+    #[test]
+    fn html_escape_handles_special_chars() {
+        assert_eq!(html_escape("<b>&\"x\"</b>"), "&lt;b&gt;&amp;&quot;x&quot;&lt;/b&gt;");
     }
 }
