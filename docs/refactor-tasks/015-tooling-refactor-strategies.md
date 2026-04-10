@@ -1,6 +1,6 @@
 # 015 - Separar Strategies de Tooling por Modulo
 
-Status: todo
+Status: done
 Priority: P2
 Type: refactor
 Milestone: CLI Pronta para Uso Diario
