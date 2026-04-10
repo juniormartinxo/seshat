@@ -40,3 +40,4 @@ Thumbs.db
 # Local agent/tooling state
 .codex
 .gitnexus
+.seshat
