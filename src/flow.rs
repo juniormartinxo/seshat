@@ -1,12 +1,13 @@
 use crate::core::{commit_with_ai, CommitOptions};
-use crate::utils::{build_gpg_env, get_last_commit_summary};
+use crate::git::GitClient;
+use crate::utils::{build_gpg_env, get_last_commit_summary_for_repo};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha1_fallback::sha1_hex;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::Output;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,9 +43,11 @@ impl ProcessResult {
 
 #[derive(Debug, Clone)]
 pub struct BatchCommitService {
+    pub repo_path: PathBuf,
     pub provider: String,
     pub model: Option<String>,
     pub language: String,
+    git: GitClient,
     lock_ttl: Duration,
     pub max_diff_size: usize,
     pub warn_diff_size: usize,
@@ -62,34 +65,28 @@ pub struct ProcessFileOptions {
 
 impl BatchCommitService {
     pub fn new(
+        repo_path: impl Into<PathBuf>,
         provider: impl Into<String>,
         model: Option<String>,
         language: impl Into<String>,
         max_diff_size: usize,
         warn_diff_size: usize,
     ) -> Self {
+        let git = GitClient::new(repo_path.into());
         Self {
+            repo_path: git.repo_path().to_path_buf(),
             provider: std::env::var("AI_PROVIDER").unwrap_or_else(|_| provider.into()),
             model: std::env::var("AI_MODEL").ok().or(model),
             language: std::env::var("COMMIT_LANGUAGE").unwrap_or_else(|_| language.into()),
+            git,
             lock_ttl: Duration::from_secs(30 * 60),
             max_diff_size,
             warn_diff_size,
         }
     }
 
-    pub fn modified_files(&self, path: impl AsRef<Path>) -> Vec<String> {
-        let path = path.as_ref();
-        let mut files = Vec::new();
-        files.extend(run_git_lines(path, &["diff", "--name-only"]));
-        files.extend(run_git_lines(
-            path,
-            &["ls-files", "--others", "--exclude-standard"],
-        ));
-        files.extend(run_git_lines(path, &["diff", "--cached", "--name-only"]));
-        files.sort();
-        files.dedup();
-        files
+    pub fn modified_files(&self) -> Vec<String> {
+        self.git.modified_files()
     }
 
     pub fn process_file(&self, file: &str, options: ProcessFileOptions) -> ProcessResult {
@@ -120,10 +117,10 @@ impl BatchCommitService {
                 ));
             }
 
-            let add = Command::new("git").args(["add", "--", file]).output()?;
+            let add = self.git.add_path(file)?;
             if !add.status.success() {
                 let output = git_output(&add);
-                let has_staged = self.has_staged_changes_for_file(file);
+                let has_staged = self.git.has_staged_changes_for_file(file);
                 if is_missing_path_error(&output) {
                     if !has_staged {
                         return Ok(ProcessResult::skipped(
@@ -145,7 +142,7 @@ impl BatchCommitService {
                 }
             }
 
-            if !self.has_staged_changes_for_file(file) {
+            if !self.git.has_staged_changes_for_file(file) {
                 self.reset_file(file);
                 return Ok(ProcessResult::skipped(
                     file,
@@ -154,6 +151,7 @@ impl BatchCommitService {
             }
 
             let commit_options = CommitOptions {
+                repo_path: self.repo_path.clone(),
                 provider: self.provider.clone(),
                 model: self.model.clone(),
                 verbose: options.verbose,
@@ -200,7 +198,7 @@ impl BatchCommitService {
             args.extend(["--".to_string(), file.to_string()]);
 
             let envs = build_gpg_env();
-            let commit = Command::new("git").args(&args).envs(envs.iter()).output()?;
+            let commit = self.git.raw_output_with_env(args, Some(&envs))?;
             if !commit.status.success() {
                 let output = git_output(&commit);
                 self.reset_file(file);
@@ -216,7 +214,7 @@ impl BatchCommitService {
             Ok(ProcessResult {
                 file: file.to_string(),
                 success: true,
-                message: get_last_commit_summary()
+                message: get_last_commit_summary_for_repo(&self.repo_path)
                     .unwrap_or_else(|| "Commit realizado".to_string()),
                 commit_hash: String::new(),
                 skipped: false,
@@ -232,32 +230,11 @@ impl BatchCommitService {
     }
 
     fn reset_file(&self, file: &str) {
-        let _ = Command::new("git").args(["reset", "HEAD", file]).output();
+        let _ = self.git.reset_head(file);
     }
 
     fn file_has_changes(&self, file: &str) -> bool {
-        Command::new("git")
-            .args(["status", "--porcelain", "--", file])
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| {
-                String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-                    line.starts_with("??")
-                        || (line.len() >= 2 && (&line[0..1] != " " || &line[1..2] != " "))
-                })
-            })
-            .unwrap_or(false)
-    }
-
-    fn has_staged_changes_for_file(&self, file: &str) -> bool {
-        Command::new("git")
-            .args(["diff", "--cached", "--name-only", "--", file])
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .map(|output| !String::from_utf8_lossy(&output.stdout).trim().is_empty())
-            .unwrap_or(false)
+        self.git.file_has_changes(file)
     }
 
     fn acquire_lock(&self, file: &str) -> Result<Option<PathBuf>> {
@@ -292,7 +269,7 @@ impl BatchCommitService {
     }
 
     fn lock_path_for_file(&self, file: &str) -> Option<PathBuf> {
-        let git_dir = get_git_dir(file)?;
+        let git_dir = self.git.git_dir()?;
         Some(
             git_dir
                 .join("seshat-flow-locks")
@@ -324,58 +301,7 @@ impl BatchCommitService {
     }
 }
 
-fn run_git_lines(path: &Path, args: &[&str]) -> Vec<String> {
-    Command::new("git")
-        .arg("-C")
-        .arg(path)
-        .args(args)
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .map(|output| {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty())
-                .map(ToOwned::to_owned)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn get_git_dir(file: &str) -> Option<PathBuf> {
-    let mut base = Path::new(file)
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .to_path_buf();
-    while !base.exists() && base != Path::new(".") && base != Path::new("/") {
-        base = base
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .to_path_buf();
-    }
-    if !base.exists() {
-        base = PathBuf::from(".");
-    }
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(&base)
-        .args(["rev-parse", "--git-dir"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    let path = PathBuf::from(git_dir);
-    if path.is_absolute() {
-        Some(path)
-    } else {
-        Some(base.join(path))
-    }
-}
-
-fn git_output(output: &std::process::Output) -> String {
+fn git_output(output: &Output) -> String {
     let mut text = String::from_utf8_lossy(&output.stderr).to_string();
     text.push_str(&String::from_utf8_lossy(&output.stdout));
     text
