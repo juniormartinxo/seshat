@@ -1187,6 +1187,48 @@ fn tooling_e2e_flow_check_lint_runs_fake_command() {
 
 #[cfg(unix)]
 #[test]
+fn tooling_e2e_flow_rustfmt_auto_fix_commits_formatted_file() {
+    let repo = init_git_repo();
+    configure_git_author(repo.path());
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    write_fake_codex(&fake_codex);
+    write_rust_seshat(repo.path(), "");
+    write_rust_project_file(
+        repo.path(),
+        "src/main.rs",
+        "fn main() {\n    println!(\"seed\");\n}\n",
+    );
+    git(
+        repo.path(),
+        &["add", "-f", "--", ".seshat", "Cargo.toml", "src/main.rs"],
+    );
+    git(repo.path(), &["commit", "-m", "chore: seed"]);
+
+    write_rust_project_file(
+        repo.path(),
+        "src/main.rs",
+        "fn main(){println!(\"fixed by rustfmt\");}\n",
+    );
+
+    seshat()
+        .current_dir(repo.path())
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: auto format rust file")
+        .args(["flow", "1", "--yes", "--check", "lint"])
+        .assert()
+        .success();
+
+    let committed = git_stdout(repo.path(), &["show", "HEAD:src/main.rs"]);
+    assert_eq!(
+        committed,
+        "fn main() {\n    println!(\"fixed by rustfmt\");\n}"
+    );
+    assert_eq!(last_subject(repo.path()), "feat: auto format rust file");
+}
+
+#[cfg(unix)]
+#[test]
 fn tooling_e2e_flow_no_check_skips_fake_command() {
     let repo = init_git_repo();
     configure_git_author(repo.path());
