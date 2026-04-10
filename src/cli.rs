@@ -1,7 +1,9 @@
 use crate::bench::{self, AgentBenchFormat, AgentBenchOptions, AgentFixture, ReportLanguage};
 use crate::config::{
-    load_config, load_config_for_path, mask_api_key, resolve_effective_config, save_config,
-    valid_providers, AppConfig, CliConfigOverrides, ProjectConfig,
+    has_project_config, load_config, load_config_for_path, mask_api_key,
+    migrate_legacy_project_layout, project_config_dir, project_config_path,
+    project_review_prompt_path, resolve_effective_config, save_config, valid_providers, AppConfig,
+    CliConfigOverrides, ProjectConfig,
 };
 use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
@@ -284,9 +286,9 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     let git = GitClient::new(".");
     let json_mode = matches!(args.format, Some(OutputFormat::Json));
     ui::set_json_mode(json_mode);
-    if !git.repo_path().join(".seshat").exists() {
+    if !has_project_config(git.repo_path()) {
         return Err(anyhow!(
-            "Arquivo .seshat não encontrado. O Seshat requer um arquivo de configuração .seshat no projeto."
+            "Arquivo .seshat/config.yaml não encontrado. O Seshat requer configuração local no projeto."
         ));
     }
 
@@ -527,10 +529,18 @@ fn print_current_config(config: &AppConfig) {
 fn run_init(args: InitArgs) -> Result<()> {
     let project_path = args.path.canonicalize().unwrap_or(args.path);
     fs::create_dir_all(&project_path)?;
-    let seshat_file = project_path.join(".seshat");
-    if seshat_file.exists() && !args.force {
+    let migrated = migrate_legacy_project_layout(&project_path)?;
+    let config_path = project_config_path(&project_path);
+    if config_path.exists() && !args.force {
+        if migrated {
+            ui::success(format!(
+                "Configuração migrada para {}",
+                config_path.display()
+            ));
+            return Ok(());
+        }
         return Err(anyhow!(
-            "Arquivo .seshat já existe. Use --force para sobrescrever."
+            "Arquivo .seshat/config.yaml já existe. Use --force para sobrescrever."
         ));
     }
 
@@ -586,16 +596,17 @@ fn run_init(args: InitArgs) -> Result<()> {
         "code_review:".to_string(),
         "  enabled: true".to_string(),
         "  blocking: true".to_string(),
-        "  prompt: seshat-review.md".to_string(),
+        "  prompt: .seshat/review.md".to_string(),
         format!("  extensions: {extensions}"),
         String::new(),
         "ui:".to_string(),
         "  force_rich: true".to_string(),
         String::new(),
     ]);
-    fs::write(&seshat_file, lines.join("\n"))?;
+    fs::create_dir_all(project_config_dir(&project_path))?;
+    fs::write(&config_path, lines.join("\n"))?;
 
-    let prompt_file = project_path.join("seshat-review.md");
+    let prompt_file = project_review_prompt_path(&project_path);
     if !prompt_file.exists() {
         fs::write(
             &prompt_file,
@@ -603,8 +614,8 @@ fn run_init(args: InitArgs) -> Result<()> {
         )?;
     }
     ui::success(format!(
-        "Arquivo .seshat criado em {}",
-        seshat_file.display()
+        "Arquivo .seshat/config.yaml criado em {}",
+        config_path.display()
     ));
     Ok(())
 }
