@@ -11,6 +11,7 @@ O binario final se chama `seshat` e oferece os comandos:
 - `init`
 - `fix`
 - `flow`
+- `bench agents`
 
 ## Instalacao Local
 
@@ -77,6 +78,12 @@ Processe arquivos em lote:
 ```bash
 seshat flow 3 --yes
 seshat flow 3 --yes --check lint
+```
+
+Compare agentes em fixtures temporarias:
+
+```bash
+seshat bench agents --agents codex,claude-cli --fixtures rust,python,typescript --iterations 3 --pt-br
 ```
 
 ## Configuracao
@@ -160,6 +167,34 @@ Providers CLI cobertos:
 - Claude CLI (`claude-cli`)
 
 Providers `codex`, `claude-cli` e `ollama` nao exigem `API_KEY` global.
+
+## Benchmark de Agentes
+
+O comando `bench agents` mede agentes/providers usando fixtures Git temporarias. Ele nao altera o repo atual.
+
+Exemplo em PT-BR:
+
+```bash
+seshat bench agents \
+  --agents codex,claude-cli,ollama \
+  --fixtures rust,python,typescript \
+  --iterations 5 \
+  --pt-br
+```
+
+Exemplo JSON:
+
+```bash
+seshat bench agents --agents codex --fixtures rust --iterations 3 --format json
+```
+
+Metricas principais:
+
+- `Sucesso`: quantas execucoes retornaram mensagem.
+- `Conv. valido`: quantas mensagens passaram na validacao Conventional Commits.
+- `Media ms`, `P95 ms`, `Min ms`, `Max ms`: tempo de geracao da mensagem pelo agente.
+
+O setup da fixture Git fica fora da medicao. Cada iteracao usa um repo temporario novo com diff controlado.
 
 ## Git e GPG
 
