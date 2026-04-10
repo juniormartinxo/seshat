@@ -121,7 +121,7 @@ Provar comportamento real de commit sem depender de mocks excessivos.
 - Testar `flow` com arquivos modificados, untracked e staged.
 - Testar arquivo ignorado pelo Git em `flow`.
 - Testar `fix` usando comandos fake no PATH.
-- Testar `init --force` criando `.seshat` e `seshat-review.md`.
+- Testar `init --force` criando `.seshat/config.yaml` e `.seshat/review.md`.
 
 ### Criterio de aceite
 
