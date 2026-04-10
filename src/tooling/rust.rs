@@ -25,7 +25,55 @@ impl LanguageStrategy for RustStrategy {
     }
 
     fn test_patterns(&self) -> &'static [&'static str] {
-        &["_test.rs", ".rs"]
+        &["tests"]
+    }
+
+    fn filter_files_for_check(
+        &self,
+        files: &[String],
+        check_type: &str,
+        custom_extensions: Option<&[String]>,
+    ) -> Vec<String> {
+        if custom_extensions.is_some() || check_type != "test" {
+            return files
+                .iter()
+                .filter(|file| {
+                    let path = Path::new(file);
+                    let suffix = path
+                        .extension()
+                        .and_then(|ext| ext.to_str())
+                        .map(|ext| format!(".{}", ext.to_ascii_lowercase()));
+                    match check_type {
+                        "typecheck" => suffix
+                            .as_deref()
+                            .is_some_and(|suffix| self.typecheck_extensions().contains(&suffix)),
+                        "lint" => suffix
+                            .as_deref()
+                            .is_some_and(|suffix| self.lint_extensions().contains(&suffix)),
+                        _ => false,
+                    }
+                })
+                .cloned()
+                .collect();
+        }
+
+        files
+            .iter()
+            .filter_map(|file| {
+                let path = Path::new(file);
+                let is_integration_test = path.extension().and_then(|ext| ext.to_str())
+                    == Some("rs")
+                    && path
+                        .components()
+                        .any(|component| component.as_os_str() == "tests");
+                if !is_integration_test {
+                    return None;
+                }
+                path.file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .map(|stem| format!("--test={stem}"))
+            })
+            .collect()
     }
 
     fn default_tools(&self) -> BTreeMap<&'static str, ToolCommand> {
@@ -53,7 +101,7 @@ impl LanguageStrategy for RustStrategy {
             ),
             (
                 "cargo-test",
-                ToolCommand::new("cargo-test", &["cargo", "test"], "test"),
+                ToolCommand::new("cargo-test", &["cargo", "test"], "test").with_files(),
             ),
         ])
     }
