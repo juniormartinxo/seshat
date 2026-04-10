@@ -1,14 +1,16 @@
 use crate::config::ProjectConfig;
-use crate::git;
+use crate::git::{self, GitClient};
 use crate::providers::get_provider;
 use crate::review::{self, CodeReviewResult};
 use crate::tooling::{ToolResult, ToolingRunner};
 use crate::ui;
 use crate::utils::{is_valid_conventional_commit, normalize_commit_subject_case};
 use anyhow::{anyhow, Result};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct CommitOptions {
+    pub repo_path: PathBuf,
     pub provider: String,
     pub model: Option<String>,
     pub verbose: bool,
@@ -30,11 +32,14 @@ impl CommitOptions {
 }
 
 pub fn run_pre_commit_checks(
+    repo_path: impl Into<PathBuf>,
     check_type: &str,
     paths: Option<&[String]>,
     verbose: bool,
 ) -> Result<(bool, Vec<ToolResult>)> {
-    let runner = ToolingRunner::default();
+    let repo_path = repo_path.into();
+    let git = GitClient::new(&repo_path);
+    let runner = ToolingRunner::new(&repo_path);
     if runner.detect_project_type().is_none() {
         ui::warning("Tipo de projeto não detectado. Pulando verificações.");
         return Ok((true, Vec::new()));
@@ -43,7 +48,7 @@ pub fn run_pre_commit_checks(
     ui::info(format!("Executando verificações ({check_type})"));
     let files = match paths {
         Some(paths) => paths.to_vec(),
-        None => git::staged_files(None, true)?,
+        None => git.staged_files(None, true)?,
     };
     let results = runner.run_checks(check_type, Some(&files));
     if results.is_empty() {
@@ -64,11 +69,12 @@ pub fn run_pre_commit_checks(
 }
 
 pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeReviewResult>)> {
-    let project_config = ProjectConfig::load(".");
+    let git = GitClient::new(&options.repo_path);
+    let project_config = ProjectConfig::load(git.repo_path());
     let paths = options.paths_ref();
 
-    if git::is_deletion_only_commit(paths)? {
-        let files = git::deleted_staged_files(paths)?;
+    if git.is_deletion_only_commit(paths)? {
+        let files = git.deleted_staged_files(paths)?;
         let message = git::generate_deletion_commit_message(&files);
         ui::info(format!(
             "Commit de deleção detectado ({} arquivo(s))",
@@ -78,8 +84,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         return Ok((message, None));
     }
 
-    if git::is_markdown_only_commit(paths)? {
-        let files = git::staged_files(paths, true)?;
+    if git.is_markdown_only_commit(paths)? {
+        let files = git.staged_files(paths, true)?;
         let message = git::generate_markdown_commit_message(&files);
         ui::info(format!(
             "Commit de documentação detectado ({} arquivo(s))",
@@ -89,8 +95,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         return Ok((message, None));
     }
 
-    if git::is_image_only_commit(paths)? {
-        let files = git::staged_files(paths, true)?;
+    if git.is_image_only_commit(paths)? {
+        let files = git.staged_files(paths, true)?;
         let message = git::generate_generic_update_commit_message(&files);
         ui::info(format!(
             "Commit de imagens detectado ({} arquivo(s))",
@@ -100,8 +106,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         return Ok((message, None));
     }
 
-    if git::is_lock_file_only_commit(paths)? {
-        let files = git::staged_files(paths, true)?;
+    if git.is_lock_file_only_commit(paths)? {
+        let files = git.staged_files(paths, true)?;
         let message = git::generate_lock_file_commit_message(&files);
         ui::info(format!(
             "Commit de lock files detectado ({} arquivo(s))",
@@ -111,8 +117,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         return Ok((message, None));
     }
 
-    if git::is_dotfile_only_commit(paths)? {
-        let files = git::staged_files(paths, true)?;
+    if git.is_dotfile_only_commit(paths)? {
+        let files = git.staged_files(paths, true)?;
         let message = git::generate_generic_update_commit_message(&files);
         ui::info(format!(
             "Commit de dotfiles detectado ({} arquivo(s))",
@@ -122,8 +128,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         return Ok((message, None));
     }
 
-    if git::is_builtin_no_ai_only_commit(paths)? {
-        let files = git::staged_files(paths, true)?;
+    if git.is_builtin_no_ai_only_commit(paths)? {
+        let files = git.staged_files(paths, true)?;
         let message = git::generate_generic_update_commit_message(&files);
         ui::info(format!(
             "Commit sem IA detectado ({} arquivo(s))",
@@ -136,7 +142,7 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
     let no_ai_extensions = &project_config.commit.no_ai_extensions;
     let no_ai_paths = &project_config.commit.no_ai_paths;
     if !no_ai_extensions.is_empty() || !no_ai_paths.is_empty() {
-        let files = git::staged_files(paths, true)?;
+        let files = git.staged_files(paths, true)?;
         if git::is_no_ai_only_commit(&files, no_ai_extensions, no_ai_paths) {
             let message = generate_no_ai_commit_message(&files);
             ui::info(format!(
@@ -158,15 +164,16 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
 
     let files_for_panel = paths
         .map(ToOwned::to_owned)
-        .unwrap_or(git::staged_files(None, true)?);
+        .unwrap_or(git.staged_files(None, true)?);
     if !files_for_panel.is_empty() {
         ui::section("Iniciando commit do(s) arquivo(s)");
         for file in &files_for_panel {
             println!(
                 "- {}",
-                std::path::Path::new(file)
+                git.repo_path()
+                    .join(file)
                     .canonicalize()
-                    .unwrap_or_else(|_| file.into())
+                    .unwrap_or_else(|_| PathBuf::from(file))
                     .display()
             );
         }
@@ -174,7 +181,8 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
 
     if let Some(check) = &options.check {
         if !options.no_check {
-            let (success, _) = run_pre_commit_checks(check, paths, options.verbose)?;
+            let (success, _) =
+                run_pre_commit_checks(git.repo_path(), check, paths, options.verbose)?;
             if !success {
                 return Err(anyhow!("Verificações pre-commit falharam."));
             }
@@ -187,10 +195,10 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
             .map(|(name, _)| name.clone())
             .collect();
         if !enabled.is_empty() {
-            let runner = ToolingRunner::default();
+            let runner = ToolingRunner::new(git.repo_path());
             let files = paths
                 .map(ToOwned::to_owned)
-                .unwrap_or(git::staged_files(None, true)?);
+                .unwrap_or(git.staged_files(None, true)?);
             let mut all_results = Vec::new();
             for check in enabled {
                 let mut results = runner.run_checks(&check, Some(&files));
@@ -210,7 +218,7 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         }
     }
 
-    let mut diff = git::git_diff(
+    let mut diff = git.git_diff(
         options.skip_confirmation,
         paths,
         options.max_diff_size,
@@ -220,7 +228,7 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
     diff = git::filter_non_ai_files_from_diff(&diff);
     diff = git::filter_configured_no_ai_files_from_diff(&diff, no_ai_extensions, no_ai_paths);
     if diff.trim().is_empty() {
-        let files = git::staged_files(paths, true)?;
+        let files = git.staged_files(paths, true)?;
         if !files.is_empty() {
             let message = generate_no_ai_commit_message(&files);
             ui::info(format!(
@@ -249,7 +257,7 @@ pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeRev
         let custom_prompt = review::get_review_prompt(
             project_config.project_type.as_deref(),
             project_config.code_review.prompt.as_deref(),
-            ".",
+            git.repo_path(),
         );
         let filtered_diff = review::filter_diff_by_extensions(
             &diff,
