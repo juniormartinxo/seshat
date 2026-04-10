@@ -1,6 +1,6 @@
 # 014 - Fechar Logs e Filtros de Code Review
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: Review Completo
