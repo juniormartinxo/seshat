@@ -1,22 +1,30 @@
 # Rust build artifacts
 /target/
 
-# Cargo.lock should be committed for this CLI application.
+# Keep Cargo.lock tracked for this CLI application.
 
-# Local environment files
+# Rust profiling and coverage output
+*.profraw
+*.profdata
+/coverage/
+/tarpaulin-report.html
+/lcov.info
+/cobertura.xml
+/criterion/
+
+# Local environment and secrets
 .env
 .env.*
 !.env.example
 
 # Logs and temporary files
 *.log
+*.out
+*.err
 *.tmp
 *.temp
-
-# Test and coverage output
-/coverage/
-/tarpaulin-report.html
-/lcov.info
+*.bak
+*.orig
 
 # Editor and IDE files
 .idea/
