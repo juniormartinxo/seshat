@@ -1,6 +1,6 @@
 # 009 - Extrair Abstracao de Transporte para Providers HTTP
 
-Status: todo
+Status: done
 Priority: P1
 Type: refactor
 Milestone: IA Testavel
