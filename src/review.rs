@@ -294,7 +294,7 @@ pub fn format_review_for_display(result: &CodeReviewResult, _verbose: bool) -> S
     ];
     for (index, issue) in result.issues.iter().enumerate() {
         let (location, detail) = split_issue_location(&issue.description);
-        let issue_type = issue.issue_type.to_ascii_uppercase();
+        let issue_type = issue_type_label(&issue.issue_type);
         if let Some(location) = location {
             lines.push(format!("{}. [{issue_type}] {location}", index + 1));
             lines.extend(wrap_text(&detail, 100, "   "));
@@ -310,6 +310,10 @@ pub fn format_review_for_display(result: &CodeReviewResult, _verbose: bool) -> S
         }
     }
     lines.join("\n")
+}
+
+fn issue_type_label(issue_type: &str) -> String {
+    issue_type.replace('_', " ").to_ascii_uppercase()
 }
 
 fn split_issue_location(description: &str) -> (Option<String>, String) {
@@ -730,6 +734,25 @@ mod tests {
         );
         assert!(!text.contains('+'));
         assert!(!text.contains('|'));
+    }
+
+    #[test]
+    fn review_display_uses_human_issue_type_labels() {
+        let result = CodeReviewResult {
+            has_issues: true,
+            summary: "Found 1 issue(s)".to_string(),
+            issues: vec![CodeIssue::new(
+                "code_smell",
+                "src/lib.rs:12 duplicated branch",
+                "",
+                "warning",
+            )],
+        };
+
+        let text = format_review_for_display(&result, false);
+
+        assert!(text.contains("[CODE SMELL] src/lib.rs:12"));
+        assert!(!text.contains("[CODE_SMELL]"));
     }
 
     #[test]
