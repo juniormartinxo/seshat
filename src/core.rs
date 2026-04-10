@@ -292,6 +292,19 @@ fn commit_with_ai_with_provider_factory_and_action(
             project_config.code_review.extensions.as_deref(),
             project_config.project_type.as_deref(),
         );
+        let prepared_review_diff = review::prepare_diff_for_review(
+            &filtered_diff,
+            project_config
+                .code_review
+                .max_diff_size
+                .unwrap_or(review::DEFAULT_CODE_REVIEW_MAX_DIFF_SIZE),
+        );
+        if prepared_review_diff.was_compacted() {
+            ui::info(format!(
+                "Code review compactado: {} -> {} caracteres.",
+                prepared_review_diff.original_chars, prepared_review_diff.final_chars
+            ));
+        }
         let result = if filtered_diff.trim().is_empty() {
             CodeReviewResult {
                 has_issues: false,
@@ -300,7 +313,7 @@ fn commit_with_ai_with_provider_factory_and_action(
             }
         } else {
             let raw = commit_provider.generate_code_review(
-                &filtered_diff,
+                &prepared_review_diff.content,
                 options.model.as_deref(),
                 Some(&custom_prompt),
             )?;
@@ -349,7 +362,7 @@ fn commit_with_ai_with_provider_factory_and_action(
                         ui::info(format!("IA: JUDGE ({})", judge.provider));
                         let (judge_provider, judge_result) = run_judge_review(
                             &judge,
-                            &filtered_diff,
+                            &prepared_review_diff.content,
                             Some(&custom_prompt),
                             options.verbose,
                             project_config.project_type.as_deref(),
