@@ -474,40 +474,38 @@ const CHART_PALETTE: &[(&str, &str)] = &[
 ];
 
 const HTML_REPORT_CSS: &str = r#"
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f8fafc;color:#1e293b;line-height:1.6}
-.container{max-width:1200px;margin:0 auto;padding:2rem}
-header{background:linear-gradient(135deg,#4f46e5 0%,#7c3aed 100%);color:#fff;padding:2.5rem;border-radius:16px;margin-bottom:2rem;box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1)}
-header h1{font-size:1.875rem;margin-bottom:.75rem;font-weight:700}
-.meta{display:flex;gap:1rem;flex-wrap:wrap;font-size:.9375rem}
-.meta span{background:rgba(255,255,255,.15);padding:.375rem .875rem;border-radius:8px}
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2rem}
-.chart-box{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.chart-box h2{font-size:.9375rem;color:#64748b;margin-bottom:1rem;font-weight:500}
-section{margin-bottom:2rem}
-section>h2{font-size:1.25rem;margin-bottom:1rem}
-.table-wrap{background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.table-scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:.875rem}
-th{background:#f8fafc;font-weight:600;text-align:left;padding:.75rem 1rem;border-bottom:2px solid #e2e8f0;white-space:nowrap;color:#475569;text-transform:uppercase;font-size:.75rem;letter-spacing:.05em}
-td{padding:.75rem 1rem;border-bottom:1px solid #f1f5f9}
-tr:last-child td{border-bottom:none}
-tbody tr:hover td{background:#f8fafc}
-.badge{display:inline-block;padding:.125rem .625rem;border-radius:9999px;font-size:.75rem;font-weight:600;letter-spacing:.025em}
-.badge-ok{background:#dcfce7;color:#166534}
-.badge-warn{background:#fef9c3;color:#854d0e}
-.badge-fail{background:#fee2e2;color:#991b1b}
-.text-right{text-align:right}
-.text-mono{font-family:'SF Mono',ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.8125rem}
-details summary{cursor:pointer;list-style:none}
-details summary::-webkit-details-marker{display:none}
-details summary::before{content:'▶ ';font-size:.75rem;display:inline-block}
-details[open] summary::before{content:'▼ '}
-details summary h2{display:inline;color:#4f46e5}
-details summary h2:hover{text-decoration:underline}
-details .table-wrap{margin-top:1rem}
-footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
-@media(max-width:768px){.charts{grid-template-columns:1fr}.meta{flex-direction:column;gap:.5rem}.container{padding:1rem}}
+.tab-content:not(.hidden){animation:fadeIn .2s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+"#;
+
+const HTML_REPORT_TW_STYLE: &str = r#"
+.badge{@apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold}
+.badge-ok{@apply bg-emerald-100 text-emerald-800}
+.badge-warn{@apply bg-amber-100 text-amber-800}
+.badge-fail{@apply bg-red-100 text-red-800}
+.text-mono{@apply font-mono text-xs}
+table{@apply w-full text-sm}
+th{@apply bg-gray-50 font-semibold text-left px-4 py-3 border-b-2 border-gray-200 whitespace-nowrap text-gray-500 uppercase text-xs tracking-wider}
+td{@apply px-4 py-3 border-b border-gray-100}
+tr:last-child td{@apply border-b-0}
+tbody tr:hover td{@apply bg-gray-50/50}
+"#;
+
+const TAB_SWITCH_JS: &str = r#"
+document.querySelectorAll('[data-tab]').forEach(function(b){
+b.addEventListener('click',function(){
+document.querySelectorAll('[data-tab]').forEach(function(t){
+t.classList.remove('text-indigo-600','border-indigo-600');
+t.classList.add('text-gray-500','border-transparent');
+t.setAttribute('aria-selected','false');
+});
+document.querySelectorAll('.tab-content').forEach(function(p){p.classList.add('hidden')});
+b.classList.remove('text-gray-500','border-transparent');
+b.classList.add('text-indigo-600','border-indigo-600');
+b.setAttribute('aria-selected','true');
+document.getElementById('panel-'+b.dataset.tab).classList.remove('hidden');
+});
+});
 "#;
 
 fn html_escape(s: &str) -> String {
@@ -541,30 +539,43 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     });
     h.push_str(
         "</title>\n\
+                <script src=\"https://cdn.tailwindcss.com\"></script>\n\
                 <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>\n\
                 <style>",
     );
     h.push_str(HTML_REPORT_CSS);
-    h.push_str("</style>\n</head>\n<body>\n<div class=\"container\">\n");
+    h.push_str("</style>\n<style type=\"text/tailwindcss\">");
+    h.push_str(HTML_REPORT_TW_STYLE);
+    h.push_str(
+        "</style>\n</head>\n\
+                <body class=\"bg-gray-50 min-h-screen antialiased\">\n\
+                <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8\">\n",
+    );
 
     // --- header ---
-    h.push_str("<header>\n<h1>");
+    h.push_str(
+        "<header class=\"relative overflow-hidden bg-gradient-to-br from-indigo-600 \
+                via-purple-600 to-indigo-800 text-white rounded-2xl p-8 mb-8 shadow-xl\">\n\
+                <h1 class=\"text-3xl font-bold tracking-tight mb-4\">",
+    );
     h.push_str(if is_pt {
         "Benchmark de Agentes"
     } else {
         "Agent Benchmark"
     });
-    h.push_str("</h1>\n<div class=\"meta\">\n");
+    h.push_str("</h1>\n<div class=\"flex flex-wrap gap-2\">\n");
     let _ = writeln!(
         h,
-        "<span><strong>{}:</strong> {}</span>",
+        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
+         <strong>{}:</strong> {}</span>",
         if is_pt { "Agentes" } else { "Agents" },
         html_escape(&report.agents.join(", "))
     );
     if report.agent_selection == AgentSelection::AutoDetected {
         let _ = writeln!(
             h,
-            "<span><strong>{}:</strong> {}</span>",
+            "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
+             <strong>{}:</strong> {}</span>",
             if is_pt { "Seleção" } else { "Selection" },
             if is_pt {
                 "automática"
@@ -575,19 +586,26 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     }
     let _ = writeln!(
         h,
-        "<span><strong>Fixtures:</strong> {}</span>",
+        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
+         <strong>Fixtures:</strong> {}</span>",
         html_escape(&report.fixtures.join(", "))
     );
     let _ = writeln!(
         h,
-        "<span><strong>{}:</strong> {}</span>",
+        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
+         <strong>{}:</strong> {}</span>",
         if is_pt { "Iterações" } else { "Iterations" },
         report.iterations
     );
     h.push_str("</div>\n</header>\n\n");
 
     // --- charts ---
-    h.push_str("<section class=\"charts\">\n<div class=\"chart-box\">\n<h2>");
+    h.push_str(
+        "<div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 mb-8\">\n\
+                <div class=\"bg-white rounded-2xl border border-gray-200 p-6 shadow-sm \
+                hover:shadow-md transition-shadow\">\n\
+                <h2 class=\"text-sm font-medium text-gray-500 mb-4 uppercase tracking-wide\">",
+    );
     h.push_str(if is_pt {
         "Tempo Médio de Resposta (ms)"
     } else {
@@ -595,24 +613,57 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     });
     h.push_str(
         "</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
-                <div class=\"chart-box\">\n<h2>",
+                <div class=\"bg-white rounded-2xl border border-gray-200 p-6 shadow-sm \
+                hover:shadow-md transition-shadow\">\n\
+                <h2 class=\"text-sm font-medium text-gray-500 mb-4 uppercase tracking-wide\">",
     );
     h.push_str(if is_pt {
         "Taxa de Sucesso (%)"
     } else {
         "Success Rate (%)"
     });
-    h.push_str("</h2>\n<canvas id=\"qualityChart\"></canvas>\n</div>\n</section>\n\n");
+    h.push_str("</h2>\n<canvas id=\"qualityChart\"></canvas>\n</div>\n</div>\n\n");
 
-    // --- overall ranking ---
-    h.push_str("<section>\n<h2>");
+    // --- tabs ---
+    h.push_str(
+        "<div class=\"bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8\">\n\
+                <div class=\"border-b border-gray-200 bg-gray-50/80\">\n\
+                <nav class=\"flex\" role=\"tablist\">\n",
+    );
+    h.push_str(
+        "<button role=\"tab\" aria-selected=\"true\" data-tab=\"ranking\" \
+                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
+                transition-colors text-indigo-600 border-indigo-600\">",
+    );
     h.push_str(if is_pt {
         "Ranking geral"
     } else {
         "Overall ranking"
     });
+    h.push_str("</button>\n");
     h.push_str(
-        "</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+        "<button role=\"tab\" aria-selected=\"false\" data-tab=\"summary\" \
+                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
+                transition-colors text-gray-500 border-transparent\">",
+    );
+    h.push_str(if is_pt { "Resumo" } else { "Summary" });
+    h.push_str("</button>\n");
+    h.push_str(
+        "<button role=\"tab\" aria-selected=\"false\" data-tab=\"samples\" \
+                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
+                transition-colors text-gray-500 border-transparent\">",
+    );
+    h.push_str(if is_pt {
+        "Amostras Individuais"
+    } else {
+        "Individual Samples"
+    });
+    h.push_str("</button>\n</nav>\n</div>\n\n");
+
+    // --- overall ranking panel ---
+    h.push_str(
+        "<div id=\"panel-ranking\" class=\"tab-content\">\n\
+                <div class=\"overflow-x-auto\">\n\
                 <table>\n<thead><tr>",
     );
     let overall_headers: &[&str] = if is_pt {
@@ -685,13 +736,12 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             s.fixtures_won,
         );
     }
-    h.push_str("</tbody>\n</table>\n</div></div>\n</section>\n\n");
+    h.push_str("</tbody>\n</table>\n</div>\n</div>\n\n");
 
-    // --- summary table ---
-    h.push_str("<section>\n<h2>");
-    h.push_str(if is_pt { "Resumo" } else { "Summary" });
+    // --- summary panel ---
     h.push_str(
-        "</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+        "<div id=\"panel-summary\" class=\"tab-content hidden\">\n\
+                <div class=\"overflow-x-auto\">\n\
                 <table>\n<thead><tr>",
     );
     let summary_headers: &[&str] = if is_pt {
@@ -763,17 +813,12 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             s.max_ms,
         );
     }
-    h.push_str("</tbody>\n</table>\n</div></div>\n</section>\n\n");
+    h.push_str("</tbody>\n</table>\n</div>\n</div>\n\n");
 
-    // --- individual samples (collapsible) ---
-    h.push_str("<section>\n<details>\n<summary><h2>");
-    h.push_str(if is_pt {
-        "Amostras Individuais"
-    } else {
-        "Individual Samples"
-    });
+    // --- individual samples panel ---
     h.push_str(
-        "</h2></summary>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+        "<div id=\"panel-samples\" class=\"tab-content hidden\">\n\
+                <div class=\"overflow-x-auto\">\n\
                 <table>\n<thead><tr>",
     );
     let sample_headers: &[&str] = if is_pt {
@@ -841,19 +886,20 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             html_escape(&display_msg),
         );
     }
-    h.push_str("</tbody>\n</table>\n</div></div>\n</details>\n</section>\n\n");
+    h.push_str("</tbody>\n</table>\n</div>\n</div>\n</div>\n\n");
 
     // --- footer ---
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     let _ = writeln!(
         h,
-        "<footer>{ts} &mdash; Seshat v{}</footer>",
+        "<footer class=\"text-center text-gray-400 py-8 text-sm\">{ts} &mdash; Seshat v{}</footer>",
         crate::VERSION,
     );
     h.push_str("</div>\n\n");
 
-    // --- chart.js script ---
+    // --- scripts ---
     h.push_str("<script>\n");
+    h.push_str(TAB_SWITCH_JS);
     write_chart_js(&mut h, report, language);
     h.push_str("</script>\n</body>\n</html>");
 
@@ -1550,6 +1596,15 @@ mod tests {
         assert!(html.contains("feat: add calculator"));
         assert!(html.contains("badge-ok"));
         assert!(html.contains("badge-warn"));
+        // tailwind + tab structure
+        assert!(html.contains("cdn.tailwindcss.com"));
+        assert!(html.contains("data-tab=\"ranking\""));
+        assert!(html.contains("data-tab=\"summary\""));
+        assert!(html.contains("data-tab=\"samples\""));
+        assert!(html.contains("panel-ranking"));
+        assert!(html.contains("panel-summary"));
+        assert!(html.contains("panel-samples"));
+        assert!(html.contains("tab-content"));
     }
 
     #[test]
