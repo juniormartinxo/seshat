@@ -103,7 +103,11 @@ enum BenchCommands {
 
 #[derive(Debug, Args)]
 struct BenchAgentsArgs {
-    #[arg(long, value_delimiter = ',')]
+    #[arg(
+        long,
+        value_delimiter = ',',
+        help = "Agents to compare. Defaults to auto-detected configured/available agents."
+    )]
     agents: Vec<String>,
     #[arg(
         long,
