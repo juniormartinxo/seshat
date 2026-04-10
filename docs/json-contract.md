@@ -67,7 +67,7 @@ Campos:
 Emitido quando o comando falha.
 
 ```json
-{"event":"error","message":"Arquivo .seshat não encontrado. O Seshat requer um arquivo de configuração .seshat no projeto."}
+{"event":"error","message":"Arquivo .seshat/config.yaml não encontrado. O Seshat requer configuração local no projeto."}
 ```
 
 Campos:
