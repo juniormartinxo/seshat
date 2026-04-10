@@ -1,6 +1,6 @@
 # 003 - Criar Harness E2E para Repositorios Git Temporarios
 
-Status: todo
+Status: done
 Priority: P0
 Type: test
 Milestone: Git Seguro
