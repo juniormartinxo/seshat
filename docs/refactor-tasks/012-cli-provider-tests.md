@@ -1,6 +1,6 @@
 # 012 - Testar Providers Codex CLI e Claude CLI
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: IA Testavel
