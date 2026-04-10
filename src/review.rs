@@ -1,4 +1,4 @@
-use crate::git;
+use crate::{config, git};
 use anyhow::{Context, Result};
 use chrono::Local;
 use regex::Regex;
@@ -8,7 +8,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
-pub const FALSE_POSITIVE_STORE_NAME: &str = "seshat-false-positives.jsonl";
+pub const FALSE_POSITIVE_STORE_NAME: &str = "false-positives.jsonl";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeIssue {
@@ -195,7 +195,12 @@ pub fn load_custom_prompt(prompt_path: &str, base_path: impl AsRef<Path>) -> Opt
     let path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        base_path.as_ref().join(path)
+        let root_relative = base_path.as_ref().join(path);
+        if root_relative.exists() {
+            root_relative
+        } else {
+            config::project_config_dir(base_path.as_ref()).join(path)
+        }
     };
     let content = fs::read_to_string(path).ok()?;
     let re = Regex::new(r"(?s)<!--.*?-->").ok()?;
