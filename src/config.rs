@@ -10,6 +10,10 @@ use std::path::{Path, PathBuf};
 
 pub const API_KEYLESS_PROVIDERS: &[&str] = &["claude-cli", "codex", "ollama"];
 pub const DEFAULT_CODEX_MODEL: &str = "gpt-5.4";
+pub const PROJECT_CONFIG_DIR_NAME: &str = ".seshat";
+pub const PROJECT_CONFIG_FILE_NAME: &str = "config.yaml";
+pub const PROJECT_REVIEW_PROMPT_FILE_NAME: &str = "review.md";
+pub const LEGACY_PROJECT_REVIEW_PROMPT_FILE_NAME: &str = "seshat-review.md";
 const APP_NAME: &str = "seshat";
 const SECRET_KEYS: &[&str] = &["API_KEY", "JUDGE_API_KEY"];
 
@@ -261,10 +265,9 @@ pub struct ProjectConfig {
 
 impl ProjectConfig {
     pub fn load(path: impl AsRef<Path>) -> Self {
-        let config_path = path.as_ref().join(".seshat");
-        if !config_path.exists() {
+        let Some(config_path) = resolve_project_config_path(path.as_ref()) else {
             return Self::default();
-        }
+        };
         match fs::read_to_string(&config_path)
             .ok()
             .and_then(|content| serde_yaml::from_str::<ProjectConfig>(&content).ok())
@@ -327,6 +330,154 @@ impl ProjectConfig {
                 yaml_string_list(get("no_ai_paths").or_else(|| get("NO_AI_PATHS")));
         }
     }
+}
+
+pub fn project_config_dir(path: impl AsRef<Path>) -> PathBuf {
+    path.as_ref().join(PROJECT_CONFIG_DIR_NAME)
+}
+
+pub fn project_config_path(path: impl AsRef<Path>) -> PathBuf {
+    project_config_dir(path).join(PROJECT_CONFIG_FILE_NAME)
+}
+
+pub fn project_review_prompt_path(path: impl AsRef<Path>) -> PathBuf {
+    project_config_dir(path).join(PROJECT_REVIEW_PROMPT_FILE_NAME)
+}
+
+pub fn legacy_project_review_prompt_path(path: impl AsRef<Path>) -> PathBuf {
+    path.as_ref().join(LEGACY_PROJECT_REVIEW_PROMPT_FILE_NAME)
+}
+
+pub fn project_false_positive_path(path: impl AsRef<Path>) -> PathBuf {
+    project_config_dir(path).join("false-positives.jsonl")
+}
+
+pub fn has_project_config(path: impl AsRef<Path>) -> bool {
+    resolve_project_config_path(path).is_some()
+}
+
+pub fn resolve_project_config_path(path: impl AsRef<Path>) -> Option<PathBuf> {
+    let base_path = path.as_ref();
+    let config_path = project_config_path(base_path);
+    if config_path.is_file() {
+        return Some(config_path);
+    }
+    let legacy_path = legacy_project_config_path(base_path);
+    if legacy_path.is_file() {
+        return Some(legacy_path);
+    }
+    None
+}
+
+pub fn migrate_legacy_project_layout(path: impl AsRef<Path>) -> Result<bool> {
+    let base_path = path.as_ref();
+    let config_migrated = migrate_legacy_project_config(base_path)?;
+    let prompt_migrated = migrate_legacy_review_prompt(base_path)?;
+    Ok(config_migrated || prompt_migrated)
+}
+
+fn legacy_project_config_path(path: impl AsRef<Path>) -> PathBuf {
+    path.as_ref().join(PROJECT_CONFIG_DIR_NAME)
+}
+
+fn migrate_legacy_project_config(base_path: &Path) -> Result<bool> {
+    let legacy_path = legacy_project_config_path(base_path);
+    if !legacy_path.is_file() {
+        return Ok(false);
+    }
+
+    let content = fs::read_to_string(&legacy_path)
+        .with_context(|| format!("falha ao ler {}", legacy_path.display()))?;
+    let content = migrate_legacy_prompt_reference(&content);
+    let backup_path = base_path.join(".seshat.legacy");
+    if backup_path.exists() {
+        return Err(anyhow!(
+            "Não foi possível migrar {} porque {} já existe.",
+            legacy_path.display(),
+            backup_path.display()
+        ));
+    }
+
+    fs::rename(&legacy_path, &backup_path).with_context(|| {
+        format!(
+            "falha ao preparar migração de {} para {}",
+            legacy_path.display(),
+            project_config_path(base_path).display()
+        )
+    })?;
+
+    let migration = (|| -> Result<()> {
+        fs::create_dir_all(project_config_dir(base_path))?;
+        fs::write(project_config_path(base_path), content)?;
+        Ok(())
+    })();
+
+    if let Err(error) = migration {
+        let _ = fs::remove_dir_all(project_config_dir(base_path));
+        let _ = fs::rename(&backup_path, &legacy_path);
+        return Err(error);
+    }
+
+    fs::remove_file(backup_path)?;
+    Ok(true)
+}
+
+fn migrate_legacy_review_prompt(base_path: &Path) -> Result<bool> {
+    let legacy_path = legacy_project_review_prompt_path(base_path);
+    if !legacy_path.is_file() {
+        return Ok(false);
+    }
+
+    let prompt_path = project_review_prompt_path(base_path);
+    if prompt_path.exists() {
+        let legacy_content = fs::read(&legacy_path).unwrap_or_default();
+        let prompt_content = fs::read(&prompt_path).unwrap_or_default();
+        if legacy_content == prompt_content {
+            fs::remove_file(&legacy_path)?;
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+
+    if let Some(parent) = prompt_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::rename(&legacy_path, &prompt_path).with_context(|| {
+        format!(
+            "falha ao migrar {} para {}",
+            legacy_path.display(),
+            prompt_path.display()
+        )
+    })?;
+    Ok(true)
+}
+
+fn migrate_legacy_prompt_reference(content: &str) -> String {
+    let mut lines = content
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim_start();
+            let indent = &line[..line.len() - trimmed.len()];
+            let Some(value) = trimmed.strip_prefix("prompt:") else {
+                return line.to_string();
+            };
+            let value = value.trim().trim_matches(['"', '\'']);
+            if value == LEGACY_PROJECT_REVIEW_PROMPT_FILE_NAME
+                || value == format!("./{LEGACY_PROJECT_REVIEW_PROMPT_FILE_NAME}")
+            {
+                format!(
+                    "{indent}prompt: {PROJECT_CONFIG_DIR_NAME}/{PROJECT_REVIEW_PROMPT_FILE_NAME}"
+                )
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    if content.ends_with('\n') {
+        lines.push('\n');
+    }
+    lines
 }
 
 fn yaml_string(value: Option<&YamlValue>) -> Option<String> {
@@ -946,8 +1097,10 @@ mod tests {
     #[test]
     fn project_config_loads_commit_section() {
         let dir = tempfile::tempdir().unwrap();
+        let config_path = project_config_path(dir.path());
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
         fs::write(
-            dir.path().join(".seshat"),
+            config_path,
             r#"
 project_type: typescript
 commit:
@@ -967,6 +1120,45 @@ checks:
         assert_eq!(config.commit.max_diff_size, Some(4000));
         assert_eq!(config.commit.no_ai_paths, vec!["docs/"]);
         assert!(!config.checks["lint"].blocking);
+    }
+
+    #[test]
+    fn project_config_loads_legacy_file_before_migration() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".seshat"),
+            "project_type: rust\ncommit:\n  language: PT-BR\n",
+        )
+        .unwrap();
+
+        let config = ProjectConfig::load(dir.path());
+
+        assert_eq!(config.project_type.as_deref(), Some("rust"));
+        assert_eq!(config.commit.language.as_deref(), Some("PT-BR"));
+    }
+
+    #[test]
+    fn migration_moves_legacy_project_layout() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join(".seshat"),
+            "project_type: rust\ncode_review:\n  prompt: seshat-review.md\n",
+        )
+        .unwrap();
+        fs::write(dir.path().join("seshat-review.md"), "custom prompt\n").unwrap();
+
+        let migrated = migrate_legacy_project_layout(dir.path()).unwrap();
+
+        assert!(migrated);
+        assert!(!dir.path().join("seshat-review.md").exists());
+        assert!(project_config_path(dir.path()).exists());
+        assert_eq!(
+            fs::read_to_string(project_review_prompt_path(dir.path())).unwrap(),
+            "custom prompt\n"
+        );
+        assert!(fs::read_to_string(project_config_path(dir.path()))
+            .unwrap()
+            .contains("prompt: .seshat/review.md"));
     }
 
     #[test]
