@@ -484,6 +484,66 @@ mod tests {
     }
 
     #[test]
+    fn rust_lint_tool_passes_file_args() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+
+        let config = runner.discover_tools();
+        let tool = &config.tools["lint"];
+
+        assert_eq!(
+            tool.command,
+            vec!["rustfmt", "--check", "--config", "skip_children=true"]
+        );
+        assert_eq!(
+            tool.fix_command.as_ref().unwrap(),
+            &vec![
+                "rustfmt".to_string(),
+                "--config".to_string(),
+                "skip_children=true".to_string()
+            ]
+        );
+        assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn rust_lint_tool_uses_manifest_edition() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        let runner = ToolingRunner::new(dir.path());
+
+        let config = runner.discover_tools();
+        let tool = &config.tools["lint"];
+
+        assert_eq!(
+            tool.command,
+            vec![
+                "rustfmt",
+                "--check",
+                "--config",
+                "skip_children=true",
+                "--edition",
+                "2021"
+            ]
+        );
+        assert_eq!(
+            tool.fix_command.as_ref().unwrap(),
+            &vec![
+                "rustfmt".to_string(),
+                "--config".to_string(),
+                "skip_children=true".to_string(),
+                "--edition".to_string(),
+                "2021".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn applies_command_override() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
