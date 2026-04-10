@@ -1,6 +1,6 @@
 # 008 - Refatorar Pipeline de Config Efetiva
 
-Status: todo
+Status: done
 Priority: P1
 Type: refactor
 Milestone: Config Confiavel
