@@ -1,6 +1,6 @@
 # 017 - Definir e Implementar Contrato de UI
 
-Status: todo
+Status: done
 Priority: P2
 Type: feature
 Milestone: CLI Pronta para Uso Diario
