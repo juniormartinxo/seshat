@@ -154,6 +154,12 @@ pub fn render_tool_output(output: &str, status: Option<&str>) {
 }
 
 pub fn display_code_review(text: &str) {
+    if use_rich() {
+        for line in text.lines() {
+            stdout_line(colorize_code_review_line(line));
+        }
+        return;
+    }
     stdout_line(text);
 }
 
@@ -383,6 +389,25 @@ fn status_color(kind: &str) -> &'static str {
     }
 }
 
+fn colorize_code_review_line(line: &str) -> String {
+    review_issue_color(line)
+        .map(|code| color(line, code))
+        .unwrap_or_else(|| line.to_string())
+}
+
+fn review_issue_color(line: &str) -> Option<&'static str> {
+    let line = line.trim_start();
+    let (_, after_number) = line.split_once(". [")?;
+    let (marker, _) = after_number.split_once(']')?;
+    match marker.replace('_', " ").to_ascii_uppercase().as_str() {
+        "BUG" | "SECURITY" => Some("31"),
+        "STYLE" => Some("32"),
+        "CODE SMELL" => Some("34"),
+        "PERFORMANCE" | "PERF" => Some("36"),
+        _ => Some("33"),
+    }
+}
+
 fn color(text: &str, code: &str) -> String {
     format!("\x1b[{code}m{text}\x1b[0m")
 }
@@ -488,5 +513,26 @@ mod tests {
             yaml_bool(&YamlValue::String("nao".to_string())),
             Some(false)
         );
+    }
+
+    #[test]
+    fn ui_code_review_issue_lines_have_expected_colors() {
+        assert_eq!(
+            colorize_code_review_line("1. [BUG] src/app.rs:1"),
+            "\x1b[31m1. [BUG] src/app.rs:1\x1b[0m"
+        );
+        assert_eq!(
+            colorize_code_review_line("2. [SECURITY] src/auth.rs:4"),
+            "\x1b[31m2. [SECURITY] src/auth.rs:4\x1b[0m"
+        );
+        assert_eq!(
+            colorize_code_review_line("3. [STYLE] src/lib.rs:9"),
+            "\x1b[32m3. [STYLE] src/lib.rs:9\x1b[0m"
+        );
+        assert_eq!(
+            colorize_code_review_line("4. [CODE SMELL] src/lib.rs:12"),
+            "\x1b[34m4. [CODE SMELL] src/lib.rs:12\x1b[0m"
+        );
+        assert_eq!(colorize_code_review_line("   detalhe"), "   detalhe");
     }
 }
