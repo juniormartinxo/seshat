@@ -17,9 +17,9 @@ Status:
 | Git com repo explicito | ported | `GitClient` usa `git -C <repo_path>` | `002` |
 | E2E de repos Git temporarios | ported | `tests/e2e_git.rs` | `003` |
 | Fast paths sem IA | ported | E2E `no_ai_e2e_*` | `004` |
-| Config global + `.seshat` + `.env` | partial | `src/config.rs` carrega config global, projeto e `.env` local | `007`, `008` |
-| Providers HTTP/CLI | partial | Providers implementados, falta mock/contrato HTTP amplo | `009`, `010`, `011`, `012` |
-| Code review | partial | Parser e review existem, falta JUDGE completo | `013`, `014` |
+| Config global + `.seshat` + `.env` + keyring | ported | `resolve_effective_config` centraliza precedencia | `006`, `007`, `008` |
+| Providers HTTP/CLI | ported | Providers HTTP cobertos por transporte fake; providers CLI cobertos com executaveis fake | - |
+| Code review | ported | Parser, filtros, logs e JUDGE cobertos | - |
 | Tooling/fix | partial | Strategies existem, falta E2E com comandos fake | `015`, `016` |
 | UI/JSON | partial | JSON basico em `commit`, contrato incompleto | `017`, `018` |
 | GPG | partial | Prewarm existe, falta hardening de falhas tardias | `019` |
@@ -60,7 +60,7 @@ Status:
 | Diff grande com confirmacao | `validate_diff_size` | partial | Falta E2E/contrato UI | `017` |
 | Checks por flag | `run_pre_commit_checks` | partial | Repo path explicito; falta comandos fake | `016` |
 | Checks por `.seshat` | `project_config.checks` | partial | Falta E2E | `016` |
-| Code review por flag/config | `commit_with_ai` | partial | Parser existe, falta JUDGE completo | `013`, `014` |
+| Code review por flag/config | `commit_with_ai` | ported | Inclui bloqueio e reavaliacao por JUDGE | - |
 | Commit assinado GPG | `ensure_gpg_auth_for_repo` | partial | Usa repo path; falta hardening | `019` |
 
 ## `seshat flow`
@@ -77,7 +77,7 @@ Status:
 | `--verbose`, `-v` | `FlowArgs.verbose` | ported | Passado ao processamento | - |
 | `--date`, `-d` | `FlowArgs.date` | partial | Implementado; falta E2E proprio de flow | `004` cobre commit |
 | `--check`, `-c` | `FlowArgs.check` | partial | Repo path explicito; falta fake tools | `016` |
-| `--review`, `-r` | `FlowArgs.review` | partial | Passado ao commit por arquivo | `013`, `014` |
+| `--review`, `-r` | `FlowArgs.review` | ported | Passado ao commit por arquivo | - |
 | `--no-check` | `FlowArgs.no_check` | partial | Passado ao commit por arquivo | `016` |
 
 ### Contratos de comportamento
@@ -118,12 +118,12 @@ Status:
 
 | Item Python | Rust | Status | Notas | Gap/Card |
 | --- | --- | --- | --- | --- |
-| `--api-key` | `ConfigArgs.api_key` | partial | Salva config; keyring ainda ausente | `007` |
+| `--api-key` | `ConfigArgs.api_key` | ported | Tenta keyring antes de plaintext | `007` |
 | `--provider` | `ConfigArgs.provider` | ported | Valida provedores | - |
 | `--model` | `ConfigArgs.model` | ported | Salva modelo | - |
-| `--judge-api-key` | `ConfigArgs.judge_api_key` | partial | Keyring ausente | `007`, `013` |
-| `--judge-provider` | `ConfigArgs.judge_provider` | partial | Provider salvo; JUDGE incompleto | `013` |
-| `--judge-model` | `ConfigArgs.judge_model` | partial | Modelo salvo; JUDGE incompleto | `013` |
+| `--judge-api-key` | `ConfigArgs.judge_api_key` | ported | Keyring e fluxo JUDGE portados | - |
+| `--judge-provider` | `ConfigArgs.judge_provider` | ported | Usado pelo fluxo JUDGE | - |
+| `--judge-model` | `ConfigArgs.judge_model` | ported | Usado pelo fluxo JUDGE | - |
 | `--max-diff` | `ConfigArgs.max_diff` | ported | Valida maior que zero | - |
 | `--warn-diff` | `ConfigArgs.warn_diff` | ported | Valida maior que zero | - |
 | `--language` | `ConfigArgs.language` | ported | Normaliza caixa | - |
@@ -137,9 +137,9 @@ Status:
 | `API_KEY` | `AppConfig.api_key` | ported | Env tem precedencia | `008` para pipeline formal |
 | `AI_PROVIDER` | `AppConfig.ai_provider` | ported | Env e CLI override | - |
 | `AI_MODEL` | `AppConfig.ai_model` | ported | Default por provider | - |
-| `JUDGE_API_KEY` | `AppConfig.judge_api_key` | partial | Falta JUDGE completo/keyring | `007`, `013` |
-| `JUDGE_PROVIDER` | `AppConfig.judge_provider` | partial | Falta JUDGE completo | `013` |
-| `JUDGE_MODEL` | `AppConfig.judge_model` | partial | Falta JUDGE completo | `013` |
+| `JUDGE_API_KEY` | `AppConfig.judge_api_key` | ported | Usado como `API_KEY` temporaria do JUDGE | - |
+| `JUDGE_PROVIDER` | `AppConfig.judge_provider` | ported | Seleciona provider do JUDGE | - |
+| `JUDGE_MODEL` | `AppConfig.judge_model` | ported | Seleciona modelo do JUDGE | - |
 | `MAX_DIFF_SIZE` | `AppConfig.max_diff_size` | ported | Env carregado | - |
 | `WARN_DIFF_SIZE` | `AppConfig.warn_diff_size` | ported | Env carregado | - |
 | `COMMIT_LANGUAGE` | `AppConfig.commit_language` | ported | Env carregado | - |
@@ -165,11 +165,11 @@ Status:
 | `checks.*.blocking` | `ProjectConfig.checks` | partial | Falta E2E fake | `016` |
 | `checks.*.command` | `CommandOverride` | partial | Unit test cobre override | `016` |
 | `checks.*.auto_fix` | `ToolCommand.auto_fix` | partial | Falta E2E fake | `016` |
-| `code_review.enabled` | `CodeReviewConfig.enabled` | partial | Falta JUDGE completo | `013`, `014` |
-| `code_review.blocking` | `CodeReviewConfig.blocking` | partial | Falta E2E de bloqueio | `014` |
-| `code_review.prompt` | `get_review_prompt` | partial | Funciona por repo path | `014` |
-| `code_review.extensions` | `filter_diff_by_extensions` | partial | Unit test cobre filtro | `014` |
-| `code_review.log_dir` | `save_review_to_log` | partial | Falta E2E | `014` |
+| `code_review.enabled` | `CodeReviewConfig.enabled` | ported | Ativa review e respeita `--no-review` | - |
+| `code_review.blocking` | `CodeReviewConfig.blocking` | ported | Aciona parada, continuar ou JUDGE em BUG/SECURITY | - |
+| `code_review.prompt` | `get_review_prompt` | ported | Usado pelo review principal e JUDGE | - |
+| `code_review.extensions` | `filter_diff_by_extensions` | ported | Unit tests cobrem filtros default/custom e exclusoes | - |
+| `code_review.log_dir` | `save_review_to_log` | ported | Unit tests cobrem agrupamento, paths e unknown | - |
 | `ui` | Parcial | partial | Template existe; aplicacao incompleta | `017` |
 
 ## Arquivos Lidos e Escritos
@@ -178,11 +178,11 @@ Status:
 | --- | --- | --- | --- | --- |
 | `.seshat` local | Leitura obrigatoria em commit | Leitura obrigatoria em commit | ported | - |
 | `.seshat` local em flow | Opcional | Opcional | ported | - |
-| `~/.seshat` global | JSON | JSON | partial | `007`, `008` |
+| `~/.seshat` global | JSON | JSON com secrets removidos quando keyring funciona | ported | `007`, `008` |
 | `.env` local | Lido | Lido do path do projeto | ported | `006` |
 | `.git/seshat-flow-locks/*` | Escrito/removido | Escrito/removido | ported | `003` |
-| Logs de review | Escrito se configurado | Escrito se configurado | partial | `014` |
-| Keyring do sistema | Usado para segredos | Ausente | missing | `007` |
+| Logs de review | Escrito se configurado | Escrito se configurado e testado | ported | - |
+| Keyring do sistema | Usado para segredos | Usado para `API_KEY` e `JUDGE_API_KEY` | ported | `007` |
 
 ## Efeitos Colaterais em Git
 
@@ -202,12 +202,12 @@ Status:
 | Python | Rust atual | Status | Gap/Card |
 | --- | --- | --- | --- |
 | `tests/test_cli.py` commit/config/init | Unit + E2E parcial | partial | `016`, `018` |
-| `tests/test_core.py` fast paths/review | Unit + E2E no-AI | partial | `004`, `013`, `014` |
-| `tests/test_config.py` config/keyring/dotenv | Unit parcial | partial | `007`, `008` |
-| `tests/test_providers.py` providers | Unit minimo | partial | `009`, `010`, `011`, `012` |
+| `tests/test_core.py` fast paths/review | Unit + E2E no-AI/review | ported | - |
+| `tests/test_config.py` config/keyring/dotenv | Unit de config/keyring/dotenv | partial | Falta E2E de keyring real por ambiente | `020` |
+| `tests/test_providers.py` providers | Unit de providers HTTP e CLI com fakes offline | ported | - |
 | `tests/test_tooling.py` discovery | Unit Rust | partial | `015`, `016` |
 | `tests/test_tooling_fix.py` fix | E2E com `ruff` fake | partial | `016` aprofunda estrategias |
-| `tests/test_code_review.py` review | Unit parser/filtro | partial | `013`, `014` |
+| `tests/test_code_review.py` review | Unit parser/filtro/logs/JUDGE | ported | - |
 | `tests/test_ui.py` UI | Ausente contrato completo | missing | `017`, `018` |
 
 ## Decisoes `changed`
