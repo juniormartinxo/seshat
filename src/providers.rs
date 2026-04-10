@@ -1108,7 +1108,9 @@ mod tests {
 
     #[test]
     fn zai_provider_uses_env_base_url_and_zai_api_key() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let previous = save_provider_env();
         clear_provider_env();
         env::set_var("ZAI_API_KEY", "zai-key");
@@ -1132,7 +1134,9 @@ mod tests {
 
     #[test]
     fn zai_provider_falls_back_to_zhipu_api_key() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let previous = save_provider_env();
         clear_provider_env();
         env::set_var("ZHIPU_API_KEY", "zhipu-key");
@@ -1476,7 +1480,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn codex_cli_provider_invokes_fake_binary_with_expected_args() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("codex-fake");
@@ -1516,7 +1522,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn codex_cli_provider_reports_empty_response() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("codex-fake");
@@ -1541,7 +1549,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn codex_cli_provider_truncates_failure_output() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("codex-fake");
@@ -1567,7 +1577,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn claude_cli_provider_invokes_fake_binary_with_expected_args() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("claude-fake");
@@ -1607,7 +1619,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn claude_cli_provider_reports_login_failure() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("claude-fake");
@@ -1633,7 +1647,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn claude_cli_provider_reports_empty_response() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("claude-fake");
@@ -1658,7 +1674,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn claude_cli_provider_reports_timeout() {
-        let _lock = ENV_LOCK.lock().unwrap();
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("claude-slow-fake");
@@ -1673,8 +1691,6 @@ mod tests {
 
         assert!(error.to_string().contains("CLI excedeu o timeout de 0s"));
     }
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     struct ProviderEnvGuard(Option<Vec<(&'static str, Option<OsString>)>>);
 
