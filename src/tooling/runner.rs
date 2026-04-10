@@ -452,6 +452,38 @@ mod tests {
     }
 
     #[test]
+    fn filters_rust_test_targets_only_for_integration_tests() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let files = vec![
+            "src/core.rs".into(),
+            "tests/e2e_cli.rs".into(),
+            "tests/e2e_git.rs".into(),
+        ];
+
+        let filtered = runner.filter_files_for_check(&files, "test", None);
+
+        assert_eq!(
+            filtered,
+            vec!["--test=e2e_cli".to_string(), "--test=e2e_git".to_string()]
+        );
+    }
+
+    #[test]
+    fn rust_test_tool_passes_target_args() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+
+        let config = runner.discover_tools();
+        let tool = &config.tools["test"];
+
+        assert_eq!(tool.command, vec!["cargo", "test"]);
+        assert!(tool.pass_files);
+    }
+
+    #[test]
     fn applies_command_override() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
