@@ -1,3 +1,4 @@
+use crate::config::DEFAULT_CODEX_MODEL;
 use crate::review::{CODE_REVIEW_PROMPT, CODE_REVIEW_PROMPT_ADDON};
 use crate::utils::{clean_provider_response, clean_review_response};
 use anyhow::{anyhow, Context, Result};
@@ -600,14 +601,14 @@ impl CodexCliProvider {
         format!("{system_prompt}\n\n{guardrails}\n\nDiff:\n{diff}\n\n{task}")
     }
 
-    fn run_codex(&self, prompt: &str) -> Result<String> {
+    fn run_codex(&self, prompt: &str, requested_model: Option<&str>) -> Result<String> {
         validate_executable(
             &self.codex_bin,
             "Codex CLI não encontrada. Instale a CLI do Codex ou defina CODEX_BIN.",
         )?;
         let temp_dir = TempDir::new()?;
         let output_path = temp_dir.path().join("last-message.txt");
-        let args = self.build_args(&output_path);
+        let args = self.build_args(&output_path, requested_model);
         let completed = run_cli(&self.codex_bin, &args, prompt, self.timeout, None)?;
         if !completed.status.success() {
             return Err(anyhow!("Codex CLI falhou: {}", tail_error(&completed)));
@@ -627,11 +628,21 @@ impl CodexCliProvider {
         }
     }
 
-    fn build_args(&self, output_path: &Path) -> Vec<OsString> {
-        let mut args: Vec<OsString> = vec!["--ask-for-approval".into(), "never".into()];
-        if let Some(model) = &self.model {
-            args.extend(["--model".into(), model.into()]);
-        }
+    fn build_args(&self, output_path: &Path, requested_model: Option<&str>) -> Vec<OsString> {
+        let model = self
+            .model
+            .as_deref()
+            .and_then(codex_compatible_model)
+            .or_else(|| requested_model.and_then(codex_compatible_model))
+            .unwrap_or(DEFAULT_CODEX_MODEL);
+        let mut args: Vec<OsString> = vec![
+            "--ask-for-approval".into(),
+            "never".into(),
+            "-c".into(),
+            "mcp_servers={}".into(),
+            "--model".into(),
+            model.into(),
+        ];
         if let Some(profile) = &self.profile {
             args.extend(["--profile".into(), profile.into()]);
         }
@@ -654,6 +665,33 @@ impl CodexCliProvider {
     }
 }
 
+fn codex_compatible_model(model: &str) -> Option<&str> {
+    let model = model.trim();
+    if model.is_empty() || looks_like_external_model(model) {
+        None
+    } else {
+        Some(model)
+    }
+}
+
+fn looks_like_external_model(model: &str) -> bool {
+    let model = model.to_ascii_lowercase();
+    model.contains('/')
+        || [
+            "anthropic",
+            "claude",
+            "deepseek",
+            "gemini",
+            "glm",
+            "llama",
+            "mistral",
+            "qwen",
+            "z-ai",
+        ]
+        .iter()
+        .any(|prefix| model.starts_with(prefix))
+}
+
 impl Provider for CodexCliProvider {
     fn name(&self) -> &'static str {
         "codex"
@@ -662,7 +700,7 @@ impl Provider for CodexCliProvider {
     fn generate_commit_message(
         &self,
         diff: &str,
-        _model: Option<&str>,
+        model: Option<&str>,
         code_review: bool,
     ) -> Result<String> {
         let prompt = self.build_prompt(
@@ -670,14 +708,14 @@ impl Provider for CodexCliProvider {
             diff,
             "Return only the final Conventional Commit message.",
         );
-        self.run_codex(&prompt)
+        self.run_codex(&prompt, model)
             .map(|content| clean_provider_response(Some(&content)))
     }
 
     fn generate_code_review(
         &self,
         diff: &str,
-        _model: Option<&str>,
+        model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String> {
         let prompt = self.build_prompt(
@@ -685,7 +723,7 @@ impl Provider for CodexCliProvider {
             diff,
             "Return only the code review in the requested format.",
         );
-        self.run_codex(&prompt)
+        self.run_codex(&prompt, model)
             .map(|content| clean_review_response(Some(&content)))
     }
 }
@@ -1506,6 +1544,7 @@ mod tests {
         assert_eq!(message, "feat: use codex cli");
         assert_eq!(args[0], "--ask-for-approval");
         assert_eq!(args[1], "never");
+        assert_arg_pair(&args, "-c", "mcp_servers={}");
         assert_arg_pair(&args, "--model", "codex-model");
         assert_arg_pair(&args, "--profile", "work-profile");
         assert!(args.contains(&"exec".to_string()));
@@ -1517,6 +1556,58 @@ mod tests {
         assert_eq!(args.last().map(String::as_str), Some("-"));
         assert_eq!(stdin.matches("diff-body").count(), 1);
         assert!(stdin.contains("Return only the final Conventional Commit message."));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_cli_provider_uses_requested_model_or_default() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_code_review("diff-body", Some("gpt-5.4-mini"), None)
+            .unwrap();
+        let args = read_lines(&args_path);
+        assert_arg_pair(&args, "--model", "gpt-5.4-mini");
+        assert_arg_pair(&args, "-c", "mcp_servers={}");
+
+        provider
+            .generate_code_review("diff-body", Some("deepseek-reasoner"), None)
+            .unwrap();
+        let args = read_lines(&args_path);
+        assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
+
+        provider
+            .generate_code_review("diff-body", Some("z-ai/glm-5:free"), None)
+            .unwrap();
+        let args = read_lines(&args_path);
+        assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
+
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+        let args = read_lines(&args_path);
+        assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
+
+        env::set_var("CODEX_MODEL", "z-ai/glm-5:free");
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_code_review("diff-body", None, None)
+            .unwrap();
+        let args = read_lines(&args_path);
+        assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
     }
 
     #[cfg(unix)]
