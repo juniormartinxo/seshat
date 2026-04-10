@@ -59,7 +59,7 @@ pub fn run_pre_commit_checks(
     }
 
     for block in runner.format_results(&results, verbose) {
-        println!("{}", block.text);
+        ui::render_tool_output(&block.text, block.status.as_deref());
     }
     let has_failures = runner.has_blocking_failures(&results);
     if has_failures {
@@ -183,17 +183,18 @@ fn commit_with_ai_with_provider_factory_and_action(
         .map(ToOwned::to_owned)
         .unwrap_or(git.staged_files(None, true)?);
     if !files_for_panel.is_empty() {
-        ui::section("Iniciando commit do(s) arquivo(s)");
-        for file in &files_for_panel {
-            println!(
-                "- {}",
+        let files = files_for_panel
+            .iter()
+            .map(|file| {
                 git.repo_path()
                     .join(file)
                     .canonicalize()
                     .unwrap_or_else(|_| PathBuf::from(file))
                     .display()
-            );
-        }
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        ui::file_list("Iniciando commit do(s) arquivo(s)", &files, false);
     }
 
     if let Some(check) = &options.check {
@@ -227,7 +228,7 @@ fn commit_with_ai_with_provider_factory_and_action(
                 all_results.extend(results);
             }
             for block in runner.format_results(&all_results, options.verbose) {
-                println!("{}", block.text);
+                ui::render_tool_output(&block.text, block.status.as_deref());
             }
             if runner.has_blocking_failures(&all_results) {
                 return Err(anyhow!("Verificações pre-commit falharam."));
@@ -258,11 +259,14 @@ fn commit_with_ai_with_provider_factory_and_action(
     }
 
     if options.verbose {
-        println!("Diff analysis:\n{}\n", &diff[..diff.len().min(500)]);
-        println!(
+        ui::info(format!(
+            "Diff analysis:\n{}\n",
+            &diff[..diff.len().min(500)]
+        ));
+        ui::info(format!(
             "Limites configurados: max={}, warn={}",
             options.max_diff_size, options.warn_diff_size
-        );
+        ));
     }
 
     let provider = provider_factory(&options.provider)
@@ -301,10 +305,8 @@ fn commit_with_ai_with_provider_factory_and_action(
             )?;
             review::parse_standalone_review(&raw)
         };
-        println!(
-            "{}",
-            review::format_review_for_display(&result, options.verbose)
-        );
+        let formatted_review = review::format_review_for_display(&result, options.verbose);
+        ui::display_code_review(&formatted_review);
         let mut skip_issue_confirmation = false;
         if result.has_issues {
             if let Some(log_dir) = project_config.code_review.log_dir.as_deref() {
@@ -347,10 +349,9 @@ fn commit_with_ai_with_provider_factory_and_action(
                         )
                         .map_err(|error| anyhow!("Falha ao obter JUDGE: {error}"))?;
 
-                        println!(
-                            "{}",
-                            review::format_review_for_display(&judge_result, options.verbose)
-                        );
+                        let formatted_review =
+                            review::format_review_for_display(&judge_result, options.verbose);
+                        ui::display_code_review(&formatted_review);
                         if has_blocking_review_issues(&judge_result) {
                             return Err(anyhow!(
                                 "JUDGE bloqueou o commit por apontar BUG ou SECURITY."
@@ -584,8 +585,6 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use tempfile::TempDir;
 
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct ProviderCall {
         provider: String,
@@ -704,6 +703,9 @@ mod tests {
 
     #[test]
     fn judge_config_uses_default_model_and_dedicated_key() {
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let _guard = TempEnv::apply(&[
             ("JUDGE_PROVIDER".to_string(), Some("gemini".to_string())),
             ("JUDGE_MODEL".to_string(), None),
@@ -719,7 +721,9 @@ mod tests {
 
     #[test]
     fn judge_review_uses_separate_provider_model_and_api_key_without_env_leak() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let calls = Arc::new(Mutex::new(Vec::new()));
         let previous = TempEnv::apply(&[
             ("API_KEY".to_string(), Some("main-key".to_string())),
@@ -768,7 +772,9 @@ mod tests {
 
     #[test]
     fn judge_approved_flow_uses_judge_provider_for_final_commit_message() {
-        let _env_lock = ENV_LOCK.lock().unwrap();
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let repo = staged_rust_repo(
             "\
 project_type: rust
