@@ -1,6 +1,6 @@
 # 016 - Testar Tooling com Comandos Fake
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: CLI Pronta para Uso Diario
