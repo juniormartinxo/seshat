@@ -249,8 +249,12 @@ pub fn ensure_gpg_auth_for_repo(
         format!("Commit assinado com GPG detectado, mas não foi possível executar '{gpg_program}'")
     })?;
     if let Some(stdin) = child.stdin.as_mut() {
-        use std::io::Write;
-        stdin.write_all(b"seshat-gpg-auth-check\n")?;
+        use std::io::{ErrorKind, Write};
+        if let Err(error) = stdin.write_all(b"seshat-gpg-auth-check\n") {
+            if error.kind() != ErrorKind::BrokenPipe {
+                return Err(error.into());
+            }
+        }
     }
     let output = child.wait_with_output()?;
     if output.status.success() {
