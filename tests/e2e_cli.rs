@@ -91,6 +91,12 @@ fn read_global_config(home: &Path) -> Value {
     serde_json::from_str(&content).expect("parse global config")
 }
 
+fn write_project_seshat(repo: &Path, content: impl AsRef<str>) {
+    let config_path = repo.join(".seshat").join("config.yaml");
+    fs::create_dir_all(config_path.parent().expect("config parent")).expect("create .seshat");
+    fs::write(config_path, content.as_ref()).expect("write .seshat/config.yaml");
+}
+
 fn parse_json_events(output: &[u8]) -> Vec<Value> {
     String::from_utf8_lossy(output)
         .lines()
@@ -108,11 +114,10 @@ fn assert_no_json_events(output: &[u8]) {
 }
 
 fn write_commit_seshat(repo: &Path) {
-    fs::write(
-        repo.join(".seshat"),
+    write_project_seshat(
+        repo,
         "project_type: rust\ncommit:\n  provider: ollama\n  model: llama3\n  language: PT-BR\ncode_review:\n  enabled: false\n",
-    )
-    .expect("write .seshat");
+    );
 }
 
 fn write_fake_ruff(bin_dir: &Path, log_path: &Path, should_fail: bool) {
@@ -216,13 +221,12 @@ exit "${FAKE_TOOL_EXIT:-0}"
 
 #[cfg(unix)]
 fn write_rust_seshat(repo: &Path, check_config: &str) {
-    fs::write(
-        repo.join(".seshat"),
+    write_project_seshat(
+        repo,
         format!(
             "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\nchecks:\n  lint:\n    enabled: true\n{check_config}code_review:\n  enabled: false\n"
         ),
-    )
-    .expect("write .seshat");
+    );
 }
 
 #[cfg(unix)]
@@ -240,11 +244,10 @@ fn write_rust_project_file(repo: &Path, path: &str, content: &str) {
 }
 
 fn write_python_seshat(repo: &Path) {
-    fs::write(
-        repo.join(".seshat"),
+    write_project_seshat(
+        repo,
         "project_type: python\nchecks:\n  lint:\n    enabled: true\n    blocking: true\n",
-    )
-    .expect("write .seshat");
+    );
 }
 
 fn path_with_fake_bin(bin_dir: &Path) -> String {
@@ -292,33 +295,68 @@ fn init_e2e_creates_seshat_and_review_prompt() {
         .assert()
         .success();
 
-    let config = fs::read_to_string(project.path().join(".seshat")).expect("read .seshat");
+    let config = fs::read_to_string(project.path().join(".seshat").join("config.yaml"))
+        .expect("read .seshat/config.yaml");
     assert!(config.contains("project_type: rust"));
     assert!(config.contains("commit:"));
     assert!(config.contains("no_ai_extensions"));
     assert!(config.contains("no_ai_paths"));
-    assert!(config.contains("prompt: seshat-review.md"));
+    assert!(config.contains("prompt: .seshat/review.md"));
     assert!(config.contains("ui:"));
-    assert!(project.path().join("seshat-review.md").exists());
+    assert!(project.path().join(".seshat").join("review.md").exists());
+    assert!(!project.path().join("seshat-review.md").exists());
 }
 
 #[test]
-fn init_e2e_refuses_existing_seshat_without_force() {
+fn init_e2e_refuses_existing_seshat_config_without_force() {
     let project = tempfile::tempdir().expect("create project");
     let home = tempfile::tempdir().expect("create home");
-    fs::write(project.path().join(".seshat"), "existing config").expect("write .seshat");
+    write_project_seshat(project.path(), "existing config");
 
     seshat()
         .env("HOME", home.path())
         .args(["init", "--path", project.path().to_str().unwrap()])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("Arquivo .seshat já existe"));
+        .stderr(predicate::str::contains(
+            "Arquivo .seshat/config.yaml já existe",
+        ));
 
     assert_eq!(
-        fs::read_to_string(project.path().join(".seshat")).expect("read .seshat"),
+        fs::read_to_string(project.path().join(".seshat").join("config.yaml"))
+            .expect("read .seshat/config.yaml"),
         "existing config"
     );
+}
+
+#[test]
+fn init_e2e_migrates_legacy_seshat_file_and_review_prompt() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    fs::write(
+        project.path().join(".seshat"),
+        "project_type: rust\ncode_review:\n  prompt: seshat-review.md\n",
+    )
+    .expect("write legacy .seshat");
+    fs::write(project.path().join("seshat-review.md"), "legacy prompt\n")
+        .expect("write legacy prompt");
+
+    seshat()
+        .env("HOME", home.path())
+        .args(["init", "--path", project.path().to_str().unwrap()])
+        .assert()
+        .success();
+
+    let config = fs::read_to_string(project.path().join(".seshat").join("config.yaml"))
+        .expect("read migrated config");
+    assert!(config.contains("project_type: rust"));
+    assert!(config.contains("prompt: .seshat/review.md"));
+    assert_eq!(
+        fs::read_to_string(project.path().join(".seshat").join("review.md"))
+            .expect("read migrated prompt"),
+        "legacy prompt\n"
+    );
+    assert!(!project.path().join("seshat-review.md").exists());
 }
 
 #[test]
@@ -345,9 +383,10 @@ fn init_e2e_preserves_existing_review_prompt() {
         .success();
 
     assert_eq!(
-        fs::read_to_string(project.path().join("seshat-review.md")).expect("read prompt"),
+        fs::read_to_string(project.path().join(".seshat").join("review.md")).expect("read prompt"),
         "custom prompt\n"
     );
+    assert!(!project.path().join("seshat-review.md").exists());
 }
 
 #[test]
@@ -405,7 +444,7 @@ fn json_e2e_errors_without_seshat() {
     assert!(events[0]["message"]
         .as_str()
         .expect("message")
-        .contains("Arquivo .seshat não encontrado"));
+        .contains("Arquivo .seshat/config.yaml não encontrado"));
     assert_no_json_events(&output.stderr);
 }
 
@@ -501,11 +540,10 @@ fn commit_e2e_large_diff_without_yes_cancels_before_provider() {
     let fake_codex = temp.path().join("fake-codex");
     let codex_log = temp.path().join("fake-codex.log");
     write_fake_codex(&fake_codex);
-    fs::write(
-        repo.path().join(".seshat"),
+    write_project_seshat(
+        repo.path(),
         "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
-    )
-    .expect("write .seshat");
+    );
     write_rust_project_file(
         repo.path(),
         "src/main.rs",
@@ -542,11 +580,10 @@ fn commit_e2e_large_diff_with_yes_runs_provider_and_commits() {
     let fake_codex = temp.path().join("fake-codex");
     let codex_log = temp.path().join("fake-codex.log");
     write_fake_codex(&fake_codex);
-    fs::write(
-        repo.path().join(".seshat"),
+    write_project_seshat(
+        repo.path(),
         "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
-    )
-    .expect("write .seshat");
+    );
     write_rust_project_file(
         repo.path(),
         "src/main.rs",
@@ -579,11 +616,10 @@ fn gpg_e2e_commit_fails_before_provider() {
     let codex_log = temp.path().join("fake-codex.log");
     write_fake_gpg(&fake_gpg);
     write_fake_codex(&fake_codex);
-    fs::write(
-        repo.path().join(".seshat"),
+    write_project_seshat(
+        repo.path(),
         "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
-    )
-    .expect("write .seshat");
+    );
     write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
     git(repo.path(), &["add", "--", "src/main.rs"]);
     git(repo.path(), &["config", "commit.gpgsign", "true"]);
@@ -624,11 +660,10 @@ fn gpg_e2e_flow_fails_before_batch_provider() {
     let codex_log = temp.path().join("fake-codex.log");
     write_fake_gpg(&fake_gpg);
     write_fake_codex(&fake_codex);
-    fs::write(
-        repo.path().join(".seshat"),
+    write_project_seshat(
+        repo.path(),
         "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
-    )
-    .expect("write .seshat");
+    );
     write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
     git(repo.path(), &["add", "-f", "--", ".seshat", "Cargo.toml"]);
     git(repo.path(), &["commit", "-m", "chore: seed"]);
@@ -845,14 +880,13 @@ fn tooling_e2e_commit_ignores_disabled_configured_check_without_flag() {
     let log_path = temp.path().join("fake-lint.log");
     write_fake_tool(&fake_tool);
     write_fake_codex(&fake_codex);
-    fs::write(
-        repo.path().join(".seshat"),
+    write_project_seshat(
+        repo.path(),
         format!(
             "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\nchecks:\n  lint:\n    enabled: false\n    blocking: true\n    command:\n      - {}\n    pass_files: true\n    extensions:\n      - .rs\ncode_review:\n  enabled: false\n",
             fake_tool.display()
         ),
-    )
-    .expect("write .seshat");
+    );
     write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
     git(repo.path(), &["add", "--", "src/main.rs"]);
 
