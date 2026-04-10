@@ -19,7 +19,7 @@ Adicionar testes E2E para `init`, `config` e `fix`.
 
 - `seshat init --force --path <repo>`.
 - Criacao de `.seshat`.
-- Criacao de `seshat-review.md`.
+- Criacao de `.seshat/review.md`.
 - Erro quando `.seshat` existe sem `--force`.
 - `seshat config` exibindo config atual.
 - `seshat config --provider codex`.
