@@ -1,14 +1,16 @@
 use crate::config::{
-    apply_project_overrides, load_config, mask_api_key, normalize_config, save_config,
-    valid_providers, AppConfig, ProjectConfig,
+    apply_project_overrides, load_config, load_config_for_path, mask_api_key, normalize_config,
+    save_config, valid_providers, AppConfig, ProjectConfig,
 };
 use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
+use crate::git::GitClient;
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
 use crate::ui;
 use crate::utils::{
-    build_gpg_env, ensure_gpg_auth, get_last_commit_summary, is_gpg_signing_enabled,
+    build_gpg_env, ensure_gpg_auth_for_repo, get_last_commit_summary_for_repo,
+    is_gpg_signing_enabled_for_repo,
 };
 use crate::VERSION;
 use anyhow::{anyhow, Result};
@@ -16,8 +18,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "seshat", version = VERSION, about = "AI Commit Bot using Conventional Commits")]
@@ -172,8 +173,9 @@ pub fn run() -> Result<()> {
 }
 
 fn run_commit(args: CommitArgs) -> Result<()> {
+    let git = GitClient::new(".");
     let json_mode = matches!(args.format, Some(OutputFormat::Json));
-    if !Path::new(".seshat").exists() {
+    if !git.repo_path().join(".seshat").exists() {
         if json_mode {
             println!(
                 "{}",
@@ -185,8 +187,11 @@ fn run_commit(args: CommitArgs) -> Result<()> {
         ));
     }
 
-    let project_config = ProjectConfig::load(".");
-    let mut config = apply_project_overrides(load_config(), &project_config.commit);
+    let project_config = ProjectConfig::load(git.repo_path());
+    let mut config = apply_project_overrides(
+        load_config_for_path(git.repo_path()),
+        &project_config.commit,
+    );
     if let Some(provider) = args.provider {
         config.ai_provider = Some(provider);
     }
@@ -224,13 +229,14 @@ fn run_commit(args: CommitArgs) -> Result<()> {
     }
 
     let git_env = build_gpg_env();
-    let git_env = if is_gpg_signing_enabled(Some(&git_env)) {
-        ensure_gpg_auth(Some(&git_env))?
+    let git_env = if is_gpg_signing_enabled_for_repo(git.repo_path(), Some(&git_env)) {
+        ensure_gpg_auth_for_repo(git.repo_path(), Some(&git_env))?
     } else {
         git_env
     };
 
     let options = CommitOptions {
+        repo_path: git.repo_path().to_path_buf(),
         provider: provider.clone(),
         model: config.ai_model.clone(),
         verbose: args.verbose,
@@ -266,20 +272,19 @@ fn run_commit(args: CommitArgs) -> Result<()> {
         return Ok(());
     }
 
-    let mut command = Command::new("git");
-    command.arg("commit");
+    let mut commit_args = vec!["commit".to_string()];
     if !args.verbose {
-        command.arg("--quiet");
+        commit_args.push("--quiet".to_string());
     }
     if let Some(date) = date.take() {
-        command.args(["--date", &date]);
+        commit_args.extend(["--date".to_string(), date]);
     }
-    command.args(["-m", &message]).envs(git_env.iter());
-    let status = command.status()?;
+    commit_args.extend(["-m".to_string(), message.clone()]);
+    let status = git.status_with_env(commit_args, Some(&git_env))?;
     if !status.success() {
         return Err(anyhow!("git commit falhou"));
     }
-    let summary = get_last_commit_summary()
+    let summary = get_last_commit_summary_for_repo(git.repo_path())
         .unwrap_or_else(|| message.lines().next().unwrap_or(&message).to_string());
     if json_mode {
         println!("{}", json!({"event": "committed", "summary": summary}));
@@ -440,7 +445,7 @@ fn run_init(args: InitArgs) -> Result<()> {
     let runner = ToolingRunner::new(&project_path);
     let project_type = runner.detect_project_type().unwrap_or("rust").to_string();
     let tooling = runner.discover_tools();
-    let config = load_config();
+    let config = load_config_for_path(&project_path);
     let provider = config.ai_provider.unwrap_or_else(|| "openai".to_string());
     let model = config
         .ai_model
@@ -548,8 +553,12 @@ fn run_fix(args: FixArgs) -> Result<()> {
 }
 
 fn run_flow(args: FlowArgs) -> Result<()> {
-    let project_config = ProjectConfig::load(&args.path);
-    let mut config = apply_project_overrides(load_config(), &project_config.commit);
+    let git = GitClient::new(&args.path);
+    let project_config = ProjectConfig::load(git.repo_path());
+    let mut config = apply_project_overrides(
+        load_config_for_path(git.repo_path()),
+        &project_config.commit,
+    );
     if let Some(provider) = args.provider {
         config.ai_provider = Some(provider);
     }
@@ -566,13 +575,14 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         .clone()
         .unwrap_or_else(|| "openai".to_string());
     let service = BatchCommitService::new(
+        git.repo_path(),
         provider,
         config.ai_model.clone(),
         config.commit_language.clone(),
         config.max_diff_size,
         config.warn_diff_size,
     );
-    let mut files = service.modified_files(&args.path);
+    let mut files = service.modified_files();
     if files.is_empty() {
         ui::warning("Nenhum arquivo modificado encontrado.");
         return Ok(());
@@ -598,8 +608,8 @@ fn run_flow(args: FlowArgs) -> Result<()> {
     }
 
     let git_env = build_gpg_env();
-    if is_gpg_signing_enabled(Some(&git_env)) {
-        ensure_gpg_auth(Some(&git_env))?;
+    if is_gpg_signing_enabled_for_repo(git.repo_path(), Some(&git_env)) {
+        ensure_gpg_auth_for_repo(git.repo_path(), Some(&git_env))?;
     }
 
     let mut success = 0;
