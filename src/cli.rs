@@ -122,6 +122,8 @@ struct BenchAgentsArgs {
     pt_br: bool,
     #[arg(long = "keep-temp")]
     keep_temp: bool,
+    #[arg(long, num_args = 0..=1, default_missing_value = "seshat-bench-report.html")]
+    report: Option<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -249,6 +251,7 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
     } else {
         ReportLanguage::English
     };
+    let report_path = args.report;
     let options = AgentBenchOptions {
         agents: args.agents,
         fixtures: args.fixtures.into_iter().map(Into::into).collect(),
@@ -264,6 +267,11 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
     match format {
         AgentBenchFormat::Text => bench::print_report(&report, language),
         AgentBenchFormat::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+    }
+    if let Some(path) = report_path {
+        let html = bench::generate_html_report(&report, language);
+        fs::write(&path, html)?;
+        eprintln!("HTML report: {path}");
     }
     Ok(())
 }
