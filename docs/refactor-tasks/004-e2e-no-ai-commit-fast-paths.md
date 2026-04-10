@@ -1,6 +1,6 @@
 # 004 - Cobrir Fast Paths de Commit Sem IA
 
-Status: todo
+Status: done
 Priority: P0
 Type: test
 Milestone: Git Seguro
