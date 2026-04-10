@@ -102,7 +102,7 @@ Status:
 | Detecta Rust | `ToolingRunner` | changed | Rust novo no port; desejado para binario Rust | `015` |
 | Inclui `commit.no_ai_*` no template | `run_init` | ported | E2E valida presenca no template | `005` |
 | Inclui `ui` no template | `run_init` | ported | E2E valida presenca; contrato documentado em `docs/ui-contract.md` | - |
-| Nao sobrescreve prompt customizado | `run_init` | ported | E2E preserva `seshat-review.md` existente | - |
+| Nao sobrescreve prompt customizado | `run_init` | ported | E2E migra/preserva prompt em `.seshat/review.md` | - |
 
 ## `seshat fix`
 
