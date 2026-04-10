@@ -13,7 +13,7 @@ Use este checklist antes de distribuir o binario Rust como implementacao princip
 
 ## Smoke Local
 
-- [ ] `seshat init --path . --force` cria `.seshat` e `seshat-review.md`.
+- [ ] `seshat init --path . --force` cria `.seshat/config.yaml` e `.seshat/review.md`.
 - [ ] `seshat config --provider codex` grava config global.
 - [ ] Commit sem IA funciona com Markdown.
 - [ ] Commit com provider escolhido gera Conventional Commit valido.
