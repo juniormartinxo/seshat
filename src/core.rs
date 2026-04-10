@@ -8,7 +8,7 @@ use crate::utils::{is_valid_conventional_commit, normalize_commit_subject_case};
 use anyhow::{anyhow, Result};
 use std::env;
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct CommitOptions {
@@ -275,6 +275,7 @@ fn commit_with_ai_with_provider_factory_and_action(
     let mut commit_provider_name = commit_provider.name().to_string();
     let mut commit_model = options.model.clone();
     let mut review_result = None;
+    let false_positive_store_path = false_positive_store_path(&git);
 
     if code_review {
         ui::info(format!(
@@ -305,6 +306,8 @@ fn commit_with_ai_with_provider_factory_and_action(
             )?;
             review::parse_standalone_review(&raw)
         };
+        let result =
+            suppress_known_false_positives(result, &filtered_diff, &false_positive_store_path);
         let formatted_review = review::format_review_for_display(&result, options.verbose);
         ui::display_code_review(&formatted_review);
         let mut skip_issue_confirmation = false;
@@ -327,6 +330,12 @@ fn commit_with_ai_with_provider_factory_and_action(
                     forced_blocking_action.unwrap_or(prompt_blocking_issue_action(&result)?);
                 match action {
                     BlockingIssueAction::Continue => {
+                        record_false_positive_decision(
+                            &false_positive_store_path,
+                            &result,
+                            &filtered_diff,
+                            "user",
+                        );
                         ui::warning("Code review encontrou problema bloqueante, mas continuando por decisão explícita.");
                         skip_issue_confirmation = true;
                     }
@@ -349,6 +358,11 @@ fn commit_with_ai_with_provider_factory_and_action(
                         )
                         .map_err(|error| anyhow!("Falha ao obter JUDGE: {error}"))?;
 
+                        let judge_result = suppress_known_false_positives(
+                            judge_result,
+                            &filtered_diff,
+                            &false_positive_store_path,
+                        );
                         let formatted_review =
                             review::format_review_for_display(&judge_result, options.verbose);
                         ui::display_code_review(&formatted_review);
@@ -357,6 +371,12 @@ fn commit_with_ai_with_provider_factory_and_action(
                                 "JUDGE bloqueou o commit por apontar BUG ou SECURITY."
                             ));
                         }
+                        record_false_positive_decision(
+                            &false_positive_store_path,
+                            &result,
+                            &filtered_diff,
+                            "judge",
+                        );
                         commit_provider = judge_provider;
                         commit_provider_name = judge.provider;
                         commit_model = judge.model;
@@ -391,6 +411,66 @@ fn commit_with_ai_with_provider_factory_and_action(
         return Err(anyhow!("Mensagem gerada inválida: {message}"));
     }
     Ok((message, review_result))
+}
+
+fn false_positive_store_path(git: &GitClient) -> PathBuf {
+    let Ok(path) = git.run_output(["rev-parse", "--git-path", review::FALSE_POSITIVE_STORE_NAME])
+    else {
+        return git.repo_path().join(review::FALSE_POSITIVE_STORE_NAME);
+    };
+    let path = path.trim();
+    if path.is_empty() {
+        return git.repo_path().join(review::FALSE_POSITIVE_STORE_NAME);
+    }
+    let path = PathBuf::from(path);
+    if path.is_absolute() {
+        path
+    } else {
+        git.repo_path().join(path)
+    }
+}
+
+fn suppress_known_false_positives(
+    result: CodeReviewResult,
+    diff: &str,
+    store_path: &Path,
+) -> CodeReviewResult {
+    if !result.has_issues {
+        return result;
+    }
+    let records = match review::load_false_positive_records(store_path) {
+        Ok(records) => records,
+        Err(error) => {
+            ui::warning(format!(
+                "Não foi possível ler falsos positivos conhecidos: {error}"
+            ));
+            return result;
+        }
+    };
+    let (filtered, suppressed) = review::suppress_false_positive_issues(&result, diff, &records);
+    if suppressed > 0 {
+        ui::info(format!(
+            "Falsos positivos conhecidos ignorados: {suppressed}"
+        ));
+    }
+    filtered
+}
+
+fn record_false_positive_decision(
+    store_path: &Path,
+    result: &CodeReviewResult,
+    diff: &str,
+    confirmed_by: &str,
+) {
+    match review::append_false_positive_decisions(store_path, result, diff, confirmed_by) {
+        Ok(0) => {}
+        Ok(count) => ui::info(format!(
+            "Falso positivo registrado: {count} fingerprint(s)."
+        )),
+        Err(error) => ui::warning(format!(
+            "Não foi possível registrar falso positivo: {error}"
+        )),
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -432,7 +512,7 @@ fn prompt_blocking_issue_action(result: &CodeReviewResult) -> Result<BlockingIss
     ui::info("Escolha o que deseja fazer:");
     ui::info("  1. Continuar o commit (falso positivo)");
     ui::info("  2. Parar e não commitar para investigar");
-    ui::info("  3. Enviar para outra IA (JUDGE)");
+    ui::info("  3. Enviar para a IA local (JUDGE) para correção/verificação de falso positivo");
     let choice = ui::prompt("Opção", Some("2"))?;
     Ok(blocking_issue_action_from_choice(&choice))
 }
@@ -720,6 +800,27 @@ mod tests {
     }
 
     #[test]
+    fn judge_config_defaults_codex_to_supported_model() {
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = TempEnv::apply(&[
+            ("JUDGE_PROVIDER".to_string(), Some("codex".to_string())),
+            ("JUDGE_MODEL".to_string(), None),
+            ("JUDGE_API_KEY".to_string(), None),
+        ]);
+
+        let judge = selected_judge_config("openai").unwrap();
+
+        assert_eq!(judge.provider, "codex");
+        assert_eq!(
+            judge.model.as_deref(),
+            Some(crate::config::DEFAULT_CODEX_MODEL)
+        );
+        assert!(judge.api_key.is_none());
+    }
+
+    #[test]
     fn judge_review_uses_separate_provider_model_and_api_key_without_env_leak() {
         let _env_lock = crate::test_env::ENV_LOCK
             .lock()
@@ -849,6 +950,74 @@ code_review:
         assert_eq!(calls[2].provider, "deepseek");
         assert_eq!(calls[2].kind, "commit");
         assert_eq!(calls[2].model.as_deref(), Some("judge-model"));
+        let records = review::load_false_positive_records(false_positive_store_path(
+            &GitClient::new(repo.path()),
+        ))
+        .unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].confirmed_by, "judge");
+    }
+
+    #[test]
+    fn false_positive_continue_records_and_suppresses_future_blocking_issue() {
+        let repo = staged_rust_repo(
+            "\
+project_type: rust
+commit:
+  provider: openai
+  model: main-model
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: true
+",
+        );
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let calls_for_factory = calls.clone();
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            assert_eq!(provider, "openai");
+            Ok(Box::new(FakeProvider {
+                name: "openai",
+                review_response: "- [BUG] src/main.rs:1 false alarm | leave as-is".to_string(),
+                commit_response: "feat: accept false positive".to_string(),
+                calls: calls_for_factory.clone(),
+            }))
+        };
+        let options = CommitOptions {
+            repo_path: repo.path().to_path_buf(),
+            provider: "openai".to_string(),
+            model: Some("main-model".to_string()),
+            verbose: false,
+            skip_confirmation: true,
+            paths: None,
+            check: None,
+            code_review: false,
+            no_review: false,
+            no_check: true,
+            max_diff_size: 10_000,
+            warn_diff_size: 9_000,
+            language: "PT-BR".to_string(),
+        };
+
+        let first = commit_with_ai_with_provider_factory_and_action(
+            &options,
+            &factory,
+            Some(BlockingIssueAction::Continue),
+        )
+        .unwrap();
+        let second = commit_with_ai_with_provider_factory(&options, &factory).unwrap();
+        let records = review::load_false_positive_records(false_positive_store_path(
+            &GitClient::new(repo.path()),
+        ))
+        .unwrap();
+
+        assert_eq!(first.0, "feat: accept false positive");
+        assert_eq!(second.0, "feat: accept false positive");
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].confirmed_by, "user");
+        assert_eq!(records[0].path, "src/main.rs");
+        let calls = calls.lock().unwrap();
+        assert_eq!(calls.iter().filter(|call| call.kind == "commit").count(), 2);
     }
 
     #[test]
