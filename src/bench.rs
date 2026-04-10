@@ -1,4 +1,4 @@
-use crate::config::{default_models, load_config, valid_providers, AppConfig};
+use crate::config::{default_models, load_config, project_config_path, valid_providers, AppConfig};
 use crate::git::GitClient;
 use crate::providers::get_provider;
 use crate::utils::{is_valid_conventional_commit, normalize_commit_subject_case};
@@ -1119,8 +1119,12 @@ fn prepare_repo(
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
+    let config_path = project_config_path(repo_path);
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     fs::write(
-        repo_path.join(".seshat"),
+        config_path,
         format!(
             "project_type: {}\ncommit:\n  provider: {agent}\n  language: {language}\ncode_review:\n  enabled: false\n",
             fixture.project_type()
