@@ -45,7 +45,7 @@ impl GitRepo {
             format!("\n{extra_commit_config}")
         };
         self.write(
-            ".seshat",
+            ".seshat/config.yaml",
             &format!(
                 "project_type: rust\ncommit:\n  provider: ollama\n  model: llama3\n  language: PT-BR{extra_commit_config}\ncode_review:\n  enabled: false\n"
             ),
@@ -267,7 +267,7 @@ fn no_ai_e2e_commit_accepts_explicit_date() {
 fn review_blocking_e2e_stops_on_bug_without_tty() {
     let repo = GitRepo::init();
     repo.write(
-        ".seshat",
+        ".seshat/config.yaml",
         "\
 project_type: rust
 commit:
