@@ -1166,3 +1166,78 @@ fn tooling_e2e_flow_no_check_skips_fake_command() {
     assert!(!log_path.exists(), "flow --no-check should not run tooling");
     assert_eq!(last_subject(repo.path()), "feat: flow skipped check");
 }
+
+#[cfg(unix)]
+#[test]
+fn bench_agents_json_runs_fake_codex() {
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    let codex_log = temp.path().join("fake-codex.log");
+    write_fake_codex(&fake_codex);
+
+    let assert = seshat()
+        .env("HOME", home.path())
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: add calculator fixture")
+        .env("FAKE_CODEX_LOG", &codex_log)
+        .args([
+            "bench",
+            "agents",
+            "--agents",
+            "codex",
+            "--fixtures",
+            "rust",
+            "--iterations",
+            "1",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    let report: Value = serde_json::from_slice(&output.stdout).expect("parse report json");
+    assert_eq!(report["iterations"], 1);
+    assert_eq!(report["agents"][0], "codex");
+    assert_eq!(report["fixtures"][0], "rust");
+    assert_eq!(report["summaries"][0]["success"], 1);
+    assert_eq!(report["summaries"][0]["conventional_valid"], 1);
+    assert_eq!(
+        report["samples"][0]["message"],
+        "feat: add calculator fixture"
+    );
+    assert!(codex_log.exists(), "fake codex should run");
+}
+
+#[cfg(unix)]
+#[test]
+fn bench_agents_pt_br_report_runs_fake_codex() {
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    write_fake_codex(&fake_codex);
+
+    seshat()
+        .env("HOME", home.path())
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: add python fixture")
+        .args([
+            "bench",
+            "agents",
+            "--agents",
+            "codex",
+            "--fixtures",
+            "python",
+            "--iterations",
+            "1",
+            "--pt-br",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Benchmark de Agentes"))
+        .stdout(predicate::str::contains("Conv. valido"))
+        .stdout(predicate::str::contains("Python"))
+        .stdout(predicate::str::contains("codex"))
+        .stdout(predicate::str::contains("ok"));
+}
