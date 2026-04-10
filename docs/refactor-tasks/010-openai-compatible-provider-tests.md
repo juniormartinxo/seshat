@@ -1,6 +1,6 @@
 # 010 - Testar Providers OpenAI-Compatible
 
-Status: todo
+Status: done
 Priority: P1
 Type: test
 Milestone: IA Testavel
