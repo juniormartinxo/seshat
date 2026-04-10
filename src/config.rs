@@ -833,12 +833,11 @@ pub fn mask_api_key(key: Option<&str>, language: &str) -> String {
 mod tests {
     use super::*;
     use std::cell::RefCell;
-    use std::sync::Mutex;
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     fn with_clean_env(test: impl FnOnce(&Path)) {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let _guard = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
         let keys = [
             "HOME",
             "API_KEY",
