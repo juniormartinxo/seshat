@@ -319,8 +319,8 @@ pub(super) fn tool_from_default(
 pub(super) fn apply_overrides(tool: &mut ToolCommand, project_config: &ProjectConfig) {
     if let Some(check) = project_config.checks.get(&tool.check_type) {
         tool.blocking = check.blocking;
-        if check.auto_fix {
-            tool.auto_fix = true;
+        if let Some(auto_fix) = check.auto_fix {
+            tool.auto_fix = auto_fix;
         }
         if let Some(command) = &check.command {
             tool.command = command.to_args();
@@ -358,8 +358,8 @@ fn apply_command_config(tool: &mut ToolCommand, config: &CommandConfig) {
     if let Some(command) = &config.fix_command {
         tool.fix_command = Some(command.to_args());
     }
-    if config.auto_fix {
-        tool.auto_fix = true;
+    if let Some(auto_fix) = config.auto_fix {
+        tool.auto_fix = auto_fix;
     }
 }
 
@@ -504,7 +504,44 @@ mod tests {
                 "skip_children=true".to_string()
             ]
         );
+        assert!(tool.auto_fix);
         assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn rust_check_config_can_disable_default_auto_fix() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        fs::create_dir_all(dir.path().join(".seshat")).unwrap();
+        fs::write(
+            dir.path().join(".seshat/config.yaml"),
+            "checks:\n  lint:\n    auto_fix: false\n",
+        )
+        .unwrap();
+        let runner = ToolingRunner::new(dir.path());
+
+        let config = runner.discover_tools();
+        let tool = &config.tools["lint"];
+
+        assert!(!tool.auto_fix);
+    }
+
+    #[test]
+    fn rust_command_override_can_disable_default_auto_fix() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        fs::create_dir_all(dir.path().join(".seshat")).unwrap();
+        fs::write(
+            dir.path().join(".seshat/config.yaml"),
+            "commands:\n  rustfmt:\n    auto_fix: false\n",
+        )
+        .unwrap();
+        let runner = ToolingRunner::new(dir.path());
+
+        let config = runner.discover_tools();
+        let tool = &config.tools["lint"];
+
+        assert!(!tool.auto_fix);
     }
 
     #[test]
