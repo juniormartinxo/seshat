@@ -243,6 +243,7 @@ pub struct CodeReviewConfig {
     pub enabled: bool,
     #[serde(default)]
     pub blocking: bool,
+    pub max_diff_size: Option<usize>,
     pub prompt: Option<String>,
     pub log_dir: Option<String>,
     pub extensions: Option<Vec<String>>,
@@ -1160,6 +1161,8 @@ commit:
   language: ENG
   max_diff_size: 4000
   no_ai_paths: ["docs/"]
+code_review:
+  max_diff_size: 16000
 checks:
   lint:
     enabled: true
@@ -1171,6 +1174,7 @@ checks:
         assert_eq!(config.project_type.as_deref(), Some("typescript"));
         assert_eq!(config.commit.language.as_deref(), Some("ENG"));
         assert_eq!(config.commit.max_diff_size, Some(4000));
+        assert_eq!(config.code_review.max_diff_size, Some(16000));
         assert_eq!(config.commit.no_ai_paths, vec!["docs/"]);
         assert!(!config.checks["lint"].blocking);
     }
