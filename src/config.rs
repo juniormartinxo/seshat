@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const API_KEYLESS_PROVIDERS: &[&str] = &["claude-cli", "codex", "ollama"];
+pub const DEFAULT_CODEX_MODEL: &str = "gpt-5.4";
 const APP_NAME: &str = "seshat";
 const SECRET_KEYS: &[&str] = &["API_KEY", "JUDGE_API_KEY"];
 
@@ -39,6 +40,7 @@ impl SecretStore for SystemSecretStore {
 
 pub fn default_models() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
+        ("codex", DEFAULT_CODEX_MODEL),
         ("deepseek", "deepseek-chat"),
         ("claude", "claude-3-opus-20240229"),
         ("openai", "gpt-4-turbo-preview"),
