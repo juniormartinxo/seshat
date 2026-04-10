@@ -1,6 +1,6 @@
 # 001 - Criar Matriz de Paridade Python x Rust
 
-Status: todo
+Status: done
 Priority: P0
 Type: docs
 Milestone: Git Seguro
