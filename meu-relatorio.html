@@ -47,7 +47,7 @@ footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
 <header>
 <h1>Agent Benchmark</h1>
 <div class="meta">
-<span><strong>Agents:</strong> codex</span>
+<span><strong>Agents:</strong> claude, codex, deepseek</span>
 <span><strong>Fixtures:</strong> rust, python, typescript</span>
 <span><strong>Iterations:</strong> 3</span>
 </div>
@@ -70,7 +70,9 @@ footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
 <table>
 <thead><tr><th>Agent</th><th>Success</th><th>Conv. Valid</th><th>Avg (ms)</th><th>P95 (ms)</th><th>Min (ms)</th><th>Max (ms)</th><th>Wins</th><th>Result</th></tr></thead>
 <tbody>
-<tr><td>codex</td><td class="text-right">9/9</td><td class="text-right">9/9</td><td class="text-right text-mono">10820.1</td><td class="text-right text-mono">12830.7</td><td class="text-right text-mono">8970.9</td><td class="text-right text-mono">12830.7</td><td class="text-right">3</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>deepseek</td><td class="text-right">9/9</td><td class="text-right">9/9</td><td class="text-right text-mono">2024.8</td><td class="text-right text-mono">2140.1</td><td class="text-right text-mono">1899.1</td><td class="text-right text-mono">2140.1</td><td class="text-right">3</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>codex</td><td class="text-right">9/9</td><td class="text-right">9/9</td><td class="text-right text-mono">13205.9</td><td class="text-right text-mono">23811.6</td><td class="text-right text-mono">9543.5</td><td class="text-right text-mono">23811.6</td><td class="text-right">0</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>claude</td><td class="text-right">0/9</td><td class="text-right">0/9</td><td class="text-right text-mono">1494.8</td><td class="text-right text-mono">1653.2</td><td class="text-right text-mono">1393.0</td><td class="text-right text-mono">1653.2</td><td class="text-right">0</td><td><span class="badge badge-fail">failed</span></td></tr>
 </tbody>
 </table>
 </div></div>
@@ -82,9 +84,15 @@ footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
 <table>
 <thead><tr><th>Fixture</th><th>Agent</th><th>Success</th><th>Conv. Valid</th><th>Avg (ms)</th><th>P95 (ms)</th><th>Min (ms)</th><th>Max (ms)</th><th>Result</th></tr></thead>
 <tbody>
-<tr><td>Python</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">12667.1</td><td class="text-right text-mono">12830.7</td><td class="text-right text-mono">12488.4</td><td class="text-right text-mono">12830.7</td><td><span class="badge badge-ok">ok</span></td></tr>
-<tr><td>Rust</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">10216.5</td><td class="text-right text-mono">11245.1</td><td class="text-right text-mono">9276.7</td><td class="text-right text-mono">11245.1</td><td><span class="badge badge-ok">ok</span></td></tr>
-<tr><td>TypeScript</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">9576.6</td><td class="text-right text-mono">9974.9</td><td class="text-right text-mono">8970.9</td><td class="text-right text-mono">9974.9</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>Python</td><td>claude</td><td class="text-right">0/3</td><td class="text-right">0/3</td><td class="text-right text-mono">1509.7</td><td class="text-right text-mono">1543.7</td><td class="text-right text-mono">1477.0</td><td class="text-right text-mono">1543.7</td><td><span class="badge badge-fail">failed</span></td></tr>
+<tr><td>Python</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">11791.8</td><td class="text-right text-mono">15642.0</td><td class="text-right text-mono">9543.5</td><td class="text-right text-mono">15642.0</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>Python</td><td>deepseek</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">2054.1</td><td class="text-right text-mono">2121.8</td><td class="text-right text-mono">1969.1</td><td class="text-right text-mono">2121.8</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>Rust</td><td>claude</td><td class="text-right">0/3</td><td class="text-right">0/3</td><td class="text-right text-mono">1430.4</td><td class="text-right text-mono">1458.0</td><td class="text-right text-mono">1393.0</td><td class="text-right text-mono">1458.0</td><td><span class="badge badge-fail">failed</span></td></tr>
+<tr><td>Rust</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">15717.8</td><td class="text-right text-mono">23811.6</td><td class="text-right text-mono">11537.7</td><td class="text-right text-mono">23811.6</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>Rust</td><td>deepseek</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">2019.7</td><td class="text-right text-mono">2140.1</td><td class="text-right text-mono">1899.1</td><td class="text-right text-mono">2140.1</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>TypeScript</td><td>claude</td><td class="text-right">0/3</td><td class="text-right">0/3</td><td class="text-right text-mono">1544.1</td><td class="text-right text-mono">1653.2</td><td class="text-right text-mono">1434.2</td><td class="text-right text-mono">1653.2</td><td><span class="badge badge-fail">failed</span></td></tr>
+<tr><td>TypeScript</td><td>codex</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">12108.3</td><td class="text-right text-mono">13943.8</td><td class="text-right text-mono">10832.6</td><td class="text-right text-mono">13943.8</td><td><span class="badge badge-ok">ok</span></td></tr>
+<tr><td>TypeScript</td><td>deepseek</td><td class="text-right">3/3</td><td class="text-right">3/3</td><td class="text-right text-mono">2000.7</td><td class="text-right text-mono">2083.9</td><td class="text-right text-mono">1910.2</td><td class="text-right text-mono">2083.9</td><td><span class="badge badge-ok">ok</span></td></tr>
 </tbody>
 </table>
 </div></div>
@@ -97,31 +105,53 @@ footer{text-align:center;color:#94a3b8;padding:2rem 0 1rem;font-size:.8125rem}
 <table>
 <thead><tr><th>Fixture</th><th>Agent</th><th>#</th><th>Duration (ms)</th><th>Success</th><th>Conv.</th><th>Message</th></tr></thead>
 <tbody>
-<tr><td>Rust</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">11245.1</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
-<tr><td>Rust</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">10127.7</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
-<tr><td>Rust</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">9276.7</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar cálculo de total</td></tr>
-<tr><td>Python</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">12488.4</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
-<tr><td>Python</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">12830.7</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculadora): adicionar cálculo de total</td></tr>
-<tr><td>Python</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">12682.2</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): calcule total de itens</td></tr>
-<tr><td>TypeScript</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">9784.0</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
-<tr><td>TypeScript</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">8970.9</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
-<tr><td>TypeScript</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">9974.9</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
+<tr><td>Rust</td><td>claude</td><td class="text-right">1</td><td class="text-right text-mono">1458.0</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Rust</td><td>claude</td><td class="text-right">2</td><td class="text-right text-mono">1440.3</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Rust</td><td>claude</td><td class="text-right">3</td><td class="text-right text-mono">1393.0</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Rust</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">11803.9</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
+<tr><td>Rust</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">11537.7</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
+<tr><td>Rust</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">23811.6</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
+<tr><td>Rust</td><td>deepseek</td><td class="text-right">1</td><td class="text-right text-mono">1899.1</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar função para calcular soma de itens</td></tr>
+<tr><td>Rust</td><td>deepseek</td><td class="text-right">2</td><td class="text-right text-mono">2019.8</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar função para somar itens</td></tr>
+<tr><td>Rust</td><td>deepseek</td><td class="text-right">3</td><td class="text-right text-mono">2140.1</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar função para somar itens</td></tr>
+<tr><td>Python</td><td>claude</td><td class="text-right">1</td><td class="text-right text-mono">1477.0</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Python</td><td>claude</td><td class="text-right">2</td><td class="text-right text-mono">1543.7</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Python</td><td>claude</td><td class="text-right">3</td><td class="text-right text-mono">1508.4</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>Python</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">10189.8</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
+<tr><td>Python</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">15642.0</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
+<tr><td>Python</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">9543.5</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar cálculo de total</td></tr>
+<tr><td>Python</td><td>deepseek</td><td class="text-right">1</td><td class="text-right text-mono">2121.8</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar funções de cálculo e teste</td></tr>
+<tr><td>Python</td><td>deepseek</td><td class="text-right">2</td><td class="text-right text-mono">1969.1</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar funções de cálculo e teste</td></tr>
+<tr><td>Python</td><td>deepseek</td><td class="text-right">3</td><td class="text-right text-mono">2071.4</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat: adiciona módulo de calculadora básica</td></tr>
+<tr><td>TypeScript</td><td>claude</td><td class="text-right">1</td><td class="text-right text-mono">1434.2</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>TypeScript</td><td>claude</td><td class="text-right">2</td><td class="text-right text-mono">1653.2</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>TypeScript</td><td>claude</td><td class="text-right">3</td><td class="text-right text-mono">1545.0</td><td><span class="badge badge-fail">✗</span></td><td><span class="badge badge-fail">✗</span></td><td class="text-mono">HTTP POST https://api.anthropic.com/v1/messages falhou com status 401 Unauthoriz…</td></tr>
+<tr><td>TypeScript</td><td>codex</td><td class="text-right">1</td><td class="text-right text-mono">10832.6</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
+<tr><td>TypeScript</td><td>codex</td><td class="text-right">2</td><td class="text-right text-mono">11548.5</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona cálculo de total</td></tr>
+<tr><td>TypeScript</td><td>codex</td><td class="text-right">3</td><td class="text-right text-mono">13943.8</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicione cálculo de total</td></tr>
+<tr><td>TypeScript</td><td>deepseek</td><td class="text-right">1</td><td class="text-right text-mono">2008.0</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar função calculateTotal</td></tr>
+<tr><td>TypeScript</td><td>deepseek</td><td class="text-right">2</td><td class="text-right text-mono">2083.9</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adiciona função para calcular total de itens</td></tr>
+<tr><td>TypeScript</td><td>deepseek</td><td class="text-right">3</td><td class="text-right text-mono">1910.2</td><td><span class="badge badge-ok">✓</span></td><td><span class="badge badge-ok">✓</span></td><td class="text-mono">feat(calculator): adicionar função de cálculo de total</td></tr>
 </tbody>
 </table>
 </div></div>
 </details>
 </section>
 
-<footer>2026-04-10 11:37:17 &mdash; Seshat v0.1.0</footer>
+<footer>2026-04-10 12:09:55 &mdash; Seshat v0.1.0</footer>
 </div>
 
 <script>
 const F=['Rust','Python','TypeScript'];
 const P=[
-{label:'codex',data:[10216.5,12667.1,9576.6],backgroundColor:'rgba(79,70,229,0.7)',borderColor:'#4f46e5',borderWidth:1},
+{label:'claude',data:[1430.4,1509.7,1544.1],backgroundColor:'rgba(79,70,229,0.7)',borderColor:'#4f46e5',borderWidth:1},
+{label:'codex',data:[15717.8,11791.8,12108.3],backgroundColor:'rgba(5,150,105,0.7)',borderColor:'#059669',borderWidth:1},
+{label:'deepseek',data:[2019.7,2054.1,2000.7],backgroundColor:'rgba(217,119,6,0.7)',borderColor:'#d97706',borderWidth:1},
 ];
 const Q=[
-{label:'codex',data:[100.0,100.0,100.0],backgroundColor:'rgba(79,70,229,0.7)',borderColor:'#4f46e5',borderWidth:1},
+{label:'claude',data:[0.0,0.0,0.0],backgroundColor:'rgba(79,70,229,0.7)',borderColor:'#4f46e5',borderWidth:1},
+{label:'codex',data:[100.0,100.0,100.0],backgroundColor:'rgba(5,150,105,0.7)',borderColor:'#059669',borderWidth:1},
+{label:'deepseek',data:[100.0,100.0,100.0],backgroundColor:'rgba(217,119,6,0.7)',borderColor:'#d97706',borderWidth:1},
 ];
 new Chart(document.getElementById('perfChart'),{type:'bar',data:{labels:F,datasets:P},options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,title:{display:true,text:'ms'}}}}});
 new Chart(document.getElementById('qualityChart'),{type:'bar',data:{labels:F,datasets:Q},options:{responsive:true,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true,max:100,title:{display:true,text:'%'}}}}});
