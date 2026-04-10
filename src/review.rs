@@ -458,6 +458,141 @@ mod tests {
     }
 
     #[test]
+    fn filters_review_diff_excludes_standard_non_review_files() {
+        let diff = concat!(
+            "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/Dockerfile.api b/Dockerfile.api\n--- a/Dockerfile.api\n+++ b/Dockerfile.api\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/docker-compose.dev.yml b/docker-compose.dev.yml\n--- a/docker-compose.dev.yml\n+++ b/docker-compose.dev.yml\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml\n--- a/pnpm-lock.yaml\n+++ b/pnpm-lock.yaml\n@@ -1 +1 @@\n-old\n+new\n"
+        );
+
+        let result = filter_diff_by_extensions(diff, Some(&["ts".into(), "yaml".into()]), None);
+
+        assert!(result.contains("src/app.ts"));
+        assert!(!result.contains("Dockerfile.api"));
+        assert!(!result.contains("docker-compose.dev.yml"));
+        assert!(!result.contains("pnpm-lock.yaml"));
+    }
+
+    #[test]
+    fn filters_review_diff_uses_project_default_extensions() {
+        let diff = concat!(
+            "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/src/app.ts b/src/app.ts\n--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/main.py b/main.py\n--- a/main.py\n+++ b/main.py\n@@ -1 +1 @@\n-old\n+new\n"
+        );
+
+        let rust = filter_diff_by_extensions(diff, None, Some("rust"));
+        let typescript = filter_diff_by_extensions(diff, None, Some("typescript"));
+        let python = filter_diff_by_extensions(diff, None, Some("python"));
+        let generic = filter_diff_by_extensions(diff, None, None);
+
+        assert!(rust.contains("src/lib.rs"));
+        assert!(!rust.contains("src/app.ts"));
+        assert!(!rust.contains("main.py"));
+        assert!(typescript.contains("src/app.ts"));
+        assert!(!typescript.contains("src/lib.rs"));
+        assert!(!typescript.contains("main.py"));
+        assert!(python.contains("main.py"));
+        assert!(!python.contains("src/lib.rs"));
+        assert!(!python.contains("src/app.ts"));
+        assert!(generic.contains("src/lib.rs"));
+        assert!(generic.contains("src/app.ts"));
+        assert!(generic.contains("main.py"));
+    }
+
+    #[test]
+    fn filters_review_diff_handles_paths_with_spaces() {
+        let diff = concat!(
+            "diff --git a/src/my file.ts b/src/my file.ts\n--- a/src/my file.ts\n+++ b/src/my file.ts\n@@ -1 +1 @@\n-old\n+new\n",
+            "diff --git a/docs/my file.md b/docs/my file.md\n--- a/docs/my file.md\n+++ b/docs/my file.md\n@@ -1 +1 @@\n-old\n+new\n"
+        );
+
+        let result = filter_diff_by_extensions(diff, Some(&[".ts".into()]), None);
+
+        assert!(result.contains("src/my file.ts"));
+        assert!(!result.contains("docs/my file.md"));
+    }
+
+    #[test]
+    fn save_review_to_log_groups_by_safe_file_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = CodeReviewResult {
+            has_issues: true,
+            summary: "Found 3 issue(s)".to_string(),
+            issues: vec![
+                CodeIssue::new(
+                    "bug",
+                    "src/app.rs:10 panic on empty input",
+                    "return Result instead",
+                    "error",
+                ),
+                CodeIssue::new(
+                    "security",
+                    "`src/My Folder/file name.py:7` command injection",
+                    "escape shell arguments",
+                    "error",
+                ),
+                CodeIssue::new(
+                    "code_smell",
+                    "Missing file reference",
+                    "add context",
+                    "warning",
+                ),
+            ],
+        };
+
+        let created = save_review_to_log(&result, dir.path(), "fake-provider").unwrap();
+
+        assert_eq!(created.len(), 3);
+        let file_names = created
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert!(
+            file_names
+                .iter()
+                .any(|name| name.starts_with("src-app.rs_") && name.ends_with(".log")),
+            "{file_names:?}"
+        );
+        assert!(
+            file_names
+                .iter()
+                .any(|name| name.starts_with("src-My Folder-file name.py_")
+                    && name.ends_with(".log")),
+            "{file_names:?}"
+        );
+        assert!(
+            file_names
+                .iter()
+                .any(|name| name.starts_with("unknown_") && name.ends_with(".log")),
+            "{file_names:?}"
+        );
+
+        let combined = created
+            .iter()
+            .map(|path| fs::read_to_string(path).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(combined.contains("Nome do arquivo: src/app.rs"));
+        assert!(combined.contains("IA revisora: fake-provider"));
+        assert!(combined.contains("Descrição do apontamento:"));
+        assert!(combined.contains("- [BUG] src/app.rs:10 panic on empty input"));
+        assert!(combined.contains("Sugestão: return Result instead"));
+        assert!(combined.contains("Nome do arquivo: unknown"));
+    }
+
+    #[test]
+    fn save_review_to_log_skips_clean_results() {
+        let dir = tempfile::tempdir().unwrap();
+
+        let created = save_review_to_log(&CodeReviewResult::clean(), dir.path(), "fake").unwrap();
+
+        assert!(created.is_empty());
+        assert!(!dir.path().exists() || fs::read_dir(dir.path()).unwrap().next().is_none());
+    }
+
+    #[test]
     fn extracts_paths_with_spaces_and_windows() {
         assert_eq!(
             extract_issue_filename("src/My Folder/file name.py:12 Something"),
