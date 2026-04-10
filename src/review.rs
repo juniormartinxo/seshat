@@ -1,11 +1,14 @@
 use crate::git;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::Local;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::fs;
+use std::collections::{BTreeMap, HashSet};
+use std::fs::{self, OpenOptions};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
+
+pub const FALSE_POSITIVE_STORE_NAME: &str = "seshat-false-positives.jsonl";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeIssue {
@@ -61,6 +64,16 @@ impl CodeReviewResult {
             .iter()
             .any(|issue| severity_rank(&issue.severity) >= threshold)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FalsePositiveRecord {
+    pub fingerprint: String,
+    pub path: String,
+    pub issue_type: String,
+    pub decision: String,
+    pub confirmed_by: String,
+    pub created_at: String,
 }
 
 fn severity_rank(value: &str) -> u8 {
@@ -430,6 +443,187 @@ fn extract_issue_filename(description: &str) -> String {
     "unknown".to_string()
 }
 
+pub fn load_false_positive_records(path: impl AsRef<Path>) -> Result<Vec<FalsePositiveRecord>> {
+    let path = path.as_ref();
+    let Ok(content) = fs::read_to_string(path) else {
+        return Ok(Vec::new());
+    };
+    let mut records = Vec::new();
+    for (index, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let record = serde_json::from_str::<FalsePositiveRecord>(line).with_context(|| {
+            format!(
+                "registro de falso positivo invalido em {}:{}",
+                path.display(),
+                index + 1
+            )
+        })?;
+        records.push(record);
+    }
+    Ok(records)
+}
+
+pub fn suppress_false_positive_issues(
+    result: &CodeReviewResult,
+    diff: &str,
+    records: &[FalsePositiveRecord],
+) -> (CodeReviewResult, usize) {
+    if !result.has_issues || records.is_empty() {
+        return (result.clone(), 0);
+    }
+
+    let fingerprints = records
+        .iter()
+        .map(|record| record.fingerprint.as_str())
+        .collect::<HashSet<_>>();
+    let mut suppressed = 0;
+    let issues = result
+        .issues
+        .iter()
+        .filter(|issue| {
+            let known = fingerprints.contains(issue_fingerprint(issue, diff).as_str());
+            if known {
+                suppressed += 1;
+            }
+            !known
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    (review_result_from_issues(issues), suppressed)
+}
+
+pub fn append_false_positive_decisions(
+    path: impl AsRef<Path>,
+    result: &CodeReviewResult,
+    diff: &str,
+    confirmed_by: &str,
+) -> Result<usize> {
+    if !result.has_issues {
+        return Ok(0);
+    }
+
+    let path = path.as_ref();
+    let existing = load_false_positive_records(path)?;
+    let mut seen = existing
+        .iter()
+        .map(|record| record.fingerprint.clone())
+        .collect::<HashSet<_>>();
+    let records = result
+        .issues
+        .iter()
+        .filter(|issue| is_blocking_issue(issue))
+        .filter_map(|issue| {
+            let record = false_positive_record(issue, diff, confirmed_by);
+            if seen.insert(record.fingerprint.clone()) {
+                Some(record)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if records.is_empty() {
+        return Ok(0);
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("falha ao abrir {}", path.display()))?;
+    for record in &records {
+        serde_json::to_writer(&mut file, record)?;
+        file.write_all(b"\n")?;
+    }
+    Ok(records.len())
+}
+
+pub fn is_blocking_issue(issue: &CodeIssue) -> bool {
+    matches!(issue.issue_type.as_str(), "bug" | "security")
+}
+
+fn false_positive_record(issue: &CodeIssue, diff: &str, confirmed_by: &str) -> FalsePositiveRecord {
+    FalsePositiveRecord {
+        fingerprint: issue_fingerprint(issue, diff),
+        path: extract_issue_filename(&issue.description),
+        issue_type: issue.issue_type.clone(),
+        decision: "false_positive".to_string(),
+        confirmed_by: confirmed_by.to_string(),
+        created_at: Local::now().format("%Y-%m-%d").to_string(),
+    }
+}
+
+fn issue_fingerprint(issue: &CodeIssue, diff: &str) -> String {
+    let path = extract_issue_filename(&issue.description);
+    let code_context = diff_section_for_path(diff, &path).unwrap_or(diff);
+    let input = format!(
+        "{}\0{}\0{}\0{}\0{:016x}",
+        normalize_fingerprint_text(&issue.issue_type),
+        normalize_fingerprint_text(&path),
+        normalize_fingerprint_text(&issue.description),
+        normalize_fingerprint_text(&issue.suggestion),
+        stable_hash64(code_context.as_bytes())
+    );
+    format!("fnv1a64:{:016x}", stable_hash64(input.as_bytes()))
+}
+
+fn review_result_from_issues(issues: Vec<CodeIssue>) -> CodeReviewResult {
+    if issues.is_empty() {
+        CodeReviewResult::clean()
+    } else {
+        CodeReviewResult {
+            has_issues: true,
+            summary: format!("Found {} issue(s)", issues.len()),
+            issues,
+        }
+    }
+}
+
+fn normalize_fingerprint_text(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn diff_section_for_path<'a>(diff: &'a str, path: &str) -> Option<&'a str> {
+    if path == "unknown" || path.is_empty() {
+        return None;
+    }
+
+    let mut sections = diff
+        .match_indices("\ndiff --git ")
+        .map(|(index, _)| index + 1);
+    let mut starts = vec![0];
+    starts.extend(&mut sections);
+    starts.push(diff.len());
+
+    starts.windows(2).find_map(|window| {
+        let section = &diff[window[0]..window[1]];
+        let old_path = format!("--- a/{path}");
+        let new_path = format!("+++ b/{path}");
+        let header = format!("diff --git a/{path} b/{path}");
+        if section.contains(&header) || section.contains(&old_path) || section.contains(&new_path) {
+            Some(section)
+        } else {
+            None
+        }
+    })
+}
+
+fn stable_hash64(input: &[u8]) -> u64 {
+    let mut hash = 0xcbf29ce484222325u64;
+    for byte in input {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    hash
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -590,6 +784,38 @@ mod tests {
 
         assert!(created.is_empty());
         assert!(!dir.path().exists() || fs::read_dir(dir.path()).unwrap().next().is_none());
+    }
+
+    #[test]
+    fn false_positive_records_are_small_and_suppress_matching_issue() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FALSE_POSITIVE_STORE_NAME);
+        let diff = "diff --git a/src/app.rs b/src/app.rs\n--- a/src/app.rs\n+++ b/src/app.rs\n@@ -1 +1 @@\n-old\n+new\n";
+        let result = CodeReviewResult {
+            has_issues: true,
+            issues: vec![
+                CodeIssue::new("bug", "src/app.rs:1 false alarm", "leave as-is", "error"),
+                CodeIssue::new("security", "src/auth.rs:2 real issue", "fix it", "error"),
+            ],
+            summary: "Found 2 issue(s)".to_string(),
+        };
+        let first_only = CodeReviewResult {
+            has_issues: true,
+            issues: vec![result.issues[0].clone()],
+            summary: "Found 1 issue(s)".to_string(),
+        };
+
+        let written = append_false_positive_decisions(&path, &first_only, diff, "user").unwrap();
+        let records = load_false_positive_records(&path).unwrap();
+        let (filtered, suppressed) = suppress_false_positive_issues(&result, diff, &records);
+
+        assert_eq!(written, 1);
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].path, "src/app.rs");
+        assert!(fs::read_to_string(&path).unwrap().len() < 240);
+        assert_eq!(suppressed, 1);
+        assert_eq!(filtered.issues.len(), 1);
+        assert_eq!(filtered.issues[0].description, "src/auth.rs:2 real issue");
     }
 
     #[test]
