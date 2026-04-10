@@ -173,7 +173,7 @@ pub struct CheckConfig {
     #[serde(default = "default_true")]
     pub blocking: bool,
     #[serde(default)]
-    pub auto_fix: bool,
+    pub auto_fix: Option<bool>,
     pub command: Option<CommandValue>,
     pub extensions: Option<Vec<String>>,
     pub pass_files: Option<bool>,
@@ -207,7 +207,7 @@ pub struct CommandConfig {
     pub pass_files: Option<bool>,
     pub fix_command: Option<CommandValue>,
     #[serde(default)]
-    pub auto_fix: bool,
+    pub auto_fix: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
