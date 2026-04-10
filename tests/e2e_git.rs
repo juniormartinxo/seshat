@@ -1,4 +1,5 @@
 use assert_cmd::Command as AssertCommand;
+use predicates::prelude::*;
 use std::fs;
 use std::path::Path;
 use std::process::Command as ProcessCommand;
@@ -120,6 +121,33 @@ impl GitRepo {
     }
 }
 
+#[cfg(unix)]
+fn write_fake_codex(bin_path: &Path) {
+    let script = r#"#!/bin/sh
+out=""
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-o" ]; then
+    out="$arg"
+    break
+  fi
+  previous="$arg"
+done
+if [ -n "$out" ]; then
+  printf '%s' "$FAKE_CODEX_RESPONSE" > "$out"
+else
+  printf '%s' "$FAKE_CODEX_RESPONSE"
+fi
+"#;
+    fs::write(bin_path, script).expect("write fake codex");
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(bin_path)
+        .expect("fake codex metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(bin_path, permissions).expect("chmod fake codex");
+}
+
 #[test]
 fn e2e_commit_yes_commits_markdown_without_ai() {
     let repo = GitRepo::init();
@@ -232,6 +260,43 @@ fn no_ai_e2e_commit_accepts_explicit_date() {
 
     assert_eq!(repo.last_subject(), "docs: update README.md");
     assert_eq!(repo.last_date(), "2020-01-02");
+}
+
+#[cfg(unix)]
+#[test]
+fn review_blocking_e2e_stops_on_bug_without_tty() {
+    let repo = GitRepo::init();
+    repo.write(
+        ".seshat",
+        "\
+project_type: rust
+commit:
+  provider: codex
+  model: fake-model
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: true
+",
+    );
+    repo.seed_commit("README.md", "seed\n");
+    repo.write("src/main.rs", "fn main() { println!(\"hello\"); }\n");
+    repo.stage("src/main.rs");
+    let fake_dir = tempfile::tempdir().expect("create fake bin dir");
+    let fake_codex = fake_dir.path().join("codex");
+    write_fake_codex(&fake_codex);
+
+    repo.seshat()
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "- [BUG] src/main.rs:1 panic | fix")
+        .args(["commit", "--yes"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Commit cancelado para investigar problema apontado pela IA.",
+        ));
+
+    assert_eq!(repo.last_subject(), "chore: seed");
 }
 
 #[test]
