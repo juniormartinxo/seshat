@@ -9,6 +9,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 pub const FALSE_POSITIVE_STORE_NAME: &str = "false-positives.jsonl";
+pub const DEFAULT_CODE_REVIEW_MAX_DIFF_SIZE: usize = 16_000;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeIssue {
@@ -74,6 +75,19 @@ pub struct FalsePositiveRecord {
     pub decision: String,
     pub confirmed_by: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreparedReviewDiff {
+    pub content: String,
+    pub original_chars: usize,
+    pub final_chars: usize,
+}
+
+impl PreparedReviewDiff {
+    pub fn was_compacted(&self) -> bool {
+        self.final_chars < self.original_chars
+    }
 }
 
 fn severity_rank(value: &str) -> u8 {
@@ -217,6 +231,119 @@ pub fn parse_code_review_response(response: &str) -> (String, CodeReviewResult) 
 
 pub fn parse_standalone_review(response: &str) -> CodeReviewResult {
     parse_review_section(response)
+}
+
+pub fn prepare_diff_for_review(diff: &str, max_chars: usize) -> PreparedReviewDiff {
+    let original_chars = diff.chars().count();
+    if original_chars <= max_chars {
+        return PreparedReviewDiff {
+            content: diff.to_string(),
+            original_chars,
+            final_chars: original_chars,
+        };
+    }
+
+    let stripped = strip_review_diff_context(diff);
+    let stripped_chars = stripped.chars().count();
+    if stripped_chars <= max_chars {
+        return PreparedReviewDiff {
+            content: stripped,
+            original_chars,
+            final_chars: stripped_chars,
+        };
+    }
+
+    let truncated = truncate_review_diff(&stripped, max_chars);
+    let final_chars = truncated.chars().count();
+    PreparedReviewDiff {
+        content: truncated,
+        original_chars,
+        final_chars,
+    }
+}
+
+fn strip_review_diff_context(diff: &str) -> String {
+    let mut lines = Vec::new();
+    let mut omitted_context = 0usize;
+    for line in diff.lines() {
+        let keep = line.starts_with("diff --git ")
+            || line.starts_with("index ")
+            || line.starts_with("--- ")
+            || line.starts_with("+++ ")
+            || line.starts_with("@@ ")
+            || (line.starts_with('+') && !line.starts_with("+++ "))
+            || (line.starts_with('-') && !line.starts_with("--- "))
+            || line.starts_with("\\ No newline at end of file");
+        if keep {
+            if omitted_context > 0 {
+                lines.push(format!(
+                    "... {omitted_context} unchanged context line(s) omitted ..."
+                ));
+                omitted_context = 0;
+            }
+            lines.push(line.to_string());
+        } else if line.starts_with(' ') {
+            omitted_context += 1;
+        } else if line.is_empty() {
+            if omitted_context > 0 {
+                lines.push(format!(
+                    "... {omitted_context} unchanged context line(s) omitted ..."
+                ));
+                omitted_context = 0;
+            }
+            lines.push(String::new());
+        } else {
+            if omitted_context > 0 {
+                lines.push(format!(
+                    "... {omitted_context} unchanged context line(s) omitted ..."
+                ));
+                omitted_context = 0;
+            }
+            lines.push(line.to_string());
+        }
+    }
+    if omitted_context > 0 {
+        lines.push(format!(
+            "... {omitted_context} unchanged context line(s) omitted ..."
+        ));
+    }
+    lines.join("\n")
+}
+
+fn truncate_review_diff(diff: &str, max_chars: usize) -> String {
+    if diff.chars().count() <= max_chars {
+        return diff.to_string();
+    }
+
+    let suffix = "... remaining diff omitted by Seshat to fit code review size limit ...";
+    let suffix_chars = suffix.chars().count();
+    let reserved = suffix_chars + usize::from(max_chars > suffix_chars);
+    let mut lines = Vec::new();
+    let mut used = 0usize;
+
+    for line in diff.lines() {
+        let line_chars = line.chars().count();
+        let extra = usize::from(!lines.is_empty());
+        if used + extra + line_chars + reserved > max_chars {
+            break;
+        }
+        if extra > 0 {
+            used += 1;
+        }
+        used += line_chars;
+        lines.push(line.to_string());
+    }
+
+    if lines.is_empty() {
+        let prefix_budget = max_chars.saturating_sub(reserved);
+        let prefix = diff.chars().take(prefix_budget).collect::<String>();
+        if prefix.is_empty() {
+            return suffix.to_string();
+        }
+        return format!("{prefix}\n{suffix}");
+    }
+
+    format!("{}\n{suffix}", lines.join("\n"))
 }
 
 fn parse_review_section(review: &str) -> CodeReviewResult {
@@ -753,6 +880,65 @@ mod tests {
 
         assert!(text.contains("[CODE SMELL] src/lib.rs:12"));
         assert!(!text.contains("[CODE_SMELL]"));
+    }
+
+    #[test]
+    fn prepare_diff_for_review_keeps_small_diff_intact() {
+        let diff = "diff --git a/src/app.rs b/src/app.rs\n@@ -1 +1 @@\n-old\n+new\n";
+
+        let prepared = prepare_diff_for_review(diff, 1_000);
+
+        assert_eq!(prepared.content, diff);
+        assert!(!prepared.was_compacted());
+    }
+
+    #[test]
+    fn strip_review_diff_context_omits_unchanged_context_lines() {
+        let diff = concat!(
+            "diff --git a/src/app.rs b/src/app.rs\n",
+            "--- a/src/app.rs\n",
+            "+++ b/src/app.rs\n",
+            "@@ -1,11 +1,11 @@\n",
+            " context 0\n",
+            " context 1\n",
+            " context 2\n",
+            " context 3\n",
+            " context 4\n",
+            " context a\n",
+            " context b\n",
+            "-old\n",
+            "+new\n",
+            " context c\n",
+            " context d\n",
+            " context 5\n",
+            " context 6\n",
+            " context 7\n",
+            " context 8\n",
+            " context 9\n"
+        );
+
+        let compacted = strip_review_diff_context(diff);
+
+        assert!(compacted.contains("@@ -1,11 +1,11 @@"));
+        assert!(compacted.contains("-old"));
+        assert!(compacted.contains("+new"));
+        assert!(compacted.contains("unchanged context line(s) omitted"));
+    }
+
+    #[test]
+    fn prepare_diff_for_review_truncates_large_diff_with_notice() {
+        let diff = (0..200)
+            .map(|index| format!("+line {index}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let prepared = prepare_diff_for_review(&diff, 120);
+
+        assert!(prepared.was_compacted());
+        assert!(prepared.final_chars <= 120);
+        assert!(prepared
+            .content
+            .contains("remaining diff omitted by Seshat"));
     }
 
     #[test]
