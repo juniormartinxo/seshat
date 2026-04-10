@@ -1,3 +1,4 @@
+use crate::ui;
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -8,6 +9,33 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub const API_KEYLESS_PROVIDERS: &[&str] = &["claude-cli", "codex", "ollama"];
+const APP_NAME: &str = "seshat";
+const SECRET_KEYS: &[&str] = &["API_KEY", "JUDGE_API_KEY"];
+
+pub trait SecretStore {
+    fn get_secret(&self, key: &str) -> Result<Option<String>>;
+    fn set_secret(&self, key: &str, value: &str) -> Result<()>;
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemSecretStore;
+
+impl SecretStore for SystemSecretStore {
+    fn get_secret(&self, key: &str) -> Result<Option<String>> {
+        let entry = keyring::Entry::new(APP_NAME, key)?;
+        match entry.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn set_secret(&self, key: &str, value: &str) -> Result<()> {
+        let entry = keyring::Entry::new(APP_NAME, key)?;
+        entry.set_password(value)?;
+        Ok(())
+    }
+}
 
 pub fn default_models() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
@@ -26,6 +54,29 @@ pub fn valid_providers() -> Vec<&'static str> {
     providers.sort_unstable();
     providers.dedup();
     providers
+}
+
+pub type GlobalConfig = AppConfig;
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CliConfigOverrides {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub max_diff_size: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EffectiveConfig {
+    pub config: AppConfig,
+    pub provider: String,
+}
+
+impl EffectiveConfig {
+    pub fn apply_to_env(&self) {
+        for (key, value) in self.config.as_env() {
+            std::env::set_var(key, value);
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -322,7 +373,15 @@ pub fn load_config() -> AppConfig {
 }
 
 pub fn load_config_for_path(base_path: impl AsRef<Path>) -> AppConfig {
+    load_config_for_path_with_store(base_path, &SystemSecretStore)
+}
+
+pub fn load_config_for_path_with_store(
+    base_path: impl AsRef<Path>,
+    secret_store: &dyn SecretStore,
+) -> AppConfig {
     let mut config = load_global_config(&config_path()).unwrap_or_default();
+    apply_keyring_values(&mut config, secret_store);
     let dotenv = load_dotenv_file(base_path.as_ref());
 
     apply_config_values(&mut config, |key| dotenv.get(key).cloned());
@@ -332,6 +391,53 @@ pub fn load_config_for_path(base_path: impl AsRef<Path>) -> AppConfig {
     apply_environment_provider_aliases(&mut config);
 
     normalize_config(config)
+}
+
+pub fn resolve_effective_config(
+    base_path: impl AsRef<Path>,
+    project_config: &ProjectConfig,
+    overrides: CliConfigOverrides,
+) -> Result<EffectiveConfig> {
+    resolve_effective_config_with_store(base_path, project_config, overrides, &SystemSecretStore)
+}
+
+pub fn resolve_effective_config_with_store(
+    base_path: impl AsRef<Path>,
+    project_config: &ProjectConfig,
+    overrides: CliConfigOverrides,
+    secret_store: &dyn SecretStore,
+) -> Result<EffectiveConfig> {
+    let global_config: GlobalConfig = load_config_for_path_with_store(base_path, secret_store);
+    let mut config = apply_project_overrides(global_config, &project_config.commit);
+    apply_cli_overrides(&mut config, overrides);
+    config = normalize_config(config);
+    validate_config(&config)?;
+    let provider = config
+        .ai_provider
+        .clone()
+        .unwrap_or_else(|| "openai".to_string());
+    Ok(EffectiveConfig { config, provider })
+}
+
+fn apply_cli_overrides(config: &mut AppConfig, overrides: CliConfigOverrides) {
+    if let Some(provider) = overrides.provider {
+        config.ai_provider = Some(provider);
+    }
+    if let Some(model) = overrides.model {
+        config.ai_model = Some(model);
+    }
+    if let Some(max_diff_size) = overrides.max_diff_size {
+        config.max_diff_size = max_diff_size;
+    }
+}
+
+fn apply_keyring_values(config: &mut AppConfig, secret_store: &dyn SecretStore) {
+    if let Ok(Some(value)) = secret_store.get_secret("API_KEY") {
+        config.api_key = Some(value);
+    }
+    if let Ok(Some(value)) = secret_store.get_secret("JUDGE_API_KEY") {
+        config.judge_api_key = Some(value);
+    }
 }
 
 fn load_dotenv_file(base_path: &Path) -> HashMap<String, String> {
@@ -589,6 +695,17 @@ pub fn save_config(updates: HashMap<String, JsonValue>) -> Result<AppConfig> {
 }
 
 pub fn save_config_at(path: &Path, updates: HashMap<String, JsonValue>) -> Result<AppConfig> {
+    save_config_at_with_store(path, updates, &SystemSecretStore, |key| {
+        confirm_plaintext_secret_fallback(key)
+    })
+}
+
+pub fn save_config_at_with_store(
+    path: &Path,
+    updates: HashMap<String, JsonValue>,
+    secret_store: &dyn SecretStore,
+    mut confirm_plaintext_fallback: impl FnMut(&str) -> Result<bool>,
+) -> Result<AppConfig> {
     let mut current = if path.exists() {
         fs::read_to_string(path)
             .ok()
@@ -601,7 +718,17 @@ pub fn save_config_at(path: &Path, updates: HashMap<String, JsonValue>) -> Resul
     };
 
     for (key, value) in updates {
-        current.insert(key, value);
+        if SECRET_KEYS.contains(&key.as_str()) {
+            handle_secret_update(
+                &mut current,
+                secret_store,
+                &mut confirm_plaintext_fallback,
+                &key,
+                value,
+            )?;
+        } else {
+            current.insert(key, value);
+        }
     }
 
     if let Some(parent) = path.parent() {
@@ -610,6 +737,49 @@ pub fn save_config_at(path: &Path, updates: HashMap<String, JsonValue>) -> Resul
     let content = serde_json::to_string_pretty(&current)?;
     fs::write(path, format!("{content}\n"))?;
     load_global_config(path).with_context(|| format!("falha ao recarregar {}", path.display()))
+}
+
+fn handle_secret_update(
+    current: &mut serde_json::Map<String, JsonValue>,
+    secret_store: &dyn SecretStore,
+    confirm_plaintext_fallback: &mut impl FnMut(&str) -> Result<bool>,
+    key: &str,
+    value: JsonValue,
+) -> Result<()> {
+    let Some(secret) = json_value_as_secret(value) else {
+        return Ok(());
+    };
+    if secret.is_empty() {
+        return Ok(());
+    }
+    if current.get(key).and_then(JsonValue::as_str) == Some(secret.as_str()) {
+        return Ok(());
+    }
+    if secret_store.set_secret(key, &secret).is_ok() {
+        current.remove(key);
+        return Ok(());
+    }
+    if confirm_plaintext_fallback(key)? {
+        current.insert(key.to_string(), JsonValue::String(secret));
+    }
+    Ok(())
+}
+
+fn json_value_as_secret(value: JsonValue) -> Option<String> {
+    match value {
+        JsonValue::String(value) => Some(value),
+        JsonValue::Null => None,
+        other => Some(other.to_string()),
+    }
+}
+
+fn confirm_plaintext_secret_fallback(key: &str) -> Result<bool> {
+    ui::warning(format!("Keyring indisponível para {key}."));
+    ui::warning("Salvar em texto plano no arquivo ~/.seshat expõe sua chave.");
+    ui::warning(
+        "Recomendação: habilite o chaveiro do sistema antes de salvar segredos permanentes.",
+    );
+    ui::confirm("Deseja salvar em texto plano mesmo assim?", false)
 }
 
 pub fn apply_project_overrides(mut config: AppConfig, commit: &CommitConfig) -> AppConfig {
@@ -662,6 +832,7 @@ pub fn mask_api_key(key: Option<&str>, language: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
     use std::sync::Mutex;
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
@@ -700,6 +871,43 @@ mod tests {
             } else {
                 env::remove_var(key);
             }
+        }
+    }
+
+    #[derive(Default)]
+    struct FakeSecretStore {
+        values: RefCell<HashMap<String, String>>,
+        fail_get: bool,
+        fail_set: bool,
+    }
+
+    impl FakeSecretStore {
+        fn with_secret(key: &str, value: &str) -> Self {
+            let store = Self::default();
+            store
+                .values
+                .borrow_mut()
+                .insert(key.to_string(), value.to_string());
+            store
+        }
+    }
+
+    impl SecretStore for FakeSecretStore {
+        fn get_secret(&self, key: &str) -> Result<Option<String>> {
+            if self.fail_get {
+                return Err(anyhow!("fake keyring get failure"));
+            }
+            Ok(self.values.borrow().get(key).cloned())
+        }
+
+        fn set_secret(&self, key: &str, value: &str) -> Result<()> {
+            if self.fail_set {
+                return Err(anyhow!("fake keyring set failure"));
+            }
+            self.values
+                .borrow_mut()
+                .insert(key.to_string(), value.to_string());
+            Ok(())
         }
     }
 
@@ -842,6 +1050,208 @@ GEMINI_API_KEY=dotenv-key
             let config = load_config_for_path(dir.path());
 
             assert_eq!(config.api_key.as_deref(), Some("real-key"));
+        });
+    }
+
+    #[test]
+    fn keyring_loads_secret_when_env_and_dotenv_do_not_set_it() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{"API_KEY":"plain-key","AI_PROVIDER":"openai"}"#,
+            )
+            .unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let store = FakeSecretStore::with_secret("API_KEY", "keyring-key");
+
+            let config = load_config_for_path_with_store(dir.path(), &store);
+
+            assert_eq!(config.api_key.as_deref(), Some("keyring-key"));
+            assert_eq!(config.ai_provider.as_deref(), Some("openai"));
+        });
+    }
+
+    #[test]
+    fn keyring_does_not_override_dotenv_or_real_env() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(dir.path().join(".env"), "API_KEY=dotenv-key\n").unwrap();
+            env::set_var("API_KEY", "real-key");
+            let store = FakeSecretStore::with_secret("API_KEY", "keyring-key");
+
+            let config = load_config_for_path_with_store(dir.path(), &store);
+
+            assert_eq!(config.api_key.as_deref(), Some("real-key"));
+        });
+    }
+
+    #[test]
+    fn keyring_save_keeps_api_keys_out_of_plaintext_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".seshat");
+        let store = FakeSecretStore::default();
+        let mut updates = HashMap::new();
+        updates.insert(
+            "API_KEY".to_string(),
+            JsonValue::String("main-key".to_string()),
+        );
+        updates.insert(
+            "JUDGE_API_KEY".to_string(),
+            JsonValue::String("judge-key".to_string()),
+        );
+        updates.insert(
+            "AI_PROVIDER".to_string(),
+            JsonValue::String("openai".to_string()),
+        );
+
+        save_config_at_with_store(&path, updates, &store, |_| {
+            panic!("plaintext fallback should not be requested")
+        })
+        .unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(!content.contains("main-key"));
+        assert!(!content.contains("judge-key"));
+        assert_eq!(
+            store.values.borrow().get("API_KEY").map(String::as_str),
+            Some("main-key")
+        );
+        assert_eq!(
+            store
+                .values
+                .borrow()
+                .get("JUDGE_API_KEY")
+                .map(String::as_str),
+            Some("judge-key")
+        );
+    }
+
+    #[test]
+    fn keyring_fallback_writes_plaintext_when_user_accepts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".seshat");
+        let store = FakeSecretStore {
+            fail_set: true,
+            ..FakeSecretStore::default()
+        };
+        let mut updates = HashMap::new();
+        updates.insert(
+            "API_KEY".to_string(),
+            JsonValue::String("main-key".to_string()),
+        );
+
+        save_config_at_with_store(&path, updates, &store, |_| Ok(true)).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.contains("main-key"));
+    }
+
+    #[test]
+    fn keyring_fallback_omits_plaintext_when_user_refuses() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".seshat");
+        let store = FakeSecretStore {
+            fail_set: true,
+            ..FakeSecretStore::default()
+        };
+        let mut updates = HashMap::new();
+        updates.insert(
+            "API_KEY".to_string(),
+            JsonValue::String("main-key".to_string()),
+        );
+
+        save_config_at_with_store(&path, updates, &store, |_| Ok(false)).unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(!content.contains("main-key"));
+        assert!(!content.contains("API_KEY"));
+    }
+
+    #[test]
+    fn keyring_fallback_does_not_prompt_when_plaintext_secret_is_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".seshat");
+        fs::write(&path, r#"{"API_KEY":"same-key"}"#).unwrap();
+        let store = FakeSecretStore {
+            fail_set: true,
+            ..FakeSecretStore::default()
+        };
+        let mut updates = HashMap::new();
+        updates.insert(
+            "API_KEY".to_string(),
+            JsonValue::String("same-key".to_string()),
+        );
+
+        save_config_at_with_store(&path, updates, &store, |_| {
+            panic!("plaintext fallback should not be requested for unchanged secret")
+        })
+        .unwrap();
+
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.contains("same-key"));
+    }
+
+    #[test]
+    fn effective_config_applies_expected_precedence() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{
+  "API_KEY": "global-key",
+  "AI_PROVIDER": "openai",
+  "AI_MODEL": "global-model",
+  "MAX_DIFF_SIZE": 1000,
+  "WARN_DIFF_SIZE": 1000,
+  "COMMIT_LANGUAGE": "PT-BR"
+}"#,
+            )
+            .unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+API_KEY=dotenv-key
+AI_PROVIDER=gemini
+AI_MODEL=dotenv-model
+MAX_DIFF_SIZE=2000
+WARN_DIFF_SIZE=2000
+",
+            )
+            .unwrap();
+            let project = ProjectConfig {
+                commit: CommitConfig {
+                    language: Some("ENG".to_string()),
+                    provider: Some("ollama".to_string()),
+                    model: Some("project-model".to_string()),
+                    max_diff_size: Some(4000),
+                    warn_diff_size: Some(3500),
+                    ..CommitConfig::default()
+                },
+                ..ProjectConfig::default()
+            };
+            let store = FakeSecretStore::with_secret("API_KEY", "keyring-key");
+            env::set_var("API_KEY", "env-key");
+            env::set_var("AI_MODEL", "env-model");
+            env::set_var("WARN_DIFF_SIZE", "3000");
+
+            let effective = resolve_effective_config_with_store(
+                dir.path(),
+                &project,
+                CliConfigOverrides {
+                    provider: Some("codex".to_string()),
+                    model: Some("flag-model".to_string()),
+                    max_diff_size: Some(5000),
+                },
+                &store,
+            )
+            .unwrap();
+
+            assert_eq!(effective.provider, "codex");
+            assert_eq!(effective.config.api_key.as_deref(), Some("env-key"));
+            assert_eq!(effective.config.ai_model.as_deref(), Some("flag-model"));
+            assert_eq!(effective.config.max_diff_size, 5000);
+            assert_eq!(effective.config.warn_diff_size, 3500);
+            assert_eq!(effective.config.commit_language, "ENG");
         });
     }
 }
