@@ -459,8 +459,10 @@ mod tests {
             r#"{"name":"test","devDependencies":{"eslint":"^8.0.0"}}"#,
         )
         .unwrap();
+        let config_path = crate::config::project_config_path(dir.path());
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
         fs::write(
-            dir.path().join(".seshat"),
+            config_path,
             r#"
 commands:
   eslint:
