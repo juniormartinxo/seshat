@@ -4,6 +4,7 @@ use crate::providers::get_provider;
 use crate::utils::{is_valid_conventional_commit, normalize_commit_subject_case};
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
+use std::cmp::Ordering;
 use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
@@ -103,6 +104,13 @@ pub enum ReportLanguage {
     Portuguese,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentSelection {
+    Explicit,
+    AutoDetected,
+}
+
 #[derive(Debug, Clone)]
 pub struct AgentBenchOptions {
     pub agents: Vec<String>,
@@ -118,9 +126,11 @@ pub struct AgentBenchOptions {
 pub struct AgentBenchReport {
     pub iterations: usize,
     pub agents: Vec<String>,
+    pub agent_selection: AgentSelection,
     pub fixtures: Vec<String>,
     pub temp_root: Option<PathBuf>,
     pub summaries: Vec<AgentBenchSummary>,
+    pub overall: Vec<AgentBenchOverallSummary>,
     pub samples: Vec<AgentBenchSample>,
 }
 
@@ -135,6 +145,19 @@ pub struct AgentBenchSummary {
     pub min_ms: f64,
     pub p95_ms: f64,
     pub max_ms: f64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AgentBenchOverallSummary {
+    pub agent: String,
+    pub total: usize,
+    pub success: usize,
+    pub conventional_valid: usize,
+    pub avg_ms: f64,
+    pub min_ms: f64,
+    pub p95_ms: f64,
+    pub max_ms: f64,
+    pub fixtures_won: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -158,6 +181,11 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
     }
 
     let base_config = load_config();
+    let agent_selection = if options.agents.is_empty() {
+        AgentSelection::AutoDetected
+    } else {
+        AgentSelection::Explicit
+    };
     let agents = normalize_agents(options.agents, &base_config)?;
     let root = TempBuilder::new().prefix("seshat-agent-bench.").tempdir()?;
     let mut samples = Vec::new();
@@ -178,6 +206,7 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
     }
 
     let summaries = summarize(&samples);
+    let overall = summarize_overall(&samples, &summaries);
     let temp_root = if options.keep_temp {
         Some(keep_temp_dir(root))
     } else {
@@ -187,6 +216,7 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
     Ok(AgentBenchReport {
         iterations: options.iterations,
         agents,
+        agent_selection,
         fixtures: options
             .fixtures
             .iter()
@@ -194,6 +224,7 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
             .collect(),
         temp_root,
         summaries,
+        overall,
         samples,
     })
 }
@@ -209,8 +240,11 @@ fn print_report_pt_br(report: &AgentBenchReport) {
     println!("Benchmark de Agentes");
     println!("====================\n");
     println!("Agentes: {}", report.agents.join(", "));
+    print_agent_selection_note_pt_br(report);
     println!("Fixtures: {}", report.fixtures.join(", "));
     println!("Iteracoes por fixture: {}\n", report.iterations);
+    println!("Por fixture");
+    println!("-----------");
     print_table_header_pt_br();
     for summary in &report.summaries {
         println!(
@@ -226,8 +260,10 @@ fn print_report_pt_br(report: &AgentBenchReport) {
             result_label_pt_br(summary),
         );
     }
+    print_overall_pt_br(report);
     println!("\nTodas as duracoes estao em milissegundos (ms).");
     println!("O tempo mede a geracao da mensagem pelo agente; setup da fixture Git fica fora da medicao.");
+    println!("Quanto menor Media/P95 ms, mais rapido; Sucesso e Conv. valido medem qualidade.");
     if let Some(path) = &report.temp_root {
         println!(
             "Repositorios temporarios preservados em: {}",
@@ -240,8 +276,11 @@ fn print_report_en(report: &AgentBenchReport) {
     println!("Agent Benchmark");
     println!("===============\n");
     println!("Agents: {}", report.agents.join(", "));
+    print_agent_selection_note_en(report);
     println!("Fixtures: {}", report.fixtures.join(", "));
     println!("Iterations per fixture: {}\n", report.iterations);
+    println!("By fixture");
+    println!("----------");
     print_table_header_en();
     for summary in &report.summaries {
         println!(
@@ -257,10 +296,76 @@ fn print_report_en(report: &AgentBenchReport) {
             result_label_en(summary),
         );
     }
+    print_overall_en(report);
     println!("\nAll durations are milliseconds (ms).");
     println!("Timing measures agent message generation; Git fixture setup is excluded.");
+    println!("Lower Avg/P95 ms is faster; Success and Conv. valid measure quality.");
     if let Some(path) = &report.temp_root {
         println!("Temporary repositories kept at: {}", path.display());
+    }
+}
+
+fn print_agent_selection_note_pt_br(report: &AgentBenchReport) {
+    if report.agent_selection != AgentSelection::AutoDetected {
+        return;
+    }
+    println!("Selecao de agentes: detectada automaticamente");
+    if report.agents.len() == 1 {
+        println!(
+            "Apenas um agente disponivel foi detectado. Use --agents codex,claude-cli para comparar mais provedores."
+        );
+    }
+}
+
+fn print_agent_selection_note_en(report: &AgentBenchReport) {
+    if report.agent_selection != AgentSelection::AutoDetected {
+        return;
+    }
+    println!("Agent selection: auto-detected");
+    if report.agents.len() == 1 {
+        println!(
+            "Only one available agent was detected. Use --agents codex,claude-cli to compare more providers."
+        );
+    }
+}
+
+fn print_overall_pt_br(report: &AgentBenchReport) {
+    println!("\nRanking geral");
+    println!("-------------");
+    print_overall_header_pt_br();
+    for summary in &report.overall {
+        println!(
+            "{:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1} {:>8}  {}",
+            summary.agent,
+            format!("{}/{}", summary.success, summary.total),
+            format!("{}/{}", summary.conventional_valid, summary.total),
+            summary.avg_ms,
+            summary.p95_ms,
+            summary.min_ms,
+            summary.max_ms,
+            summary.fixtures_won,
+            overall_result_label_pt_br(summary),
+        );
+    }
+}
+
+fn print_overall_en(report: &AgentBenchReport) {
+    println!("\nOverall ranking");
+    println!("---------------");
+    print_overall_header_en();
+    for summary in &report.overall {
+        println!(
+            "{:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1} {:>8}  {}",
+            summary.agent,
+            format!("{}/{}", summary.success, summary.total),
+            format!("{}/{}", summary.conventional_valid, summary.total),
+            summary.avg_ms,
+            summary.p95_ms,
+            summary.min_ms,
+            summary.max_ms,
+            summary.fixtures_won,
+            overall_result_label_en(summary),
+        );
     }
 }
 
@@ -286,6 +391,28 @@ fn print_table_header_en() {
     );
 }
 
+fn print_overall_header_pt_br() {
+    println!(
+        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  Resultado",
+        "Agente", "Sucesso", "Conv. valido", "Media ms", "P95 ms", "Min ms", "Max ms", "Vitorias",
+    );
+    println!(
+        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  ---------",
+        "------", "-------", "------------", "--------", "------", "------", "------", "--------",
+    );
+}
+
+fn print_overall_header_en() {
+    println!(
+        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  Result",
+        "Agent", "Success", "Conv. valid", "Avg ms", "P95 ms", "Min ms", "Max ms", "Wins",
+    );
+    println!(
+        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  ------",
+        "-----", "-------", "-----------", "------", "------", "------", "------", "----",
+    );
+}
+
 fn result_label_pt_br(summary: &AgentBenchSummary) -> &'static str {
     if summary.success < summary.total {
         "falha"
@@ -297,6 +424,26 @@ fn result_label_pt_br(summary: &AgentBenchSummary) -> &'static str {
 }
 
 fn result_label_en(summary: &AgentBenchSummary) -> &'static str {
+    if summary.success < summary.total {
+        "failed"
+    } else if summary.conventional_valid < summary.total {
+        "invalid conv."
+    } else {
+        "ok"
+    }
+}
+
+fn overall_result_label_pt_br(summary: &AgentBenchOverallSummary) -> &'static str {
+    if summary.success < summary.total {
+        "falha"
+    } else if summary.conventional_valid < summary.total {
+        "conv. invalido"
+    } else {
+        "ok"
+    }
+}
+
+fn overall_result_label_en(summary: &AgentBenchOverallSummary) -> &'static str {
     if summary.success < summary.total {
         "failed"
     } else if summary.conventional_valid < summary.total {
@@ -383,16 +530,20 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
 
     h.push_str("<!DOCTYPE html>\n<html lang=\"");
     h.push_str(if is_pt { "pt-BR" } else { "en" });
-    h.push_str("\">\n<head>\n<meta charset=\"UTF-8\">\n\
-                <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n<title>");
+    h.push_str(
+        "\">\n<head>\n<meta charset=\"UTF-8\">\n\
+                <meta name=\"viewport\" content=\"width=device-width,initial-scale=1.0\">\n<title>",
+    );
     h.push_str(if is_pt {
         "Relatório Benchmark — Seshat"
     } else {
         "Benchmark Report — Seshat"
     });
-    h.push_str("</title>\n\
+    h.push_str(
+        "</title>\n\
                 <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>\n\
-                <style>");
+                <style>",
+    );
     h.push_str(HTML_REPORT_CSS);
     h.push_str("</style>\n</head>\n<body>\n<div class=\"container\">\n");
 
@@ -410,6 +561,18 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
         if is_pt { "Agentes" } else { "Agents" },
         html_escape(&report.agents.join(", "))
     );
+    if report.agent_selection == AgentSelection::AutoDetected {
+        let _ = writeln!(
+            h,
+            "<span><strong>{}:</strong> {}</span>",
+            if is_pt { "Seleção" } else { "Selection" },
+            if is_pt {
+                "automática"
+            } else {
+                "auto-detected"
+            }
+        );
+    }
     let _ = writeln!(
         h,
         "<span><strong>Fixtures:</strong> {}</span>",
@@ -430,8 +593,10 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     } else {
         "Average Response Time (ms)"
     });
-    h.push_str("</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
-                <div class=\"chart-box\">\n<h2>");
+    h.push_str(
+        "</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
+                <div class=\"chart-box\">\n<h2>",
+    );
     h.push_str(if is_pt {
         "Taxa de Sucesso (%)"
     } else {
@@ -439,11 +604,96 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     });
     h.push_str("</h2>\n<canvas id=\"qualityChart\"></canvas>\n</div>\n</section>\n\n");
 
+    // --- overall ranking ---
+    h.push_str("<section>\n<h2>");
+    h.push_str(if is_pt {
+        "Ranking geral"
+    } else {
+        "Overall ranking"
+    });
+    h.push_str(
+        "</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+                <table>\n<thead><tr>",
+    );
+    let overall_headers: &[&str] = if is_pt {
+        &[
+            "Agente",
+            "Sucesso",
+            "Conv. Válido",
+            "Média (ms)",
+            "P95 (ms)",
+            "Min (ms)",
+            "Max (ms)",
+            "Vitórias",
+            "Resultado",
+        ]
+    } else {
+        &[
+            "Agent",
+            "Success",
+            "Conv. Valid",
+            "Avg (ms)",
+            "P95 (ms)",
+            "Min (ms)",
+            "Max (ms)",
+            "Wins",
+            "Result",
+        ]
+    };
+    for hdr in overall_headers {
+        let _ = write!(h, "<th>{hdr}</th>");
+    }
+    h.push_str("</tr></thead>\n<tbody>\n");
+
+    for s in &report.overall {
+        let (badge_cls, badge_lbl) = if s.success < s.total {
+            ("badge-fail", if is_pt { "falha" } else { "failed" })
+        } else if s.conventional_valid < s.total {
+            (
+                "badge-warn",
+                if is_pt {
+                    "conv. inválido"
+                } else {
+                    "invalid conv."
+                },
+            )
+        } else {
+            ("badge-ok", "ok")
+        };
+        let _ = writeln!(
+            h,
+            "<tr>\
+             <td>{}</td>\
+             <td class=\"text-right\">{}/{}</td>\
+             <td class=\"text-right\">{}/{}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"text-right\">{}</td>\
+             <td><span class=\"badge {badge_cls}\">{badge_lbl}</span></td>\
+             </tr>",
+            html_escape(&s.agent),
+            s.success,
+            s.total,
+            s.conventional_valid,
+            s.total,
+            s.avg_ms,
+            s.p95_ms,
+            s.min_ms,
+            s.max_ms,
+            s.fixtures_won,
+        );
+    }
+    h.push_str("</tbody>\n</table>\n</div></div>\n</section>\n\n");
+
     // --- summary table ---
     h.push_str("<section>\n<h2>");
     h.push_str(if is_pt { "Resumo" } else { "Summary" });
-    h.push_str("</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
-                <table>\n<thead><tr>");
+    h.push_str(
+        "</h2>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+                <table>\n<thead><tr>",
+    );
     let summary_headers: &[&str] = if is_pt {
         &[
             "Fixture",
@@ -522,8 +772,10 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     } else {
         "Individual Samples"
     });
-    h.push_str("</h2></summary>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
-                <table>\n<thead><tr>");
+    h.push_str(
+        "</h2></summary>\n<div class=\"table-wrap\"><div class=\"table-scroll\">\n\
+                <table>\n<thead><tr>",
+    );
     let sample_headers: &[&str] = if is_pt {
         &[
             "Fixture",
@@ -695,9 +947,7 @@ fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLan
 
 fn normalize_agents(agents: Vec<String>, base_config: &AppConfig) -> Result<Vec<String>> {
     let mut agents = if agents.is_empty() {
-        vec![base_config.ai_provider.clone().ok_or_else(|| {
-            anyhow!("informe --agents ou configure AI_PROVIDER com 'seshat config --provider'")
-        })?]
+        detect_available_agents(base_config)
     } else {
         agents
     };
@@ -707,6 +957,12 @@ fn normalize_agents(agents: Vec<String>, base_config: &AppConfig) -> Result<Vec<
     agents.retain(|agent| !agent.is_empty());
     agents.sort();
     agents.dedup();
+
+    if agents.is_empty() {
+        return Err(anyhow!(
+            "nenhum agente disponivel detectado. Instale/configure codex, claude-cli ou ollama, ou use --agents <lista>."
+        ));
+    }
 
     let valid = valid_providers();
     for agent in &agents {
@@ -718,6 +974,59 @@ fn normalize_agents(agents: Vec<String>, base_config: &AppConfig) -> Result<Vec<
         }
     }
     Ok(agents)
+}
+
+fn detect_available_agents(base_config: &AppConfig) -> Vec<String> {
+    let mut agents = Vec::new();
+
+    if let Some(provider) = base_config.ai_provider.as_deref() {
+        agents.push(provider.to_string());
+    }
+    if executable_from_env_or_path("CODEX_BIN", "codex") {
+        agents.push("codex".to_string());
+    }
+    if executable_from_env_or_path("CLAUDE_BIN", "claude") {
+        agents.push("claude-cli".to_string());
+    }
+    if env_has_value("OLLAMA_BASE_URL") || executable_exists("ollama") {
+        agents.push("ollama".to_string());
+    }
+    if env_has_value("GEMINI_API_KEY") {
+        agents.push("gemini".to_string());
+    }
+    if env_has_value("ZAI_API_KEY") || env_has_value("ZHIPU_API_KEY") {
+        agents.push("zai".to_string());
+    }
+
+    agents
+}
+
+fn executable_from_env_or_path(env_key: &str, default_executable: &str) -> bool {
+    match non_empty_env(env_key) {
+        Some(executable) => executable_exists(&executable),
+        None => executable_exists(default_executable),
+    }
+}
+
+fn executable_exists(executable: &str) -> bool {
+    if executable.contains(std::path::MAIN_SEPARATOR) {
+        return Path::new(executable).is_file();
+    }
+    let Some(paths) = env::var_os("PATH") else {
+        return false;
+    };
+    env::split_paths(&paths).any(|path| path.join(executable).is_file())
+}
+
+fn env_has_value(key: &str) -> bool {
+    non_empty_env(key).is_some()
+}
+
+fn non_empty_env(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn run_sample(
@@ -885,6 +1194,101 @@ fn summarize(samples: &[AgentBenchSample]) -> Vec<AgentBenchSummary> {
         .collect()
 }
 
+fn summarize_overall(
+    samples: &[AgentBenchSample],
+    summaries: &[AgentBenchSummary],
+) -> Vec<AgentBenchOverallSummary> {
+    let fixture_winners = fixture_winners(summaries);
+    let mut agents = samples
+        .iter()
+        .map(|sample| sample.agent.clone())
+        .collect::<Vec<_>>();
+    agents.sort();
+    agents.dedup();
+
+    let mut overall = agents
+        .into_iter()
+        .map(|agent| {
+            let group = samples
+                .iter()
+                .filter(|sample| sample.agent == agent)
+                .collect::<Vec<_>>();
+            let mut durations = group
+                .iter()
+                .map(|sample| sample.duration_ms)
+                .collect::<Vec<_>>();
+            durations.sort_by(f64::total_cmp);
+            let total = group.len();
+            let success = group.iter().filter(|sample| sample.success).count();
+            let conventional_valid = group
+                .iter()
+                .filter(|sample| sample.conventional_valid)
+                .count();
+            let fixtures_won = fixture_winners
+                .iter()
+                .filter(|(_, winner)| winner == &agent)
+                .count();
+            AgentBenchOverallSummary {
+                agent,
+                total,
+                success,
+                conventional_valid,
+                avg_ms: average(&durations),
+                min_ms: durations.first().copied().unwrap_or(0.0),
+                p95_ms: percentile(&durations, 0.95),
+                max_ms: durations.last().copied().unwrap_or(0.0),
+                fixtures_won,
+            }
+        })
+        .collect::<Vec<_>>();
+
+    overall.sort_by(compare_overall_rank);
+    overall
+}
+
+fn fixture_winners(summaries: &[AgentBenchSummary]) -> Vec<(String, String)> {
+    let mut fixtures = summaries
+        .iter()
+        .map(|summary| summary.fixture.clone())
+        .collect::<Vec<_>>();
+    fixtures.sort();
+    fixtures.dedup();
+
+    fixtures
+        .into_iter()
+        .filter_map(|fixture| {
+            summaries
+                .iter()
+                .filter(|summary| summary.fixture == fixture && summary.success > 0)
+                .max_by(|left, right| compare_fixture_rank(left, right))
+                .map(|winner| (fixture, winner.agent.clone()))
+        })
+        .collect()
+}
+
+fn compare_fixture_rank(left: &AgentBenchSummary, right: &AgentBenchSummary) -> Ordering {
+    left.conventional_valid
+        .cmp(&right.conventional_valid)
+        .then_with(|| left.success.cmp(&right.success))
+        .then_with(|| right.avg_ms.total_cmp(&left.avg_ms))
+        .then_with(|| right.p95_ms.total_cmp(&left.p95_ms))
+        .then_with(|| right.agent.cmp(&left.agent))
+}
+
+fn compare_overall_rank(
+    left: &AgentBenchOverallSummary,
+    right: &AgentBenchOverallSummary,
+) -> Ordering {
+    right
+        .fixtures_won
+        .cmp(&left.fixtures_won)
+        .then_with(|| right.conventional_valid.cmp(&left.conventional_valid))
+        .then_with(|| right.success.cmp(&left.success))
+        .then_with(|| left.avg_ms.total_cmp(&right.avg_ms))
+        .then_with(|| left.p95_ms.total_cmp(&right.p95_ms))
+        .then_with(|| left.agent.cmp(&right.agent))
+}
+
 fn average(values: &[f64]) -> f64 {
     if values.is_empty() {
         return 0.0;
@@ -1006,10 +1410,64 @@ mod tests {
     }
 
     #[test]
+    fn overall_summary_ranks_quality_then_speed() {
+        let samples = vec![
+            AgentBenchSample {
+                fixture: "rust".to_string(),
+                agent: "codex".to_string(),
+                iteration: 1,
+                duration_ms: 20.0,
+                success: true,
+                conventional_valid: true,
+                message: Some("feat: add rust".to_string()),
+                error: None,
+            },
+            AgentBenchSample {
+                fixture: "python".to_string(),
+                agent: "codex".to_string(),
+                iteration: 1,
+                duration_ms: 30.0,
+                success: true,
+                conventional_valid: true,
+                message: Some("feat: add python".to_string()),
+                error: None,
+            },
+            AgentBenchSample {
+                fixture: "rust".to_string(),
+                agent: "claude-cli".to_string(),
+                iteration: 1,
+                duration_ms: 10.0,
+                success: true,
+                conventional_valid: false,
+                message: Some("add rust".to_string()),
+                error: None,
+            },
+            AgentBenchSample {
+                fixture: "python".to_string(),
+                agent: "claude-cli".to_string(),
+                iteration: 1,
+                duration_ms: 10.0,
+                success: true,
+                conventional_valid: false,
+                message: Some("add python".to_string()),
+                error: None,
+            },
+        ];
+        let summaries = summarize(&samples);
+
+        let overall = summarize_overall(&samples, &summaries);
+
+        assert_eq!(overall[0].agent, "codex");
+        assert_eq!(overall[0].fixtures_won, 2);
+        assert_eq!(overall[0].conventional_valid, 2);
+    }
+
+    #[test]
     fn html_report_contains_expected_sections() {
         let report = AgentBenchReport {
             iterations: 2,
             agents: vec!["codex".to_string()],
+            agent_selection: AgentSelection::Explicit,
             fixtures: vec!["rust".to_string()],
             temp_root: None,
             summaries: vec![AgentBenchSummary {
@@ -1022,6 +1480,17 @@ mod tests {
                 min_ms: 100.0,
                 p95_ms: 190.0,
                 max_ms: 200.0,
+            }],
+            overall: vec![AgentBenchOverallSummary {
+                agent: "codex".to_string(),
+                total: 2,
+                success: 2,
+                conventional_valid: 1,
+                avg_ms: 150.0,
+                min_ms: 100.0,
+                p95_ms: 190.0,
+                max_ms: 200.0,
+                fixtures_won: 1,
             }],
             samples: vec![
                 AgentBenchSample {
@@ -1053,6 +1522,7 @@ mod tests {
         assert!(html.contains("Agent Benchmark"));
         assert!(html.contains("codex"));
         assert!(html.contains("Rust"));
+        assert!(html.contains("Overall ranking"));
         assert!(html.contains("chart.js@4"));
         assert!(html.contains("perfChart"));
         assert!(html.contains("qualityChart"));
@@ -1067,6 +1537,7 @@ mod tests {
         let report = AgentBenchReport {
             iterations: 1,
             agents: vec!["codex".to_string()],
+            agent_selection: AgentSelection::AutoDetected,
             fixtures: vec!["python".to_string()],
             temp_root: None,
             summaries: vec![AgentBenchSummary {
@@ -1079,6 +1550,17 @@ mod tests {
                 min_ms: 50.0,
                 p95_ms: 50.0,
                 max_ms: 50.0,
+            }],
+            overall: vec![AgentBenchOverallSummary {
+                agent: "codex".to_string(),
+                total: 1,
+                success: 1,
+                conventional_valid: 1,
+                avg_ms: 50.0,
+                min_ms: 50.0,
+                p95_ms: 50.0,
+                max_ms: 50.0,
+                fixtures_won: 1,
             }],
             samples: vec![AgentBenchSample {
                 fixture: "python".to_string(),
@@ -1098,12 +1580,17 @@ mod tests {
         assert!(html.contains("Benchmark de Agentes"));
         assert!(html.contains("Agentes"));
         assert!(html.contains("Iterações"));
+        assert!(html.contains("automática"));
+        assert!(html.contains("Ranking geral"));
         assert!(html.contains("Resumo"));
         assert!(html.contains("Amostras Individuais"));
     }
 
     #[test]
     fn html_escape_handles_special_chars() {
-        assert_eq!(html_escape("<b>&\"x\"</b>"), "&lt;b&gt;&amp;&quot;x&quot;&lt;/b&gt;");
+        assert_eq!(
+            html_escape("<b>&\"x\"</b>"),
+            "&lt;b&gt;&amp;&quot;x&quot;&lt;/b&gt;"
+        );
     }
 }
