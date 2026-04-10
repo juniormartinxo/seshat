@@ -140,7 +140,11 @@ impl ToolingRunner {
             if command.last().is_some_and(|arg| arg == ".") {
                 command.pop();
             }
-            command.extend(relevant_files);
+            if let Some(separator) = command.iter().position(|arg| arg == "--") {
+                command.splice(separator..separator, relevant_files);
+            } else {
+                command.extend(relevant_files);
+            }
         }
 
         let Some(program) = command.first() else {
@@ -222,7 +226,7 @@ impl Default for ToolingRunner {
 fn detect_strategy(path: &Path, config: &ProjectConfig) -> Option<Box<dyn LanguageStrategy>> {
     let strategies: Vec<Box<dyn LanguageStrategy>> = vec![
         Box::new(TypeScriptStrategy),
-        Box::new(RustStrategy),
+        Box::new(RustStrategy::new(path)),
         Box::new(PythonStrategy),
     ];
     if let Some(explicit) = config.project_type.as_deref() {
@@ -484,6 +488,34 @@ mod tests {
     }
 
     #[test]
+    fn rust_typecheck_filters_to_package_args() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/core\"]",
+        )
+        .unwrap();
+        let crate_dir = dir.path().join("crates/core/src");
+        fs::create_dir_all(&crate_dir).unwrap();
+        fs::write(
+            dir.path().join("crates/core/Cargo.toml"),
+            "[package]\nname = \"core\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::write(crate_dir.join("lib.rs"), "pub fn demo() {}\n").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let files = vec![dir
+            .path()
+            .join("crates/core/src/lib.rs")
+            .display()
+            .to_string()];
+
+        let filtered = runner.filter_files_for_check(&files, "typecheck", None);
+
+        assert_eq!(filtered, vec!["-p".to_string(), "core".to_string()]);
+    }
+
+    #[test]
     fn rust_lint_tool_passes_file_args() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
@@ -505,6 +537,28 @@ mod tests {
             ]
         );
         assert!(tool.auto_fix);
+        assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn rust_typecheck_tool_passes_package_args_before_clippy_flags() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let tool = &runner.discover_tools().tools["typecheck"];
+
+        assert_eq!(
+            tool.command,
+            vec![
+                "cargo",
+                "clippy",
+                "--all-targets",
+                "--all-features",
+                "--",
+                "-D",
+                "warnings"
+            ]
+        );
         assert!(tool.pass_files);
     }
 
