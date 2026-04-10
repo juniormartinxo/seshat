@@ -146,7 +146,7 @@ fn rustfmt_tool(path: &Path, project_config: &ProjectConfig) -> ToolCommand {
         pass_files: true,
         extensions: None,
         fix_command: Some(fix_command),
-        auto_fix: false,
+        auto_fix: true,
     };
     apply_overrides(&mut tool, project_config);
     tool
