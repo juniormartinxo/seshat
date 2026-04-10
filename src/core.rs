@@ -70,6 +70,25 @@ pub fn run_pre_commit_checks(
     Ok((!has_failures, results))
 }
 
+fn restage_paths(git: &GitClient, paths: &[String]) -> Result<()> {
+    for path in paths {
+        let output = git.add_path(path)?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "git add -- {} falhou: {}",
+                path,
+                String::from_utf8_lossy(if output.stderr.is_empty() {
+                    &output.stdout
+                } else {
+                    &output.stderr
+                })
+                .trim()
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn commit_with_ai(options: &CommitOptions) -> Result<(String, Option<CodeReviewResult>)> {
     commit_with_ai_with_provider_factory(options, &|provider| get_provider(provider))
 }
@@ -204,6 +223,9 @@ fn commit_with_ai_with_provider_factory_and_action(
             if !success {
                 return Err(anyhow!("Verificações pre-commit falharam."));
             }
+            if let Some(paths) = paths {
+                restage_paths(&git, paths)?;
+            }
         }
     } else if !options.no_check {
         let enabled: Vec<_> = project_config
@@ -232,6 +254,9 @@ fn commit_with_ai_with_provider_factory_and_action(
             }
             if runner.has_blocking_failures(&all_results) {
                 return Err(anyhow!("Verificações pre-commit falharam."));
+            }
+            if let Some(paths) = paths {
+                restage_paths(&git, paths)?;
             }
         }
     }
