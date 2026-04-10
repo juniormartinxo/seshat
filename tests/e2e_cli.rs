@@ -2,7 +2,7 @@ use assert_cmd::Command as AssertCommand;
 use predicates::prelude::*;
 use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use tempfile::TempDir;
 
@@ -250,6 +250,25 @@ fn write_python_seshat(repo: &Path) {
 fn path_with_fake_bin(bin_dir: &Path) -> String {
     let current = std::env::var("PATH").unwrap_or_default();
     format!("{}:{current}", bin_dir.display())
+}
+
+#[cfg(unix)]
+fn path_with_only_git(bin_dir: &Path) -> String {
+    fs::create_dir_all(bin_dir).expect("create isolated bin dir");
+    let git_path = find_executable_in_path("git").expect("find git executable");
+    let link_path = bin_dir.join("git");
+    if !link_path.exists() {
+        std::os::unix::fs::symlink(&git_path, &link_path).expect("symlink git");
+    }
+    bin_dir.display().to_string()
+}
+
+#[cfg(unix)]
+fn find_executable_in_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    std::env::split_paths(&paths)
+        .map(|path| path.join(name))
+        .find(|path| path.is_file())
 }
 
 #[test]
@@ -1212,6 +1231,49 @@ fn bench_agents_json_runs_fake_codex() {
 
 #[cfg(unix)]
 #[test]
+fn bench_agents_without_agents_autodetects_fake_codex() {
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    let isolated_bin = temp.path().join("bin");
+    write_fake_codex(&fake_codex);
+    let isolated_path = path_with_only_git(&isolated_bin);
+
+    let assert = seshat()
+        .env("HOME", home.path())
+        .env("PATH", isolated_path)
+        .env("CODEX_BIN", &fake_codex)
+        .env_remove("CLAUDE_BIN")
+        .env_remove("OLLAMA_BASE_URL")
+        .env("FAKE_CODEX_RESPONSE", "feat: add detected fixture")
+        .args([
+            "bench",
+            "agents",
+            "--fixtures",
+            "rust",
+            "--iterations",
+            "1",
+            "--format",
+            "json",
+        ])
+        .assert()
+        .success();
+
+    let output = assert.get_output();
+    let report: Value = serde_json::from_slice(&output.stdout).expect("parse report json");
+    assert_eq!(report["agent_selection"], "auto-detected");
+    assert_eq!(report["agents"].as_array().expect("agents").len(), 1);
+    assert_eq!(report["agents"][0], "codex");
+    assert_eq!(report["overall"][0]["agent"], "codex");
+    assert_eq!(report["overall"][0]["fixtures_won"], 1);
+    assert_eq!(
+        report["samples"][0]["message"],
+        "feat: add detected fixture"
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn bench_agents_pt_br_report_runs_fake_codex() {
     let home = tempfile::tempdir().expect("create home");
     let temp = tempfile::tempdir().expect("create temp");
@@ -1237,6 +1299,7 @@ fn bench_agents_pt_br_report_runs_fake_codex() {
         .success()
         .stdout(predicate::str::contains("Benchmark de Agentes"))
         .stdout(predicate::str::contains("Conv. valido"))
+        .stdout(predicate::str::contains("Ranking geral"))
         .stdout(predicate::str::contains("Python"))
         .stdout(predicate::str::contains("codex"))
         .stdout(predicate::str::contains("ok"));
