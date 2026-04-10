@@ -13,7 +13,7 @@ Providers CLI dependem de executaveis externos e argumentos especificos. Regress
 
 ## Objetivo
 
-Testar `codex` e `claude-cli` usando executaveis fake.
+Testar `codex` e `claude` usando executaveis fake.
 
 ## Escopo
 

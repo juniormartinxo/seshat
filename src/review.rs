@@ -282,33 +282,80 @@ fn parse_issue_type(line: &str) -> (&'static str, &str, &'static str) {
     ("code_smell", line, "warning")
 }
 
-pub fn format_review_for_display(result: &CodeReviewResult, verbose: bool) -> String {
+pub fn format_review_for_display(result: &CodeReviewResult, _verbose: bool) -> String {
     if !result.has_issues {
-        return "? Code review: No issues found.".to_string();
+        return "Code Review\nSummary: OK\nNo issues found.".to_string();
     }
 
-    let mut lines = vec![format!("? Code review: {}", result.summary)];
-    for issue in &result.issues {
-        lines.push(format!(
-            "{} [{}] {}",
-            severity_icon(&issue.severity),
-            issue.issue_type,
-            issue.description
-        ));
-        if verbose && !issue.suggestion.is_empty() {
-            lines.push(format!("      💡 {}", issue.suggestion));
+    let mut lines = vec![
+        "Code Review".to_string(),
+        format!("Summary: {}", result.summary),
+        String::new(),
+    ];
+    for (index, issue) in result.issues.iter().enumerate() {
+        let (location, detail) = split_issue_location(&issue.description);
+        let issue_type = issue.issue_type.to_ascii_uppercase();
+        if let Some(location) = location {
+            lines.push(format!("{}. [{issue_type}] {location}", index + 1));
+            lines.extend(wrap_text(&detail, 100, "   "));
+        } else {
+            lines.push(format!("{}. [{issue_type}]", index + 1));
+            lines.extend(wrap_text(&issue.description, 100, "   "));
+        }
+        if !issue.suggestion.is_empty() {
+            lines.extend(wrap_text(&format!("Fix: {}", issue.suggestion), 100, "   "));
+        }
+        if index + 1 < result.issues.len() {
+            lines.push(String::new());
         }
     }
     lines.join("\n")
 }
 
-fn severity_icon(severity: &str) -> &'static str {
-    match severity {
-        "error" => "x",
-        "warning" => "!",
-        "info" => "i",
-        _ => "-",
+fn split_issue_location(description: &str) -> (Option<String>, String) {
+    let patterns = [
+        r#"^\s*[`'"](?P<location>[^\n]+?:\d+(?::\d+)?)[`'"]\s*(?P<detail>.*)$"#,
+        r#"^\s*(?P<location>(?:[A-Za-z]:[\\/])?[^\s:\n]+:\d+(?::\d+)?)\s+(?P<detail>.*)$"#,
+    ];
+    for pattern in patterns {
+        let re = Regex::new(pattern).expect("valid location regex");
+        if let Some(captures) = re.captures(description) {
+            let location = captures
+                .name("location")
+                .map(|value| value.as_str().trim().to_string());
+            let detail = captures
+                .name("detail")
+                .map(|value| value.as_str().trim().to_string())
+                .unwrap_or_default();
+            return (location, detail);
+        }
     }
+    (None, description.trim().to_string())
+}
+
+fn wrap_text(text: &str, width: usize, indent: &str) -> Vec<String> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Vec::new();
+    }
+
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        let separator = usize::from(!current.is_empty());
+        if !current.is_empty() && current.len() + separator + word.len() > width {
+            lines.push(format!("{indent}{current}"));
+            current.clear();
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        lines.push(format!("{indent}{current}"));
+    }
+    lines
 }
 
 pub fn filter_diff_by_extensions(
@@ -641,6 +688,48 @@ mod tests {
         assert!(review.has_issues);
         assert_eq!(review.issues.len(), 2);
         assert_eq!(review.issues[1].severity, "error");
+    }
+
+    #[test]
+    fn review_display_is_copy_friendly() {
+        let result = CodeReviewResult {
+            has_issues: true,
+            summary: "Found 2 issue(s)".to_string(),
+            issues: vec![
+                CodeIssue::new(
+                    "bug",
+                    "src/app.rs:4 panic on empty input",
+                    "Return Result instead",
+                    "error",
+                ),
+                CodeIssue::new(
+                    "security",
+                    "`src/auth.rs:8` token is logged",
+                    "Remove token from log line",
+                    "error",
+                ),
+            ],
+        };
+
+        let text = format_review_for_display(&result, false);
+
+        assert_eq!(
+            text,
+            concat!(
+                "Code Review\n",
+                "Summary: Found 2 issue(s)\n",
+                "\n",
+                "1. [BUG] src/app.rs:4\n",
+                "   panic on empty input\n",
+                "   Fix: Return Result instead\n",
+                "\n",
+                "2. [SECURITY] src/auth.rs:8\n",
+                "   token is logged\n",
+                "   Fix: Remove token from log line"
+            )
+        );
+        assert!(!text.contains('+'));
+        assert!(!text.contains('|'));
     }
 
     #[test]

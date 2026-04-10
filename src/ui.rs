@@ -154,11 +154,7 @@ pub fn render_tool_output(output: &str, status: Option<&str>) {
 }
 
 pub fn display_code_review(text: &str) {
-    if use_rich() {
-        print_panel(text, Some("Code Review"), "36");
-    } else {
-        stdout_line(text);
-    }
+    stdout_line(text);
 }
 
 pub fn status(message: impl Into<String>) -> Status {

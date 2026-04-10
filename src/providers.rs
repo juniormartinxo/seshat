@@ -185,9 +185,24 @@ impl OpenAICompatibleProvider {
     pub fn openai_with_transport(transport: Arc<dyn HttpTransport>) -> Self {
         Self {
             name: "openai",
-            api_key: env::var("API_KEY").ok(),
+            api_key: openai_api_key(),
             model: env::var("AI_MODEL").unwrap_or_else(|_| "gpt-4-turbo-preview".to_string()),
             base_url: "https://api.openai.com/v1".to_string(),
+            transport,
+        }
+    }
+
+    pub fn codex_api() -> Self {
+        Self::codex_api_with_transport(Arc::new(ReqwestHttpTransport))
+    }
+
+    pub fn codex_api_with_transport(transport: Arc<dyn HttpTransport>) -> Self {
+        Self {
+            name: "codex-api",
+            api_key: openai_api_key(),
+            model: env::var("AI_MODEL").unwrap_or_else(|_| DEFAULT_CODEX_MODEL.to_string()),
+            base_url: env::var("OPENAI_BASE_URL")
+                .unwrap_or_else(|_| "https://api.openai.com/v1".to_string()),
             transport,
         }
     }
@@ -273,6 +288,12 @@ impl OpenAICompatibleProvider {
     }
 }
 
+fn openai_api_key() -> Option<String> {
+    env::var("OPENAI_API_KEY")
+        .ok()
+        .or_else(|| env::var("API_KEY").ok())
+}
+
 impl Provider for OpenAICompatibleProvider {
     fn name(&self) -> &'static str {
         self.name
@@ -318,7 +339,10 @@ impl AnthropicProvider {
 
     pub fn with_transport(transport: Arc<dyn HttpTransport>) -> Self {
         Self {
-            api_key: env::var("API_KEY").ok(),
+            api_key: env::var("ANTHROPIC_API_KEY")
+                .ok()
+                .or_else(|| env::var("CLAUDE_API_KEY").ok())
+                .or_else(|| env::var("API_KEY").ok()),
             model: env::var("AI_MODEL").unwrap_or_else(|_| "claude-3-opus-20240229".to_string()),
             base_url: env::var("ANTHROPIC_BASE_URL")
                 .unwrap_or_else(|_| "https://api.anthropic.com/v1".to_string()),
@@ -337,7 +361,7 @@ impl AnthropicProvider {
             .api_key
             .as_deref()
             .filter(|key| !key.is_empty())
-            .ok_or_else(|| anyhow!("API_KEY não configurada para Claude"))?;
+            .ok_or_else(|| anyhow!("ANTHROPIC_API_KEY/API_KEY não configurada para Claude"))?;
         let model = model.unwrap_or(&self.model);
         let response = self.transport.post_json(HttpJsonRequest {
             url: format!("{}/messages", self.base_url.trim_end_matches('/')),
@@ -367,7 +391,7 @@ impl Default for AnthropicProvider {
 
 impl Provider for AnthropicProvider {
     fn name(&self) -> &'static str {
-        "claude"
+        "claude-api"
     }
 
     fn generate_commit_message(
@@ -814,7 +838,7 @@ impl ClaudeCliProvider {
 
 impl Provider for ClaudeCliProvider {
     fn name(&self) -> &'static str {
-        "claude-cli"
+        "claude"
     }
 
     fn generate_commit_message(
@@ -851,12 +875,14 @@ impl Provider for ClaudeCliProvider {
 pub fn get_provider(provider_name: &str) -> Result<Box<dyn Provider>> {
     match provider_name {
         "deepseek" => Ok(Box::new(OpenAICompatibleProvider::deepseek())),
-        "claude" => Ok(Box::new(AnthropicProvider::new())),
+        "claude-api" => Ok(Box::new(AnthropicProvider::new())),
         "openai" => Ok(Box::new(OpenAICompatibleProvider::openai())),
+        "codex-api" => Ok(Box::new(OpenAICompatibleProvider::codex_api())),
         "gemini" => Ok(Box::new(GeminiProvider::new())),
         "zai" => Ok(Box::new(OpenAICompatibleProvider::zai())),
         "ollama" => Ok(Box::new(OllamaProvider::new())),
         "codex" => Ok(Box::new(CodexCliProvider::new()?)),
+        "claude" => Ok(Box::new(ClaudeCliProvider::new()?)),
         "claude-cli" => Ok(Box::new(ClaudeCliProvider::new()?)),
         _ => Err(anyhow!("Provedor '{provider_name}' não suportado.")),
     }
@@ -1068,6 +1094,10 @@ mod tests {
     #[test]
     fn unsupported_provider_errors() {
         assert!(get_provider("unknown").is_err());
+        assert_eq!(get_provider("claude").unwrap().name(), "claude");
+        assert_eq!(get_provider("claude-cli").unwrap().name(), "claude");
+        assert_eq!(get_provider("claude-api").unwrap().name(), "claude-api");
+        assert_eq!(get_provider("codex-api").unwrap().name(), "codex-api");
     }
 
     #[test]
@@ -1094,6 +1124,30 @@ mod tests {
         assert_eq!(request.payload["model"], "gpt-override");
         let user_content = request.payload["messages"][1]["content"].as_str().unwrap();
         assert_eq!(user_content.matches("diff-body").count(), 1);
+    }
+
+    #[test]
+    fn codex_api_provider_uses_openai_api_key_and_default_model() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        env::set_var("API_KEY", "generic-key");
+        env::set_var("OPENAI_API_KEY", "openai-key");
+        let transport = Arc::new(RecordingTransport::responding(chat_response(
+            "feat: add tests",
+        )));
+        let provider = OpenAICompatibleProvider::codex_api_with_transport(transport.clone());
+
+        let message = provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let request = transport.last_post();
+        assert_eq!(message, "feat: add tests");
+        assert_eq!(provider.name(), "codex-api");
+        assert_eq!(request.bearer_auth.as_deref(), Some("openai-key"));
+        assert_eq!(request.payload["model"], DEFAULT_CODEX_MODEL);
     }
 
     #[test]
@@ -1263,6 +1317,29 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("review-diff"));
+    }
+
+    #[test]
+    fn anthropic_provider_prefers_provider_specific_api_key() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        env::set_var("API_KEY", "generic-key");
+        env::set_var("ANTHROPIC_API_KEY", "anthropic-key");
+        let transport = Arc::new(RecordingTransport::responding(anthropic_response(
+            "feat: add claude coverage",
+        )));
+        let provider = AnthropicProvider::with_transport(transport.clone());
+
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let request = transport.post_at(0);
+        assert!(request
+            .headers
+            .contains(&("x-api-key".to_string(), "anthropic-key".to_string())));
     }
 
     #[test]
@@ -1802,6 +1879,9 @@ mod tests {
     fn provider_env_keys() -> &'static [&'static str] {
         &[
             "API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "CLAUDE_API_KEY",
             "AI_MODEL",
             "ZAI_API_KEY",
             "ZHIPU_API_KEY",

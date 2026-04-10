@@ -83,12 +83,12 @@ seshat flow 3 --yes --check lint
 Compare agentes em fixtures temporarias:
 
 ```bash
-seshat bench agents --agents codex,claude-cli --fixtures rust,python,typescript --iterations 3 --pt-br
+seshat bench agents --agents codex,claude --fixtures rust,python,typescript --iterations 3 --pt-br
 ```
 
 ## Configuracao
 
-O `commit` exige um arquivo `.seshat` no projeto atual. O `flow` usa `.seshat` quando existir, mas pode rodar sem ele.
+O `commit` exige um arquivo `.seshat/config.yaml` no projeto atual. O `flow` usa `.seshat/config.yaml` quando existir, mas pode rodar sem ele.
 
 Exemplo minimo:
 
@@ -110,7 +110,7 @@ checks:
 code_review:
   enabled: true
   blocking: true
-  prompt: seshat-review.md
+  prompt: .seshat/review.md
 ui:
   force_rich: false
 ```
@@ -118,7 +118,7 @@ ui:
 Campos principais:
 
 - `project_type`: `rust`, `python`, `typescript` ou omitido para autodeteccao.
-- `commit.provider`: `openai`, `deepseek`, `claude`, `gemini`, `zai`, `ollama`, `codex` ou `claude-cli`.
+- `commit.provider`: `codex`, `codex-api`, `claude`, `claude-api`, `openai`, `deepseek`, `gemini`, `zai`, `ollama` ou `claude-cli` (alias legado de `claude`).
 - `commit.model`: modelo especifico do provider.
 - `commit.language`: `PT-BR`, `ENG`, `ESP`, `FRA`, `DEU` ou `ITA`.
 - `commit.max_diff_size` e `commit.warn_diff_size`: limites de diff.
@@ -147,6 +147,8 @@ Campos principais:
 - `DEFAULT_DATE`: data padrao do commit.
 - `GEMINI_API_KEY`: fallback para provider Gemini.
 - `ZAI_API_KEY` ou `ZHIPU_API_KEY`: fallback para provider Zai.
+- `OPENAI_API_KEY`: fallback para providers `openai` e `codex-api`.
+- `ANTHROPIC_API_KEY` ou `CLAUDE_API_KEY`: fallback para provider `claude-api`.
 - `CODEX_BIN`, `CODEX_MODEL`, `CODEX_PROFILE`, `CODEX_TIMEOUT`: configuracao do Codex CLI.
 - `CLAUDE_BIN`, `CLAUDE_MODEL`, `CLAUDE_AGENT`, `CLAUDE_SETTINGS`, `CLAUDE_TIMEOUT`: configuracao do Claude CLI.
 
@@ -155,8 +157,9 @@ Campos principais:
 Providers HTTP cobertos:
 
 - OpenAI
+- Codex API (`codex-api`)
 - DeepSeek
-- Anthropic Claude
+- Anthropic Claude (`claude-api`)
 - Gemini
 - Z.ai
 - Ollama
@@ -164,9 +167,9 @@ Providers HTTP cobertos:
 Providers CLI cobertos:
 
 - Codex CLI (`codex`)
-- Claude CLI (`claude-cli`)
+- Claude CLI (`claude`; `claude-cli` continua como alias legado)
 
-Providers `codex`, `claude-cli` e `ollama` nao exigem `API_KEY` global.
+Providers `codex`, `claude` e `ollama` nao exigem `API_KEY` global.
 
 ## Benchmark de Agentes
 
@@ -176,7 +179,7 @@ Exemplo em PT-BR:
 
 ```bash
 seshat bench agents \
-  --agents codex,claude-cli,ollama \
+  --agents codex,claude,ollama \
   --fixtures rust,python,typescript \
   --iterations 5 \
   --pt-br

@@ -12,7 +12,7 @@ O repo Rust ja possui uma primeira base funcional:
 
 - Crate `seshat` com CLI `commit`, `config`, `init`, `fix` e `flow`.
 - Modulos principais em `src/cli.rs`, `src/config.rs`, `src/core.rs`, `src/git.rs`, `src/providers.rs`, `src/review.rs`, `src/tooling.rs`, `src/flow.rs`, `src/ui.rs` e `src/utils.rs`.
-- Providers iniciais para `openai`, `deepseek`, `claude`, `gemini`, `zai`, `ollama`, `codex` e `claude-cli`.
+- Providers iniciais para `openai`, `codex-api`, `deepseek`, `claude-api`, `gemini`, `zai`, `ollama`, `codex` e `claude`.
 - Bypass sem IA para delecoes, Markdown, imagens, lock files, dotfiles e regras `commit.no_ai_*`.
 - Tooling inicial para TypeScript, Python e Rust.
 - Testes unitarios cobrindo config, classificacao de arquivos, filtro de diff, parser de review, limpeza de respostas e Conventional Commits.
@@ -155,7 +155,7 @@ Alinhar precedencia e armazenamento de config com a versao Python.
 - Testar defaults de modelos para providers.
 - Testar providers sem API key:
   - `codex`
-  - `claude-cli`
+  - `claude`
   - `ollama`
 - Garantir que `.seshat` aceite campos legados no topo e campos novos em `commit`.
 

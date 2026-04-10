@@ -8,7 +8,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const API_KEYLESS_PROVIDERS: &[&str] = &["claude-cli", "codex", "ollama"];
+pub const API_KEYLESS_PROVIDERS: &[&str] = &["claude", "claude-cli", "codex", "ollama"];
 pub const DEFAULT_CODEX_MODEL: &str = "gpt-5.4";
 pub const PROJECT_CONFIG_DIR_NAME: &str = ".seshat";
 pub const PROJECT_CONFIG_FILE_NAME: &str = "config.yaml";
@@ -44,9 +44,9 @@ impl SecretStore for SystemSecretStore {
 
 pub fn default_models() -> BTreeMap<&'static str, &'static str> {
     BTreeMap::from([
-        ("codex", DEFAULT_CODEX_MODEL),
+        ("codex-api", DEFAULT_CODEX_MODEL),
         ("deepseek", "deepseek-chat"),
-        ("claude", "claude-3-opus-20240229"),
+        ("claude-api", "claude-3-opus-20240229"),
         ("openai", "gpt-4-turbo-preview"),
         ("gemini", "gemini-2.0-flash"),
         ("zai", "z-ai/glm-5:free"),
@@ -675,11 +675,23 @@ fn apply_provider_aliases(config: &mut AppConfig, mut get: impl FnMut(&str) -> O
     if config.ai_provider.as_deref() == Some("zai") && config.api_key.is_none() {
         config.api_key = get("ZAI_API_KEY").or_else(|| get("ZHIPU_API_KEY"));
     }
+    if config.ai_provider.as_deref() == Some("claude-api") && config.api_key.is_none() {
+        config.api_key = get("ANTHROPIC_API_KEY").or_else(|| get("CLAUDE_API_KEY"));
+    }
+    if config.ai_provider.as_deref() == Some("codex-api") && config.api_key.is_none() {
+        config.api_key = get("OPENAI_API_KEY");
+    }
     if config.judge_provider.as_deref() == Some("gemini") && config.judge_api_key.is_none() {
         config.judge_api_key = get("GEMINI_API_KEY");
     }
     if config.judge_provider.as_deref() == Some("zai") && config.judge_api_key.is_none() {
         config.judge_api_key = get("ZAI_API_KEY").or_else(|| get("ZHIPU_API_KEY"));
+    }
+    if config.judge_provider.as_deref() == Some("claude-api") && config.judge_api_key.is_none() {
+        config.judge_api_key = get("ANTHROPIC_API_KEY").or_else(|| get("CLAUDE_API_KEY"));
+    }
+    if config.judge_provider.as_deref() == Some("codex-api") && config.judge_api_key.is_none() {
+        config.judge_api_key = get("OPENAI_API_KEY");
     }
 }
 
@@ -695,6 +707,17 @@ fn apply_environment_provider_aliases(config: &mut AppConfig) {
                 config.api_key = Some(value);
             }
         }
+        if config.ai_provider.as_deref() == Some("claude-api") {
+            if let Ok(value) = env::var("ANTHROPIC_API_KEY").or_else(|_| env::var("CLAUDE_API_KEY"))
+            {
+                config.api_key = Some(value);
+            }
+        }
+        if config.ai_provider.as_deref() == Some("codex-api") {
+            if let Ok(value) = env::var("OPENAI_API_KEY") {
+                config.api_key = Some(value);
+            }
+        }
     }
     if env::var_os("JUDGE_API_KEY").is_none() {
         if config.judge_provider.as_deref() == Some("gemini") {
@@ -704,6 +727,17 @@ fn apply_environment_provider_aliases(config: &mut AppConfig) {
         }
         if config.judge_provider.as_deref() == Some("zai") {
             if let Ok(value) = env::var("ZAI_API_KEY").or_else(|_| env::var("ZHIPU_API_KEY")) {
+                config.judge_api_key = Some(value);
+            }
+        }
+        if config.judge_provider.as_deref() == Some("claude-api") {
+            if let Ok(value) = env::var("ANTHROPIC_API_KEY").or_else(|_| env::var("CLAUDE_API_KEY"))
+            {
+                config.judge_api_key = Some(value);
+            }
+        }
+        if config.judge_provider.as_deref() == Some("codex-api") {
+            if let Ok(value) = env::var("OPENAI_API_KEY") {
                 config.judge_api_key = Some(value);
             }
         }
@@ -763,6 +797,14 @@ pub fn normalize_config(mut config: AppConfig) -> AppConfig {
                 .ok()
                 .or_else(|| env::var("ZHIPU_API_KEY").ok());
         }
+        if provider == "claude-api" && config.api_key.is_none() {
+            config.api_key = env::var("ANTHROPIC_API_KEY")
+                .ok()
+                .or_else(|| env::var("CLAUDE_API_KEY").ok());
+        }
+        if provider == "codex-api" && config.api_key.is_none() {
+            config.api_key = env::var("OPENAI_API_KEY").ok();
+        }
     }
 
     if let Some(provider) = config.judge_provider.as_deref() {
@@ -779,6 +821,14 @@ pub fn normalize_config(mut config: AppConfig) -> AppConfig {
             config.judge_api_key = env::var("ZAI_API_KEY")
                 .ok()
                 .or_else(|| env::var("ZHIPU_API_KEY").ok());
+        }
+        if provider == "claude-api" && config.judge_api_key.is_none() {
+            config.judge_api_key = env::var("ANTHROPIC_API_KEY")
+                .ok()
+                .or_else(|| env::var("CLAUDE_API_KEY").ok());
+        }
+        if provider == "codex-api" && config.judge_api_key.is_none() {
+            config.judge_api_key = env::var("OPENAI_API_KEY").ok();
         }
     }
 
@@ -1090,6 +1140,9 @@ mod tests {
         };
         assert!(validate_config(&config).is_ok());
 
+        config.ai_provider = Some("claude".to_string());
+        assert!(validate_config(&config).is_ok());
+
         config.ai_provider = Some("claude-cli".to_string());
         assert!(validate_config(&config).is_ok());
     }
@@ -1223,6 +1276,49 @@ ZHIPU_API_KEY=zhipu-key
 
             assert_eq!(config.api_key.as_deref(), Some("gemini-key"));
             assert_eq!(config.judge_api_key.as_deref(), Some("zhipu-key"));
+        });
+    }
+
+    #[test]
+    fn dotenv_supports_anthropic_provider_key_aliases() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+AI_PROVIDER=claude-api
+ANTHROPIC_API_KEY=anthropic-key
+JUDGE_PROVIDER=claude-api
+CLAUDE_API_KEY=claude-key
+",
+            )
+            .unwrap();
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.api_key.as_deref(), Some("anthropic-key"));
+            assert_eq!(config.judge_api_key.as_deref(), Some("anthropic-key"));
+        });
+    }
+
+    #[test]
+    fn dotenv_supports_codex_api_key_alias() {
+        with_clean_env(|_| {
+            let dir = tempfile::tempdir().unwrap();
+            fs::write(
+                dir.path().join(".env"),
+                "\
+AI_PROVIDER=codex-api
+OPENAI_API_KEY=openai-key
+JUDGE_PROVIDER=codex-api
+",
+            )
+            .unwrap();
+
+            let config = load_config_for_path(dir.path());
+
+            assert_eq!(config.api_key.as_deref(), Some("openai-key"));
+            assert_eq!(config.judge_api_key.as_deref(), Some("openai-key"));
         });
     }
 

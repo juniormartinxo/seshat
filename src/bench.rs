@@ -312,7 +312,7 @@ fn print_agent_selection_note_pt_br(report: &AgentBenchReport) {
     println!("Selecao de agentes: detectada automaticamente");
     if report.agents.len() == 1 {
         println!(
-            "Apenas um agente disponivel foi detectado. Use --agents codex,claude-cli para comparar mais provedores."
+            "Apenas um agente disponivel foi detectado. Use --agents codex,claude para comparar mais provedores."
         );
     }
 }
@@ -324,7 +324,7 @@ fn print_agent_selection_note_en(report: &AgentBenchReport) {
     println!("Agent selection: auto-detected");
     if report.agents.len() == 1 {
         println!(
-            "Only one available agent was detected. Use --agents codex,claude-cli to compare more providers."
+            "Only one available agent was detected. Use --agents codex,claude to compare more providers."
         );
     }
 }
@@ -960,7 +960,7 @@ fn normalize_agents(agents: Vec<String>, base_config: &AppConfig) -> Result<Vec<
 
     if agents.is_empty() {
         return Err(anyhow!(
-            "nenhum agente disponivel detectado. Instale/configure codex, claude-cli ou ollama, ou use --agents <lista>."
+            "nenhum agente disponivel detectado. Instale/configure codex, claude ou ollama, ou use --agents <lista>."
         ));
     }
 
@@ -986,7 +986,7 @@ fn detect_available_agents(base_config: &AppConfig) -> Vec<String> {
         agents.push("codex".to_string());
     }
     if executable_from_env_or_path("CLAUDE_BIN", "claude") {
-        agents.push("claude-cli".to_string());
+        agents.push("claude".to_string());
     }
     if env_has_value("OLLAMA_BASE_URL") || executable_exists("ollama") {
         agents.push("ollama".to_string());
@@ -1438,7 +1438,7 @@ mod tests {
             },
             AgentBenchSample {
                 fixture: "rust".to_string(),
-                agent: "claude-cli".to_string(),
+                agent: "claude".to_string(),
                 iteration: 1,
                 duration_ms: 10.0,
                 success: true,
@@ -1448,7 +1448,7 @@ mod tests {
             },
             AgentBenchSample {
                 fixture: "python".to_string(),
-                agent: "claude-cli".to_string(),
+                agent: "claude".to_string(),
                 iteration: 1,
                 duration_ms: 10.0,
                 success: true,

@@ -597,7 +597,7 @@ fn judge_env_overrides(judge: &JudgeConfig) -> Vec<(String, Option<String>)> {
     if judge.provider == "codex" {
         overrides.push(("CODEX_MODEL".to_string(), judge.model.clone()));
     }
-    if judge.provider == "claude-cli" {
+    if matches!(judge.provider.as_str(), "claude" | "claude-cli") {
         overrides.push(("CLAUDE_MODEL".to_string(), judge.model.clone()));
     }
     overrides
@@ -787,7 +787,28 @@ mod tests {
     }
 
     #[test]
-    fn judge_config_defaults_codex_to_supported_model() {
+    fn judge_config_defaults_codex_api_to_supported_model() {
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = TempEnv::apply(&[
+            ("JUDGE_PROVIDER".to_string(), Some("codex-api".to_string())),
+            ("JUDGE_MODEL".to_string(), None),
+            ("JUDGE_API_KEY".to_string(), None),
+        ]);
+
+        let judge = selected_judge_config("openai").unwrap();
+
+        assert_eq!(judge.provider, "codex-api");
+        assert_eq!(
+            judge.model.as_deref(),
+            Some(crate::config::DEFAULT_CODEX_MODEL)
+        );
+        assert!(judge.api_key.is_none());
+    }
+
+    #[test]
+    fn judge_config_keeps_codex_cli_model_unset_without_override() {
         let _env_lock = crate::test_env::ENV_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
@@ -800,10 +821,7 @@ mod tests {
         let judge = selected_judge_config("openai").unwrap();
 
         assert_eq!(judge.provider, "codex");
-        assert_eq!(
-            judge.model.as_deref(),
-            Some(crate::config::DEFAULT_CODEX_MODEL)
-        );
+        assert!(judge.model.is_none());
         assert!(judge.api_key.is_none());
     }
 
