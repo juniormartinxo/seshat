@@ -1145,13 +1145,10 @@ fn prepare_repo(
 fn model_for_agent(
     agent: &str,
     explicit_model: Option<&str>,
-    base_config: &AppConfig,
+    _base_config: &AppConfig,
 ) -> Option<String> {
     if let Some(model) = explicit_model.filter(|value| !value.trim().is_empty()) {
         return Some(model.to_string());
-    }
-    if base_config.ai_provider.as_deref() == Some(agent) {
-        return base_config.ai_model.clone();
     }
     default_models()
         .get(agent)
@@ -1464,6 +1461,25 @@ mod tests {
         assert_eq!(overall[0].agent, "codex");
         assert_eq!(overall[0].fixtures_won, 2);
         assert_eq!(overall[0].conventional_valid, 2);
+    }
+
+    #[test]
+    fn model_for_agent_ignores_active_global_model_without_explicit_override() {
+        let base_config = AppConfig {
+            ai_provider: Some("deepseek".to_string()),
+            ai_model: Some("deepseek-reasoner".to_string()),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(
+            model_for_agent("deepseek", None, &base_config).as_deref(),
+            Some("deepseek-chat")
+        );
+        assert_eq!(model_for_agent("codex", None, &base_config), None);
+        assert_eq!(
+            model_for_agent("deepseek", Some("deepseek-reasoner"), &base_config).as_deref(),
+            Some("deepseek-reasoner")
+        );
     }
 
     #[test]
