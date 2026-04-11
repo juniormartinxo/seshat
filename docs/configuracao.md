@@ -16,7 +16,7 @@ Para provider, modelo, limites de diff, linguagem e segredos, a ordem efetiva e:
 
 Observacoes:
 
-- para `profile`, a precedencia base implementada agora e: `--profile` > `SESHAT_PROFILE` real > `commit.profile` > `~/.seshat`.
+- para `profile`, a precedencia base implementada agora e: `--profile` > `SESHAT_PROFILE` real > `commit.profile` > binding local `.cloak` > `default_profile` do Cloak > `~/.seshat`.
 - `checks`, `commands`, `code_review` e `ui` vivem apenas no arquivo de projeto.
 - `seshat commit` exige `.seshat/config.yaml`.
 - `seshat flow` pode rodar sem config de projeto, mas usa o arquivo se ele existir.
