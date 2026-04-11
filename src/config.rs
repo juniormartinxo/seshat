@@ -1,4 +1,6 @@
-use crate::profiles::{ProfileSource, ResolvedProfile};
+#[cfg(test)]
+use crate::profiles::ProfileSource;
+use crate::profiles::{discover_cloak_profiles, resolve_profile_precedence, ResolvedProfile};
 use crate::ui;
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -579,9 +581,17 @@ pub fn resolve_effective_config_with_store(
     overrides: CliConfigOverrides,
     secret_store: &dyn SecretStore,
 ) -> Result<EffectiveConfig> {
+    let base_path = base_path.as_ref();
     let global_config: GlobalConfig = load_config_for_path_with_store(base_path, secret_store);
-    let resolved_profile =
-        resolve_profile_precedence(&global_config, &project_config.commit, &overrides);
+    let cloak_discovery = discover_cloak_profiles().ok().flatten();
+    let resolved_profile = resolve_profile_precedence(
+        base_path,
+        overrides.profile.as_deref(),
+        env::var("SESHAT_PROFILE").ok().as_deref(),
+        project_config.commit.profile.as_deref(),
+        global_config.profile.as_deref(),
+        cloak_discovery.as_ref(),
+    );
     let mut config = apply_project_overrides(global_config, &project_config.commit);
     apply_cli_overrides(&mut config, overrides);
     if let Some(profile) = &resolved_profile {
@@ -813,35 +823,6 @@ fn json_usize(json: &JsonValue, key: &str) -> Option<usize> {
         JsonValue::String(value) => value.parse().ok(),
         _ => None,
     })
-}
-
-fn non_empty_profile(value: Option<&str>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        }
-    })
-}
-
-fn resolve_profile_precedence(
-    global_config: &AppConfig,
-    commit: &CommitConfig,
-    overrides: &CliConfigOverrides,
-) -> Option<ResolvedProfile> {
-    if let Some(profile) = non_empty_profile(overrides.profile.as_deref()) {
-        return Some(ResolvedProfile::new(profile, ProfileSource::CliFlag));
-    }
-    if let Some(profile) = non_empty_profile(env::var("SESHAT_PROFILE").ok().as_deref()) {
-        return Some(ResolvedProfile::new(profile, ProfileSource::Environment));
-    }
-    if let Some(profile) = non_empty_profile(commit.profile.as_deref()) {
-        return Some(ResolvedProfile::new(profile, ProfileSource::ProjectConfig));
-    }
-    non_empty_profile(global_config.profile.as_deref())
-        .map(|profile| ResolvedProfile::new(profile, ProfileSource::GlobalConfig))
 }
 
 pub fn normalize_config(mut config: AppConfig) -> AppConfig {
@@ -1712,6 +1693,99 @@ WARN_DIFF_SIZE=2000
                     "project-profile",
                     ProfileSource::ProjectConfig,
                 ))
+            );
+        });
+    }
+
+    #[test]
+    fn effective_config_prefers_directory_binding_after_project_profile() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{
+  "AI_PROVIDER": "codex",
+  "SESHAT_PROFILE": "global-profile"
+}"#,
+            )
+            .unwrap();
+            let cloak_root = home.join(".config").join("cloak");
+            fs::create_dir_all(cloak_root.join("profiles").join("samwise").join("codex")).unwrap();
+            fs::write(
+                cloak_root.join("config.toml"),
+                "[general]\ndefault_profile = \"amjr\"\n",
+            )
+            .unwrap();
+
+            let dir = tempfile::tempdir().unwrap();
+            fs::create_dir_all(dir.path().join("nested")).unwrap();
+            fs::write(dir.path().join(".cloak"), "profile = \"samwise\"").unwrap();
+            let project = ProjectConfig {
+                commit: CommitConfig {
+                    provider: Some("codex".to_string()),
+                    ..CommitConfig::default()
+                },
+                ..ProjectConfig::default()
+            };
+
+            let effective = resolve_effective_config_with_store(
+                dir.path().join("nested"),
+                &project,
+                CliConfigOverrides::default(),
+                &FakeSecretStore::default(),
+            )
+            .unwrap();
+
+            assert_eq!(effective.config.profile.as_deref(), Some("samwise"));
+            assert_eq!(
+                effective.profile,
+                Some(ResolvedProfile::new(
+                    "samwise",
+                    ProfileSource::DirectoryBinding,
+                ))
+            );
+        });
+    }
+
+    #[test]
+    fn effective_config_prefers_cloak_default_after_directory_binding() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{
+  "AI_PROVIDER": "codex",
+  "SESHAT_PROFILE": "global-profile"
+}"#,
+            )
+            .unwrap();
+            let cloak_root = home.join(".config").join("cloak");
+            fs::create_dir_all(cloak_root.join("profiles").join("amjr").join("codex")).unwrap();
+            fs::write(
+                cloak_root.join("config.toml"),
+                "[general]\ndefault_profile = \"amjr\"\n",
+            )
+            .unwrap();
+
+            let dir = tempfile::tempdir().unwrap();
+            let project = ProjectConfig {
+                commit: CommitConfig {
+                    provider: Some("codex".to_string()),
+                    ..CommitConfig::default()
+                },
+                ..ProjectConfig::default()
+            };
+
+            let effective = resolve_effective_config_with_store(
+                dir.path(),
+                &project,
+                CliConfigOverrides::default(),
+                &FakeSecretStore::default(),
+            )
+            .unwrap();
+
+            assert_eq!(effective.config.profile.as_deref(), Some("amjr"));
+            assert_eq!(
+                effective.profile,
+                Some(ResolvedProfile::new("amjr", ProfileSource::CloakDefault))
             );
         });
     }
