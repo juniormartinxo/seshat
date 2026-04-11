@@ -152,7 +152,7 @@ Campos principais:
 - `MAX_DIFF_SIZE`: limite maximo de diff.
 - `WARN_DIFF_SIZE`: limite de aviso de diff.
 - `COMMIT_LANGUAGE`: linguagem padrao.
-- `SESHAT_PROFILE`: profile explicito do Seshat; precedencia atual: `--profile` > `SESHAT_PROFILE` > `commit.profile` > config global `~/.seshat`.
+- `SESHAT_PROFILE`: profile explicito do Seshat; precedencia atual: `--profile` > `SESHAT_PROFILE` > `commit.profile` > binding local `.cloak` > `default_profile` do Cloak > config global `~/.seshat`.
 - `DEFAULT_DATE`: data padrao do commit.
 - `GEMINI_API_KEY`: fallback para provider Gemini.
 - `ZAI_API_KEY` ou `ZHIPU_API_KEY`: fallback para provider Zai.
