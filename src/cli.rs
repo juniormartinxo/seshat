@@ -10,7 +10,8 @@ use crate::flow::{BatchCommitService, ProcessFileOptions};
 use crate::git::GitClient;
 use crate::json_output;
 use crate::profiles::{
-    discover_cloak_profiles, resolve_profile_precedence, ProfileSource, ResolvedProfile,
+    discover_cloak_profiles, import_cloak_profiles, resolve_profile_precedence, ProfileSource,
+    ResolvedProfile,
 };
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
@@ -119,10 +120,29 @@ struct ProfileCurrentArgs {
     provider: Option<String>,
 }
 
+#[derive(Debug, Args)]
+struct ProfileDoctorArgs {
+    #[arg(long)]
+    profile: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct ProfileImportArgs {
+    #[command(subcommand)]
+    command: ProfileImportCommands,
+}
+
+#[derive(Debug, Subcommand)]
+enum ProfileImportCommands {
+    Cloak,
+}
+
 #[derive(Debug, Subcommand)]
 enum ProfileCommands {
     List,
     Current(ProfileCurrentArgs),
+    Doctor(ProfileDoctorArgs),
+    Import(ProfileImportArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -281,6 +301,14 @@ fn run_profile(args: ProfileArgs) -> Result<()> {
     match args.command {
         ProfileCommands::List => run_profile_list(),
         ProfileCommands::Current(args) => run_profile_current(args),
+        ProfileCommands::Doctor(args) => run_profile_doctor(args),
+        ProfileCommands::Import(args) => run_profile_import(args),
+    }
+}
+
+fn run_profile_import(args: ProfileImportArgs) -> Result<()> {
+    match args.command {
+        ProfileImportCommands::Cloak => run_profile_import_cloak(),
     }
 }
 
@@ -359,6 +387,95 @@ fn run_profile_current(args: ProfileCurrentArgs) -> Result<()> {
     }
 
     ui::summary("Current Profile", &items);
+    Ok(())
+}
+
+fn run_profile_doctor(args: ProfileDoctorArgs) -> Result<()> {
+    let project_config = ProjectConfig::load(".");
+    let global_config = load_config_for_path(".");
+    let cloak_discovery =
+        discover_cloak_profiles()?.ok_or_else(|| anyhow!("Nenhum profile do Cloak detectado."))?;
+    let resolved_profile = resolve_profile_precedence(
+        ".",
+        args.profile.as_deref(),
+        env::var("SESHAT_PROFILE").ok().as_deref(),
+        project_config.commit.profile.as_deref(),
+        global_config.profile.as_deref(),
+        Some(&cloak_discovery),
+    )
+    .ok_or_else(|| anyhow!("Nenhum profile efetivo resolvido."))?;
+    let installed = cloak_discovery
+        .installed_profile(&resolved_profile.name)
+        .ok_or_else(|| {
+            anyhow!(
+                "Profile '{}' não encontrado no Cloak.",
+                resolved_profile.name
+            )
+        })?;
+
+    let codex_home = installed.cli_homes.codex_home.clone();
+    let claude_config_dir = installed.cli_homes.claude_config_dir.clone();
+    let codex_auth = codex_home
+        .as_ref()
+        .map(|path| path.join("auth.json").is_file())
+        .unwrap_or(false);
+    let claude_auth = claude_config_dir
+        .as_ref()
+        .map(|path| path.join(".credentials.json").is_file())
+        .unwrap_or(false);
+
+    let items = BTreeMap::from([
+        ("Profile".to_string(), resolved_profile.name.clone()),
+        (
+            "Source".to_string(),
+            profile_source_label(resolved_profile.source).to_string(),
+        ),
+        ("Exists".to_string(), "yes".to_string()),
+        (
+            "Codex Home".to_string(),
+            codex_home
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "missing".to_string()),
+        ),
+        (
+            "Codex Auth".to_string(),
+            if codex_auth { "yes" } else { "no" }.to_string(),
+        ),
+        (
+            "Claude Config Dir".to_string(),
+            claude_config_dir
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "missing".to_string()),
+        ),
+        (
+            "Claude Auth".to_string(),
+            if claude_auth { "yes" } else { "no" }.to_string(),
+        ),
+    ]);
+
+    ui::summary("Profile Doctor", &items);
+    if !codex_auth && !claude_auth {
+        ui::warning("Nenhuma autenticacao detectavel para codex/claude neste profile.");
+    }
+    Ok(())
+}
+
+fn run_profile_import_cloak() -> Result<()> {
+    let report = import_cloak_profiles()?;
+    let items = BTreeMap::from([
+        ("Source".to_string(), "cloak".to_string()),
+        (
+            "Storage".to_string(),
+            report.storage_path.display().to_string(),
+        ),
+        ("Imported".to_string(), report.imported.to_string()),
+        ("Updated".to_string(), report.updated.to_string()),
+        ("Unchanged".to_string(), report.unchanged.to_string()),
+        ("Total".to_string(), report.total.to_string()),
+    ]);
+    ui::summary("Profile Import", &items);
     Ok(())
 }
 
@@ -1006,5 +1123,32 @@ mod tests {
         };
         assert_eq!(args.profile.as_deref(), Some("samwise"));
         assert_eq!(args.provider.as_deref(), Some("codex"));
+    }
+
+    #[test]
+    fn profile_doctor_command_accepts_profile_override() {
+        let cli =
+            Cli::try_parse_from(["seshat", "profile", "doctor", "--profile", "samwise"]).unwrap();
+
+        let Commands::Profile(args) = cli.command.expect("profile command") else {
+            panic!("expected profile command");
+        };
+        let ProfileCommands::Doctor(args) = args.command else {
+            panic!("expected doctor command");
+        };
+        assert_eq!(args.profile.as_deref(), Some("samwise"));
+    }
+
+    #[test]
+    fn profile_import_cloak_command_parses() {
+        let cli = Cli::try_parse_from(["seshat", "profile", "import", "cloak"]).unwrap();
+
+        let Commands::Profile(args) = cli.command.expect("profile command") else {
+            panic!("expected profile command");
+        };
+        let ProfileCommands::Import(args) = args.command else {
+            panic!("expected import command");
+        };
+        assert!(matches!(args.command, ProfileImportCommands::Cloak));
     }
 }
