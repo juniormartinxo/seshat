@@ -1,7 +1,8 @@
+use crate::providers::StagedFileReviewInput;
 use crate::ui;
 use anyhow::{anyhow, Context, Result};
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::path::PathBuf;
@@ -154,6 +155,41 @@ impl GitClient {
         parse_lines(&self.run_output(args)?)
     }
 
+    pub fn current_branch_name(&self) -> Result<String> {
+        let branch = self.run_output(["branch", "--show-current"])?;
+        let branch = branch.trim();
+        if !branch.is_empty() {
+            return Ok(branch.to_string());
+        }
+
+        let head = self.run_output(["rev-parse", "--short", "HEAD"])?;
+        let head = head.trim();
+        if head.is_empty() {
+            return Ok("detached-head".to_string());
+        }
+
+        Ok(format!("detached-{head}"))
+    }
+
+    pub fn staged_review_inputs(
+        &self,
+        paths: &[String],
+        max_chars: usize,
+    ) -> Result<Vec<StagedFileReviewInput>> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let deleted_paths: HashSet<_> = self
+            .deleted_staged_files(Some(paths))?
+            .into_iter()
+            .collect();
+        paths
+            .iter()
+            .map(|path| self.staged_review_input(path, deleted_paths.contains(path), max_chars))
+            .collect()
+    }
+
     pub fn is_deletion_only_commit(&self, paths: Option<&[String]>) -> Result<bool> {
         Ok(!self.deleted_staged_files(paths)?.is_empty()
             && self.staged_files(paths, true)?.is_empty())
@@ -270,6 +306,58 @@ impl GitClient {
             .ok()
             .and_then(|output| parse_lines(&output).ok())
             .unwrap_or_default()
+    }
+
+    fn staged_review_input(
+        &self,
+        path: &str,
+        is_deleted: bool,
+        max_chars: usize,
+    ) -> Result<StagedFileReviewInput> {
+        if is_deleted {
+            return Ok(StagedFileReviewInput {
+                path: path.to_string(),
+                staged_content: None,
+                is_binary: false,
+                is_deleted: true,
+                was_truncated: false,
+            });
+        }
+
+        let args = vec![OsString::from("show"), OsString::from(format!(":{path}"))];
+        let output = self.raw_output(args.iter())?;
+        if !output.status.success() {
+            return Err(self.git_error(&args, &output));
+        }
+
+        let bytes = output.stdout;
+        if bytes.contains(&0) {
+            return Ok(StagedFileReviewInput {
+                path: path.to_string(),
+                staged_content: None,
+                is_binary: true,
+                is_deleted: false,
+                was_truncated: false,
+            });
+        }
+
+        let Ok(content) = String::from_utf8(bytes) else {
+            return Ok(StagedFileReviewInput {
+                path: path.to_string(),
+                staged_content: None,
+                is_binary: true,
+                is_deleted: false,
+                was_truncated: false,
+            });
+        };
+        let (staged_content, was_truncated) = truncate_review_content(&content, max_chars);
+        Ok(StagedFileReviewInput {
+            path: path.to_string(),
+            staged_content: Some(staged_content),
+            is_binary: false,
+            is_deleted: false,
+            was_truncated,
+        })
     }
 
     fn command(&self) -> Command {
@@ -393,6 +481,29 @@ fn parse_lines(output: &str) -> Result<Vec<String>> {
         .filter(|line| !line.is_empty())
         .map(ToOwned::to_owned)
         .collect())
+}
+
+fn truncate_review_content(content: &str, max_chars: usize) -> (String, bool) {
+    let total_chars = content.chars().count();
+    if total_chars <= max_chars {
+        return (content.to_string(), false);
+    }
+
+    let suffix = "
+... file content truncated by Seshat ...";
+    let suffix_chars = suffix.chars().count();
+    if max_chars == 0 {
+        return (String::new(), true);
+    }
+    if max_chars <= suffix_chars {
+        return (suffix.chars().take(max_chars).collect(), true);
+    }
+
+    let prefix = content
+        .chars()
+        .take(max_chars.saturating_sub(suffix_chars))
+        .collect::<String>();
+    (format!("{prefix}{suffix}"), true)
 }
 
 pub fn run_git_output(args: &[String]) -> Result<String> {
@@ -617,6 +728,8 @@ pub fn diff_files(diff: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::process::Command;
 
     #[test]
     fn generates_file_messages() {
@@ -677,6 +790,115 @@ mod tests {
         assert_eq!(
             client.command_line_for_display(&["diff", "--cached"]),
             vec!["-C", "/tmp/seshat-repo", "diff", "--cached"]
+        );
+    }
+
+    #[test]
+    fn staged_review_inputs_collect_text_and_deleted_files() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::write(repo.path().join("src.rs"), "fn before() {}\n").unwrap();
+        fs::write(repo.path().join("gone.rs"), "fn gone() {}\n").unwrap();
+        git(repo.path(), &["add", "--", "src.rs", "gone.rs"]);
+        git(repo.path(), &["commit", "-m", "init"]);
+
+        fs::write(repo.path().join("src.rs"), "fn after() {}\n").unwrap();
+        std::fs::remove_file(repo.path().join("gone.rs")).unwrap();
+        git(repo.path(), &["add", "--", "src.rs"]);
+        git(repo.path(), &["rm", "--", "gone.rs"]);
+
+        let client = GitClient::new(repo.path());
+        let inputs = client
+            .staged_review_inputs(&["src.rs".to_string(), "gone.rs".to_string()], 200)
+            .unwrap();
+
+        assert_eq!(inputs.len(), 2);
+        assert_eq!(inputs[0].path, "src.rs");
+        assert_eq!(inputs[0].staged_content.as_deref(), Some("fn after() {}\n"));
+        assert!(!inputs[0].is_binary);
+        assert!(!inputs[0].is_deleted);
+        assert!(!inputs[0].was_truncated);
+
+        assert_eq!(inputs[1].path, "gone.rs");
+        assert!(inputs[1].staged_content.is_none());
+        assert!(!inputs[1].is_binary);
+        assert!(inputs[1].is_deleted);
+        assert!(!inputs[1].was_truncated);
+    }
+
+    #[test]
+    fn staged_review_inputs_marks_binary_files() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        std::fs::write(repo.path().join("blob.bin"), [0_u8, 159, 146, 150]).unwrap();
+        git(repo.path(), &["add", "--", "blob.bin"]);
+
+        let client = GitClient::new(repo.path());
+        let inputs = client
+            .staged_review_inputs(&["blob.bin".to_string()], 200)
+            .unwrap();
+
+        assert_eq!(inputs.len(), 1);
+        assert_eq!(inputs[0].path, "blob.bin");
+        assert!(inputs[0].staged_content.is_none());
+        assert!(inputs[0].is_binary);
+        assert!(!inputs[0].is_deleted);
+        assert!(!inputs[0].was_truncated);
+    }
+
+    #[test]
+    fn staged_review_inputs_truncates_large_text_files() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::write(
+            repo.path().join("large.rs"),
+            "fn main() {\n    println!(\"hello\");\n    println!(\"world\");\n}\n",
+        )
+        .unwrap();
+        git(repo.path(), &["add", "--", "large.rs"]);
+
+        let client = GitClient::new(repo.path());
+        let inputs = client
+            .staged_review_inputs(&["large.rs".to_string()], 40)
+            .unwrap();
+
+        assert_eq!(inputs.len(), 1);
+        assert!(inputs[0].was_truncated);
+        assert!(inputs[0]
+            .staged_content
+            .as_deref()
+            .is_some_and(|content| content.contains("truncated by Seshat")));
+    }
+
+    fn git(repo: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-c")
+            .arg("core.hooksPath=/dev/null")
+            .arg("-C")
+            .arg(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }
