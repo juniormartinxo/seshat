@@ -135,17 +135,7 @@ impl ToolingRunner {
             );
         }
 
-        let mut command = tool.command.clone();
-        if tool.pass_files && !relevant_files.is_empty() {
-            if command.last().is_some_and(|arg| arg == ".") {
-                command.pop();
-            }
-            if let Some(separator) = command.iter().position(|arg| arg == "--") {
-                command.splice(separator..separator, relevant_files);
-            } else {
-                command.extend(relevant_files);
-            }
-        }
+        let command = build_command(tool, &relevant_files);
 
         let Some(program) = command.first() else {
             return failed_result(tool, "Comando vazio");
@@ -241,6 +231,44 @@ fn detect_strategy(path: &Path, config: &ProjectConfig) -> Option<Box<dyn Langua
     strategies
         .into_iter()
         .find(|strategy| strategy.can_handle(path))
+}
+
+fn build_command(tool: &ToolCommand, relevant_files: &[String]) -> Vec<String> {
+    let mut command = tool.command.clone();
+    if !tool.pass_files || relevant_files.is_empty() {
+        return command;
+    }
+
+    if command.last().is_some_and(|arg| arg == ".") {
+        command.pop();
+    }
+
+    if script_runner_needs_post_separator_args(&command) {
+        if let Some(separator) = command.iter().position(|arg| arg == "--") {
+            command.splice(separator + 1..separator + 1, relevant_files.to_vec());
+        } else {
+            command.push("--".to_string());
+            command.extend(relevant_files.to_vec());
+        }
+        return command;
+    }
+
+    if let Some(separator) = command.iter().position(|arg| arg == "--") {
+        command.splice(separator..separator, relevant_files.to_vec());
+    } else {
+        command.extend(relevant_files.to_vec());
+    }
+
+    command
+}
+
+fn script_runner_needs_post_separator_args(command: &[String]) -> bool {
+    matches!(
+        command,
+        [program, subcommand, ..]
+            if matches!(program.as_str(), "npm" | "pnpm" | "yarn" | "bun")
+                && subcommand == "run"
+    )
 }
 
 pub(super) fn base_filter(
@@ -560,6 +588,76 @@ mod tests {
             ]
         );
         assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn typescript_test_script_keeps_file_args_enabled() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"test","scripts":{"test":"jest"},"devDependencies":{"jest":"^1.0.0"}}"#,
+        )
+        .unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let tool = &runner.discover_tools().tools["test"];
+
+        assert_eq!(tool.command, vec!["npm", "run", "test"]);
+        assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn npm_run_commands_append_file_args_after_separator() {
+        let tool = ToolCommand {
+            name: "jest".to_string(),
+            command: vec!["npm".to_string(), "run".to_string(), "test".to_string()],
+            check_type: "test".to_string(),
+            blocking: true,
+            pass_files: true,
+            extensions: None,
+            fix_command: None,
+            auto_fix: false,
+        };
+
+        let command = build_command(&tool, &["src/demo.test.ts".to_string()]);
+
+        assert_eq!(
+            command,
+            vec!["npm", "run", "test", "--", "src/demo.test.ts"]
+        );
+    }
+
+    #[test]
+    fn npm_run_commands_insert_file_args_after_existing_separator() {
+        let tool = ToolCommand {
+            name: "jest".to_string(),
+            command: vec![
+                "npm".to_string(),
+                "run".to_string(),
+                "test".to_string(),
+                "--".to_string(),
+                "--runInBand".to_string(),
+            ],
+            check_type: "test".to_string(),
+            blocking: true,
+            pass_files: true,
+            extensions: None,
+            fix_command: None,
+            auto_fix: false,
+        };
+
+        let command = build_command(&tool, &["src/demo.test.ts".to_string()]);
+
+        assert_eq!(
+            command,
+            vec![
+                "npm",
+                "run",
+                "test",
+                "--",
+                "src/demo.test.ts",
+                "--runInBand"
+            ]
+        );
     }
 
     #[test]
