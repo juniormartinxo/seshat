@@ -189,6 +189,60 @@ fi
 }
 
 #[cfg(unix)]
+fn write_fake_codex_with_home_capture(bin_path: &Path) {
+    let script = r#"#!/bin/sh
+if [ -n "$FAKE_CODEX_LOG" ]; then
+  printf '%s\n' "$@" >> "$FAKE_CODEX_LOG"
+fi
+if [ -n "$FAKE_CODEX_HOME_CAPTURE" ]; then
+  printf '%s' "${CODEX_HOME:-}" > "$FAKE_CODEX_HOME_CAPTURE"
+fi
+out=""
+previous=""
+for arg in "$@"; do
+  if [ "$previous" = "-o" ]; then
+    out="$arg"
+    break
+  fi
+  previous="$arg"
+done
+while IFS= read -r _line; do
+  :
+done
+if [ -n "$out" ]; then
+  printf '%s' "$FAKE_CODEX_RESPONSE" > "$out"
+else
+  printf '%s' "$FAKE_CODEX_RESPONSE"
+fi
+"#;
+    fs::write(bin_path, script).expect("write fake codex with home capture");
+    make_executable(bin_path);
+}
+
+#[cfg(unix)]
+fn write_cloak_default_profile(home: &Path, profile: &str) {
+    let cloak_root = home.join(".config").join("cloak");
+    fs::create_dir_all(cloak_root.join("profiles")).expect("create cloak profiles dir");
+    fs::write(
+        cloak_root.join("config.toml"),
+        format!("[general]\ndefault_profile = \"{profile}\"\n"),
+    )
+    .expect("write cloak config");
+}
+
+#[cfg(unix)]
+fn create_cloak_codex_profile(home: &Path, profile: &str) -> PathBuf {
+    let codex_home = home
+        .join(".config")
+        .join("cloak")
+        .join("profiles")
+        .join(profile)
+        .join("codex");
+    fs::create_dir_all(&codex_home).expect("create cloak codex profile");
+    codex_home
+}
+
+#[cfg(unix)]
 fn write_fake_gpg(bin_path: &Path) {
     let script = r#"#!/bin/sh
 for arg in "$@"; do
@@ -427,6 +481,30 @@ fn config_e2e_prints_current_config_from_isolated_home() {
         .stdout(predicate::str::contains("codex"));
 }
 
+#[cfg(unix)]
+#[test]
+fn profile_list_e2e_lists_detected_profiles_and_default() {
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+    let _ = create_cloak_codex_profile(home.path(), "amjr");
+    let cloak_profiles = home.path().join(".config").join("cloak").join("profiles");
+    fs::create_dir_all(cloak_profiles.join("samwise").join("codex")).expect("create samwise codex");
+    fs::create_dir_all(cloak_profiles.join("samwise").join("claude"))
+        .expect("create samwise claude");
+
+    seshat()
+        .env("HOME", home.path())
+        .args(["profile", "list"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profiles"))
+        .stdout(predicate::str::contains(
+            "Profile | Default | Codex | Claude",
+        ))
+        .stdout(predicate::str::contains("amjr | yes | yes |"))
+        .stdout(predicate::str::contains("samwise |  | yes | yes"));
+}
+
 #[test]
 fn json_e2e_errors_without_seshat() {
     let project = tempfile::tempdir().expect("create project");
@@ -529,6 +607,87 @@ fn json_e2e_committed_event_includes_date() {
         git_stdout(repo.path(), &["log", "-1", "--pretty=%ad", "--date=short"]),
         "2020-01-02"
     );
+}
+
+#[cfg(unix)]
+#[test]
+fn commit_e2e_explicit_profile_uses_matching_cloak_codex_home() {
+    let repo = init_git_repo();
+    configure_git_author(repo.path());
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    let codex_home_capture = temp.path().join("codex-home.txt");
+    write_fake_codex_with_home_capture(&fake_codex);
+    write_project_seshat(
+        repo.path(),
+        "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
+    );
+    write_cloak_default_profile(home.path(), "amjr");
+    let _default_codex_home = create_cloak_codex_profile(home.path(), "amjr");
+    let samwise_codex_home = create_cloak_codex_profile(home.path(), "samwise");
+    write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
+    git(repo.path(), &["add", "--", "src/main.rs"]);
+
+    seshat()
+        .current_dir(repo.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .env_remove("CODEX_HOME")
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: explicit profile")
+        .env("FAKE_CODEX_HOME_CAPTURE", &codex_home_capture)
+        .args(["commit", "--yes", "--verbose", "--profile", "samwise"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: samwise"))
+        .stdout(predicate::str::contains("Profile Source: cli-flag"));
+
+    assert_eq!(
+        fs::read_to_string(&codex_home_capture).expect("read codex home capture"),
+        samwise_codex_home.display().to_string()
+    );
+    assert_eq!(last_subject(repo.path()), "feat: explicit profile");
+}
+
+#[cfg(unix)]
+#[test]
+fn commit_e2e_falls_back_to_cloak_default_profile() {
+    let repo = init_git_repo();
+    configure_git_author(repo.path());
+    let home = tempfile::tempdir().expect("create home");
+    let temp = tempfile::tempdir().expect("create temp");
+    let fake_codex = temp.path().join("fake-codex");
+    let codex_home_capture = temp.path().join("codex-home.txt");
+    write_fake_codex_with_home_capture(&fake_codex);
+    write_project_seshat(
+        repo.path(),
+        "project_type: rust\ncommit:\n  provider: codex\n  model: fake\n  language: PT-BR\ncode_review:\n  enabled: false\n",
+    );
+    write_cloak_default_profile(home.path(), "amjr");
+    let amjr_codex_home = create_cloak_codex_profile(home.path(), "amjr");
+    write_rust_project_file(repo.path(), "src/main.rs", "fn main() {}\n");
+    git(repo.path(), &["add", "--", "src/main.rs"]);
+
+    seshat()
+        .current_dir(repo.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .env_remove("CODEX_HOME")
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_RESPONSE", "feat: cloak default profile")
+        .env("FAKE_CODEX_HOME_CAPTURE", &codex_home_capture)
+        .args(["commit", "--yes", "--verbose"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: amjr"))
+        .stdout(predicate::str::contains("Profile Source: cloak-default"));
+
+    assert_eq!(
+        fs::read_to_string(&codex_home_capture).expect("read codex home capture"),
+        amjr_codex_home.display().to_string()
+    );
+    assert_eq!(last_subject(repo.path()), "feat: cloak default profile");
 }
 
 #[cfg(unix)]
