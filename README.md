@@ -78,6 +78,7 @@ Processe arquivos em lote:
 ```bash
 seshat flow 3 --yes
 seshat flow 3 --yes --check lint
+seshat commit --profile amjr --yes
 ```
 
 Compare agentes em fixtures temporarias:
@@ -96,6 +97,7 @@ Exemplo minimo:
 project_type: rust
 commit:
   provider: codex
+  profile: amjr
   language: PT-BR
   no_ai_extensions:
     - .md
@@ -110,6 +112,7 @@ checks:
 code_review:
   enabled: true
   blocking: true
+  mode: interactive
   prompt: .seshat/review.md
 ui:
   force_rich: false
@@ -120,6 +123,7 @@ Campos principais:
 - `project_type`: `rust`, `python`, `typescript` ou omitido para autodeteccao.
 - `commit.provider`: `codex`, `codex-api`, `claude`, `claude-api`, `openai`, `deepseek`, `gemini`, `zai`, `ollama` ou `claude-cli` (alias legado de `claude`).
 - `commit.model`: modelo especifico do provider.
+- `commit.profile`: profile logico do Seshat; nesta fase ele define a escolha explicita do profile antes da integracao com resolucao do Cloak.
 - `commit.language`: `PT-BR`, `ENG`, `ESP`, `FRA`, `DEU` ou `ITA`.
 - `commit.max_diff_size` e `commit.warn_diff_size`: limites de diff.
 - `commit.no_ai_extensions` e `commit.no_ai_paths`: arquivos que usam mensagem automatica sem IA.
@@ -130,7 +134,8 @@ Campos principais:
 - `checks.*.extensions`: filtro de arquivos por extensao.
 - `checks.*.pass_files`: passa arquivos staged/explicitados ao comando.
 - `checks.*.auto_fix`: usa `fix_command` durante o check.
-- `code_review.*`: ativa review por IA, bloqueio, prompt, logs e extensoes.
+- `code_review.*`: ativa review por IA, bloqueio, prompt, logs, modo de entrega e extensoes.
+- `code_review.mode`: `interactive` mostra os findings no terminal; `files` gera markdowns em `.seshat/code_review/<branch>/<arquivo>.md` e reduz a interacao na tela.
 - `code_review.max_diff_size`: limite de caracteres enviado ao provider de code review; quando excedido, o diff e compactado.
 - `ui.force_rich` e `ui.icons`: controlam renderizacao humana.
 
@@ -147,12 +152,13 @@ Campos principais:
 - `MAX_DIFF_SIZE`: limite maximo de diff.
 - `WARN_DIFF_SIZE`: limite de aviso de diff.
 - `COMMIT_LANGUAGE`: linguagem padrao.
+- `SESHAT_PROFILE`: profile explicito do Seshat; precedencia atual: `--profile` > `SESHAT_PROFILE` > `commit.profile` > config global `~/.seshat`.
 - `DEFAULT_DATE`: data padrao do commit.
 - `GEMINI_API_KEY`: fallback para provider Gemini.
 - `ZAI_API_KEY` ou `ZHIPU_API_KEY`: fallback para provider Zai.
 - `OPENAI_API_KEY`: fallback para providers `openai` e `codex-api`.
 - `ANTHROPIC_API_KEY` ou `CLAUDE_API_KEY`: fallback para provider `claude-api`.
-- `CODEX_BIN`, `CODEX_MODEL`, `CODEX_PROFILE`, `CODEX_TIMEOUT`: configuracao do Codex CLI.
+- `CODEX_BIN`, `CODEX_MODEL`, `CODEX_PROFILE`, `CODEX_TIMEOUT`, `CODEX_API_KEY`: configuracao do Codex CLI.
 - `CLAUDE_BIN`, `CLAUDE_MODEL`, `CLAUDE_AGENT`, `CLAUDE_SETTINGS`, `CLAUDE_TIMEOUT`: configuracao do Claude CLI.
 
 ## 🤖 Providers
@@ -173,6 +179,28 @@ Providers CLI cobertos:
 - Claude CLI (`claude`; `claude-cli` continua como alias legado)
 
 Providers `codex`, `claude` e `ollama` nao exigem `API_KEY` global.
+
+## Review contextual
+
+O pipeline de code review continua usando o `diff` como referencia principal do que mudou, mas o contrato interno agora e estruturado.
+
+- `ReviewInput` carrega `diff`, `changed_files`, `staged_files`, `repo_root` e `custom_prompt`.
+- `ProviderTransportKind` separa explicitamente providers `Api` e `Cli`; o comportamento do review deixa de depender de comparacao por nome.
+- Providers HTTP recebem uma serializacao compacta do `ReviewInput`, priorizando o `diff` e anexando contexto staged quando ele ajuda a interpretar a mudanca.
+- Providers CLI recebem review contextual: lista de arquivos alterados, `diff` filtrado e staged snapshot como fonte de verdade, para reduzir falso positivo quando o working tree ja divergiu do que esta staged.
+
+O staged snapshot existe para code review de commit, nao para substituir o `diff`. Se o arquivo no disco estiver diferente do conteudo staged, o review deve considerar o snapshot staged como verdade do commit.
+
+Compatibilidade:
+
+- `claude` e `claude-cli` continuam aceitos publicamente.
+- A identidade do provider e compartilhada para comparacoes internas e overrides do JUDGE, mas o alias legado nao foi removido.
+
+Limites conhecidos:
+
+- staged snapshots podem ser truncados por arquivo para caber no budget do prompt.
+- arquivos binarios e delecoes entram como metadados, nao como conteudo bruto.
+- review contextual em CLI continua em sandbox somente-leitura; o agente pode inspecionar contexto local, mas nao deve escrever no repo.
 
 ## 📊 Benchmark de Agentes
 
