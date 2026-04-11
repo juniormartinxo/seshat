@@ -1,6 +1,12 @@
-use crate::config::{default_models, project_false_positive_path, valid_providers, ProjectConfig};
+use crate::config::{
+    default_models, project_false_positive_path, valid_providers, CodeReviewMode, ProjectConfig,
+};
 use crate::git::{self, GitClient};
-use crate::providers::{get_provider, Provider};
+use crate::providers::{
+    get_provider, provider_api_key_env_var, provider_model_env_var,
+    provider_transport_kind_for_name, same_provider_identity, Provider, ProviderTransportKind,
+    ReviewInput,
+};
 use crate::review::{self, CodeReviewResult};
 use crate::tooling::{ToolResult, ToolingRunner};
 use crate::ui;
@@ -330,24 +336,59 @@ fn commit_with_ai_with_provider_factory_and_action(
                 prepared_review_diff.original_chars, prepared_review_diff.final_chars
             ));
         }
-        let result = if filtered_diff.trim().is_empty() {
+        let review_input = if filtered_diff.trim().is_empty() {
+            None
+        } else {
+            Some(build_review_input(
+                &git,
+                &filtered_diff,
+                &prepared_review_diff.content,
+                &custom_prompt,
+                project_config
+                    .code_review
+                    .max_diff_size
+                    .unwrap_or(review::DEFAULT_CODE_REVIEW_MAX_DIFF_SIZE),
+            )?)
+        };
+        let result = if let Some(review_input) = &review_input {
+            let raw =
+                commit_provider.generate_code_review(review_input, options.model.as_deref())?;
+            review::parse_standalone_review(&raw)
+        } else {
             CodeReviewResult {
                 has_issues: false,
                 issues: Vec::new(),
                 summary: "Nenhum arquivo de código para revisar.".to_string(),
             }
-        } else {
-            let raw = commit_provider.generate_code_review(
-                &prepared_review_diff.content,
-                options.model.as_deref(),
-                Some(&custom_prompt),
-            )?;
-            review::parse_standalone_review(&raw)
         };
         let result =
             suppress_known_false_positives(result, &filtered_diff, &false_positive_store_path);
-        let formatted_review = review::format_review_for_display(&result, options.verbose);
-        ui::display_code_review(&formatted_review);
+        let review_mode = project_config.code_review.mode;
+        let review_report_files = if matches!(review_mode, CodeReviewMode::Files) {
+            review::save_review_to_markdown_files(
+                &result,
+                git.repo_path().join(".seshat").join("code_review"),
+                &git.current_branch_name()?,
+            )?
+        } else {
+            Vec::new()
+        };
+        if matches!(review_mode, CodeReviewMode::Files) {
+            ui::info(format!("Code review: {}", result.summary));
+            if !review_report_files.is_empty() {
+                ui::info(format!(
+                    "Arquivos de code review gerados em: {}",
+                    review_report_files
+                        .iter()
+                        .map(|path| path.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        } else {
+            let formatted_review = review::format_review_for_display(&result, options.verbose);
+            ui::display_code_review(&formatted_review);
+        }
         let mut skip_issue_confirmation = false;
         if result.has_issues {
             if let Some(log_dir) = project_config.code_review.log_dir.as_deref() {
@@ -364,63 +405,62 @@ fn commit_with_ai_with_provider_factory_and_action(
                 }
             }
             if project_config.code_review.blocking && has_blocking_review_issues(&result) {
-                let action =
-                    forced_blocking_action.unwrap_or(prompt_blocking_issue_action(&result)?);
-                match action {
-                    BlockingIssueAction::Continue => {
-                        record_false_positive_decision(
-                            &false_positive_store_path,
-                            &result,
-                            &filtered_diff,
-                            "user",
+                if matches!(review_mode, CodeReviewMode::Files) {
+                    if options.skip_confirmation {
+                        ui::warning(
+                            "Code review encontrou problema bloqueante. Arquivos markdown foram gerados; continuando (--yes flag).",
                         );
-                        ui::warning("Code review encontrou problema bloqueante, mas continuando por decisão explícita.");
-                        skip_issue_confirmation = true;
-                    }
-                    BlockingIssueAction::Stop => {
+                    } else if !ui::confirm(
+                        "Code review encontrou problema bloqueante. Os apontamentos foram salvos em arquivos markdown. Deseja continuar com o commit?",
+                        false,
+                    )? {
                         return Err(anyhow!(
                             "Commit cancelado para investigar problema apontado pela IA."
                         ));
                     }
-                    BlockingIssueAction::Judge => {
-                        let judge = selected_judge_config(commit_provider.name())?;
-                        ui::info(format!("IA: JUDGE ({})", judge.provider));
-                        let (judge_provider, judge_result) = run_judge_review(
-                            &judge,
-                            &prepared_review_diff.content,
-                            Some(&custom_prompt),
-                            options.verbose,
-                            project_config.project_type.as_deref(),
-                            project_config.code_review.extensions.as_deref(),
-                            provider_factory,
-                        )
-                        .map_err(|error| anyhow!("Falha ao obter JUDGE: {error}"))?;
-
-                        let judge_result = suppress_known_false_positives(
-                            judge_result,
-                            &filtered_diff,
-                            &false_positive_store_path,
-                        );
-                        let formatted_review =
-                            review::format_review_for_display(&judge_result, options.verbose);
-                        ui::display_code_review(&formatted_review);
-                        if has_blocking_review_issues(&judge_result) {
-                            return Err(anyhow!(
-                                "JUDGE bloqueou o commit por apontar BUG ou SECURITY."
-                            ));
-                        }
-                        record_false_positive_decision(
-                            &false_positive_store_path,
-                            &result,
-                            &filtered_diff,
-                            "judge",
-                        );
-                        commit_provider = judge_provider;
-                        commit_provider_name = judge.provider;
-                        commit_model = judge.model;
-                        review_result = Some(judge_result);
-                        skip_issue_confirmation = true;
+                    ui::warning(
+                        "Code review encontrou problema bloqueante, mas continuando por decisão explícita.",
+                    );
+                    skip_issue_confirmation = true;
+                } else {
+                    let plan = forced_blocking_action
+                        .map(|action| blocking_issue_plan_from_forced_action(&result, action))
+                        .unwrap_or(prompt_blocking_issue_action(&result)?);
+                    if matches!(plan.final_action, BlockingIssueAction::Stop) {
+                        return Err(anyhow!(
+                            "Commit cancelado para investigar problema apontado pela IA."
+                        ));
                     }
+                    let plan_result = apply_blocking_issue_plan(
+                        plan,
+                        BlockingIssuePlanContext {
+                            current_provider: commit_provider.name(),
+                            store_path: &false_positive_store_path,
+                            filtered_diff: &filtered_diff,
+                            review_input: review_input
+                                .as_ref()
+                                .expect("review input must exist when result has issues"),
+                            verbose: options.verbose,
+                            project_type: project_config.project_type.as_deref(),
+                            review_extensions: project_config.code_review.extensions.as_deref(),
+                            provider_factory,
+                        },
+                    )
+                    .map_err(|error| {
+                        anyhow!("Falha ao aplicar decisão dos itens bloqueantes: {error}")
+                    })?;
+                    if let Some(judge_provider) = plan_result.judge_provider {
+                        commit_provider = judge_provider;
+                        commit_provider_name = plan_result
+                            .judge_provider_name
+                            .expect("judge provider name should exist when provider is present");
+                        commit_model = plan_result.judge_model;
+                        review_result = plan_result.judge_review_result;
+                    }
+                    ui::warning(
+                        "Code review encontrou problema bloqueante, mas continuando por decisão explícita.",
+                    );
+                    skip_issue_confirmation = true;
                 }
             }
 
@@ -498,6 +538,7 @@ fn record_false_positive_decision(
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BlockingIssueAction {
     Continue,
@@ -505,11 +546,48 @@ enum BlockingIssueAction {
     Judge,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockingIssueItemAction {
+    FalsePositive,
+    Judge,
+    Skip,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BlockingIssueDecision {
+    issue: review::CodeIssue,
+    action: BlockingIssueItemAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BlockingIssuePlan {
+    final_action: BlockingIssueAction,
+    decisions: Vec<BlockingIssueDecision>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct JudgeConfig {
     provider: String,
     model: Option<String>,
     api_key: Option<String>,
+}
+
+struct BlockingIssuePlanResult {
+    judge_provider: Option<Box<dyn Provider>>,
+    judge_provider_name: Option<String>,
+    judge_model: Option<String>,
+    judge_review_result: Option<CodeReviewResult>,
+}
+
+struct BlockingIssuePlanContext<'a> {
+    current_provider: &'a str,
+    store_path: &'a Path,
+    filtered_diff: &'a str,
+    review_input: &'a ReviewInput,
+    verbose: bool,
+    project_type: Option<&'a str>,
+    review_extensions: Option<&'a [String]>,
+    provider_factory: &'a dyn Fn(&str) -> Result<Box<dyn Provider>>,
 }
 
 fn has_bug_issues(result: &CodeReviewResult) -> bool {
@@ -527,39 +605,251 @@ fn has_blocking_review_issues(result: &CodeReviewResult) -> bool {
     has_bug_issues(result) || has_security_issues(result)
 }
 
-fn prompt_blocking_issue_action(result: &CodeReviewResult) -> Result<BlockingIssueAction> {
-    let label = if has_security_issues(result) {
-        "SECURITY"
+fn blocking_issues(result: &CodeReviewResult) -> Vec<review::CodeIssue> {
+    result
+        .issues
+        .iter()
+        .filter(|issue| review::is_blocking_issue(issue))
+        .cloned()
+        .collect()
+}
+
+fn review_result_from_issues(issues: Vec<review::CodeIssue>) -> CodeReviewResult {
+    if issues.is_empty() {
+        CodeReviewResult::clean()
     } else {
-        "BUG"
-    };
-    ui::section(format!("{label} encontrado no code review"));
+        CodeReviewResult {
+            has_issues: true,
+            summary: format!("Found {} issue(s)", issues.len()),
+            issues,
+        }
+    }
+}
+
+fn prompt_blocking_issue_action(result: &CodeReviewResult) -> Result<BlockingIssuePlan> {
+    let issues = blocking_issues(result);
+    ui::section(format!(
+        "{} item(ns) bloqueante(s) encontrado(s) no code review",
+        issues.len()
+    ));
+    ui::info("Ação por item: [F] falso positivo, [I] JUDGE IA, [P] pular");
+    let mut decisions = Vec::with_capacity(issues.len());
+    for (index, issue) in issues.into_iter().enumerate() {
+        if !issue.suggestion.trim().is_empty() {
+            ui::info(format!("Fix sugerido {}: {}", index + 1, issue.suggestion));
+        }
+        let choice = ui::prompt(&blocking_issue_prompt_label(index, &issue), Some("P"))?;
+        decisions.push(BlockingIssueDecision {
+            issue,
+            action: blocking_issue_item_action_from_choice(&choice),
+        });
+    }
     ui::info("Escolha o que deseja fazer:");
-    ui::info("  1. Continuar o commit (falso positivo)");
+    ui::info("  1. Continuar");
     ui::info("  2. Parar e não commitar para investigar");
-    ui::info("  3. Enviar para a IA local (JUDGE) para correção/verificação de falso positivo");
     let choice = ui::prompt("Opção", Some("2"))?;
-    Ok(blocking_issue_action_from_choice(&choice))
+    Ok(BlockingIssuePlan {
+        final_action: blocking_issue_action_from_choice(&choice),
+        decisions,
+    })
+}
+
+fn blocking_issue_prompt_label(index: usize, issue: &review::CodeIssue) -> String {
+    format!(
+        "[F/I/P] Item {}. [{}] {}",
+        index + 1,
+        issue.issue_type.to_ascii_uppercase(),
+        issue.description
+    )
 }
 
 fn blocking_issue_action_from_choice(choice: &str) -> BlockingIssueAction {
     match choice.trim() {
         "1" => BlockingIssueAction::Continue,
-        "3" => BlockingIssueAction::Judge,
         _ => BlockingIssueAction::Stop,
     }
+}
+
+fn blocking_issue_item_action_from_choice(choice: &str) -> BlockingIssueItemAction {
+    match choice.trim().to_ascii_uppercase().as_str() {
+        "F" => BlockingIssueItemAction::FalsePositive,
+        "I" => BlockingIssueItemAction::Judge,
+        _ => BlockingIssueItemAction::Skip,
+    }
+}
+
+fn blocking_issue_plan_from_forced_action(
+    result: &CodeReviewResult,
+    action: BlockingIssueAction,
+) -> BlockingIssuePlan {
+    let per_item_action = match action {
+        BlockingIssueAction::Continue => BlockingIssueItemAction::FalsePositive,
+        BlockingIssueAction::Judge => BlockingIssueItemAction::Judge,
+        BlockingIssueAction::Stop => BlockingIssueItemAction::Skip,
+    };
+    BlockingIssuePlan {
+        final_action: if matches!(action, BlockingIssueAction::Stop) {
+            BlockingIssueAction::Stop
+        } else {
+            BlockingIssueAction::Continue
+        },
+        decisions: blocking_issues(result)
+            .into_iter()
+            .map(|issue| BlockingIssueDecision {
+                issue,
+                action: per_item_action,
+            })
+            .collect(),
+    }
+}
+
+fn judge_prompt_for_issue(issue: &review::CodeIssue) -> String {
+    format!(
+        r#"You are a second-pass JUDGE for a single blocking code review finding.
+
+Review only the finding below. Do not perform a broad new review and do not raise unrelated issues.
+Use the provided staged context and focused diff only to verify whether this finding is still a real blocking problem.
+
+Original reviewer finding:
+- [{issue_type}] {description} | {suggestion}
+
+Rules:
+1. If this finding is a false positive or should not block the commit, respond with ONLY: OK
+2. If this finding is valid and should still block the commit, respond with ONLY one issue in the exact format:
+- [BUG] <file:line> <problem> | <fix>
+or
+- [SECURITY] <file:line> <problem> | <fix>
+3. Do not include commit messages.
+4. Do not include additional unrelated findings."#,
+        issue_type = issue.issue_type.to_ascii_uppercase(),
+        description = issue.description,
+        suggestion = issue.suggestion
+    )
+}
+
+fn focused_review_input_for_issue(
+    review_input: &ReviewInput,
+    issue: &review::CodeIssue,
+) -> ReviewInput {
+    let path = review::issue_path(issue);
+    let focused_diff = review::diff_section_for_file(&review_input.diff, &path)
+        .unwrap_or_else(|| review_input.diff.clone());
+    let changed_files =
+        if path != "unknown" && review_input.changed_files.iter().any(|file| file == &path) {
+            vec![path.clone()]
+        } else {
+            review_input.changed_files.clone()
+        };
+    let staged_files = if path == "unknown" {
+        review_input.staged_files.clone()
+    } else {
+        let focused = review_input
+            .staged_files
+            .iter()
+            .filter(|file| file.path == path)
+            .cloned()
+            .collect::<Vec<_>>();
+        if focused.is_empty() {
+            review_input.staged_files.clone()
+        } else {
+            focused
+        }
+    };
+    ReviewInput::new(review_input.repo_root.clone(), focused_diff)
+        .with_changed_files(changed_files)
+        .with_staged_files(staged_files)
+        .with_custom_prompt(judge_prompt_for_issue(issue))
+}
+
+fn apply_blocking_issue_plan(
+    plan: BlockingIssuePlan,
+    context: BlockingIssuePlanContext<'_>,
+) -> Result<BlockingIssuePlanResult> {
+    let false_positive_issues = plan
+        .decisions
+        .iter()
+        .filter(|decision| matches!(decision.action, BlockingIssueItemAction::FalsePositive))
+        .map(|decision| decision.issue.clone())
+        .collect::<Vec<_>>();
+    if !false_positive_issues.is_empty() {
+        record_false_positive_decision(
+            context.store_path,
+            &review_result_from_issues(false_positive_issues),
+            context.filtered_diff,
+            "user",
+        );
+    }
+
+    let judge_decisions = plan
+        .decisions
+        .into_iter()
+        .filter(|decision| matches!(decision.action, BlockingIssueItemAction::Judge))
+        .collect::<Vec<_>>();
+
+    let mut outcome = BlockingIssuePlanResult {
+        judge_provider: None,
+        judge_provider_name: None,
+        judge_model: None,
+        judge_review_result: None,
+    };
+
+    if judge_decisions.is_empty() {
+        return Ok(outcome);
+    }
+
+    let judge = selected_judge_config(context.current_provider)?;
+    ui::info(format!("IA: JUDGE ({})", judge.provider));
+
+    for decision in judge_decisions {
+        let focused_input = focused_review_input_for_issue(context.review_input, &decision.issue);
+        let (judge_provider, judge_result) = run_judge_review(
+            &judge,
+            &focused_input,
+            context.verbose,
+            context.project_type,
+            context.review_extensions,
+            context.provider_factory,
+        )?;
+        let judge_result =
+            suppress_known_false_positives(judge_result, &focused_input.diff, context.store_path);
+        let formatted_review = review::format_review_for_display(&judge_result, context.verbose);
+        ui::display_code_review(&formatted_review);
+        if has_blocking_review_issues(&judge_result) {
+            return Err(anyhow!(
+                "JUDGE bloqueou o commit por manter BUG ou SECURITY no item: {}",
+                decision.issue.description
+            ));
+        }
+        record_false_positive_decision(
+            context.store_path,
+            &review_result_from_issues(vec![decision.issue.clone()]),
+            context.filtered_diff,
+            "judge",
+        );
+        outcome.judge_provider = Some(judge_provider);
+        outcome.judge_provider_name = Some(judge.provider.clone());
+        outcome.judge_model = judge.model.clone();
+        outcome.judge_review_result = Some(judge_result);
+    }
+
+    Ok(outcome)
 }
 
 fn selected_judge_config(current_provider: &str) -> Result<JudgeConfig> {
     let configured_provider = env::var("JUDGE_PROVIDER").ok();
     let provider = select_judge_provider(current_provider, configured_provider.as_deref())?;
+    let transport_kind = provider_transport_kind_for_name(&provider)?;
     let model = env::var("JUDGE_MODEL")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .or_else(|| {
-            default_models()
-                .get(provider.as_str())
-                .map(|model| (*model).to_string())
+            matches!(transport_kind, ProviderTransportKind::Api)
+                .then(|| {
+                    default_models()
+                        .get(provider.as_str())
+                        .map(|model| (*model).to_string())
+                })
+                .flatten()
         });
     let api_key = env::var("JUDGE_API_KEY")
         .ok()
@@ -576,11 +866,16 @@ fn select_judge_provider(
     configured_provider: Option<&str>,
 ) -> Result<String> {
     if let Some(provider) = configured_provider.filter(|value| !value.trim().is_empty()) {
+        provider_transport_kind_for_name(provider)?;
         return Ok(provider.to_string());
     }
     let providers = valid_providers()
         .into_iter()
-        .filter(|provider| *provider != current_provider)
+        .filter(|provider| {
+            same_provider_identity(provider, current_provider)
+                .map(|same_identity| !same_identity)
+                .unwrap_or(*provider != current_provider)
+        })
         .collect::<Vec<_>>();
     if providers.is_empty() {
         return Err(anyhow!("Nenhum outro provedor disponível para o JUDGE."));
@@ -603,19 +898,33 @@ fn select_judge_provider(
     }
 }
 
+fn build_review_input(
+    git: &GitClient,
+    filtered_diff: &str,
+    prepared_diff: &str,
+    custom_prompt: &str,
+    staged_file_max_chars: usize,
+) -> Result<ReviewInput> {
+    let changed_files = git::diff_files(filtered_diff);
+    let staged_files = git.staged_review_inputs(&changed_files, staged_file_max_chars)?;
+    Ok(ReviewInput::new(git.repo_path(), prepared_diff.to_string())
+        .with_changed_files(changed_files)
+        .with_staged_files(staged_files)
+        .with_custom_prompt(custom_prompt.to_string()))
+}
+
 fn run_judge_review(
     judge: &JudgeConfig,
-    diff: &str,
-    custom_prompt: Option<&str>,
+    review_input: &ReviewInput,
     verbose: bool,
     project_type: Option<&str>,
     review_extensions: Option<&[String]>,
     provider_factory: &dyn Fn(&str) -> Result<Box<dyn Provider>>,
 ) -> Result<(Box<dyn Provider>, CodeReviewResult)> {
-    let env_overrides = judge_env_overrides(judge);
+    let env_overrides = judge_env_overrides(judge)?;
     let _guard = TempEnv::apply(&env_overrides);
     let provider = provider_factory(&judge.provider)?;
-    let raw = provider.generate_code_review(diff, judge.model.as_deref(), custom_prompt)?;
+    let raw = provider.generate_code_review(review_input, judge.model.as_deref())?;
     let result = review::parse_standalone_review(&raw);
     if verbose {
         let extensions = review_extensions
@@ -626,19 +935,19 @@ fn run_judge_review(
     Ok((provider, result))
 }
 
-fn judge_env_overrides(judge: &JudgeConfig) -> Vec<(String, Option<String>)> {
+fn judge_env_overrides(judge: &JudgeConfig) -> Result<Vec<(String, Option<String>)>> {
     let mut overrides = vec![
         ("AI_PROVIDER".to_string(), Some(judge.provider.clone())),
         ("AI_MODEL".to_string(), judge.model.clone()),
         ("API_KEY".to_string(), judge.api_key.clone()),
     ];
-    if judge.provider == "codex" {
-        overrides.push(("CODEX_MODEL".to_string(), judge.model.clone()));
+    if let Some(model_env_var) = provider_model_env_var(&judge.provider)? {
+        overrides.push((model_env_var.to_string(), judge.model.clone()));
     }
-    if matches!(judge.provider.as_str(), "claude" | "claude-cli") {
-        overrides.push(("CLAUDE_MODEL".to_string(), judge.model.clone()));
+    if let Some(api_key_env_var) = provider_api_key_env_var(&judge.provider)? {
+        overrides.push((api_key_env_var.to_string(), judge.api_key.clone()));
     }
-    overrides
+    Ok(overrides)
 }
 
 struct TempEnv {
@@ -695,6 +1004,8 @@ mod tests {
         provider: String,
         kind: &'static str,
         diff: String,
+        changed_files: Vec<String>,
+        staged_files: Vec<crate::providers::StagedFileReviewInput>,
         model: Option<String>,
         api_key_env: Option<String>,
         ai_model_env: Option<String>,
@@ -727,6 +1038,8 @@ mod tests {
                 provider: self.name.to_string(),
                 kind: "commit",
                 diff: diff.to_string(),
+                changed_files: Vec::new(),
+                staged_files: Vec::new(),
                 model: model.map(ToOwned::to_owned),
                 api_key_env: env::var("API_KEY").ok(),
                 ai_model_env: env::var("AI_MODEL").ok(),
@@ -734,16 +1047,13 @@ mod tests {
             Ok(self.commit_response.clone())
         }
 
-        fn generate_code_review(
-            &self,
-            diff: &str,
-            model: Option<&str>,
-            _custom_prompt: Option<&str>,
-        ) -> Result<String> {
+        fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
             self.calls.lock().unwrap().push(ProviderCall {
                 provider: self.name.to_string(),
                 kind: "review",
-                diff: diff.to_string(),
+                diff: input.diff.clone(),
+                changed_files: input.changed_files.clone(),
+                staged_files: input.staged_files.clone(),
                 model: model.map(ToOwned::to_owned),
                 api_key_env: env::var("API_KEY").ok(),
                 ai_model_env: env::var("AI_MODEL").ok(),
@@ -779,7 +1089,7 @@ mod tests {
     }
 
     #[test]
-    fn judge_blocking_action_maps_three_choices() {
+    fn blocking_issue_action_maps_continue_or_stop() {
         assert_eq!(
             blocking_issue_action_from_choice("1"),
             BlockingIssueAction::Continue
@@ -790,12 +1100,82 @@ mod tests {
         );
         assert_eq!(
             blocking_issue_action_from_choice("3"),
-            BlockingIssueAction::Judge
+            BlockingIssueAction::Stop
         );
         assert_eq!(
             blocking_issue_action_from_choice("invalid"),
             BlockingIssueAction::Stop
         );
+    }
+
+    #[test]
+    fn blocking_issue_prompt_label_places_choice_prefix_at_start() {
+        let issue = review::CodeIssue::new(
+            "bug",
+            "src/app.rs:1 panic on empty input",
+            "Return Result",
+            "error",
+        );
+
+        assert_eq!(
+            blocking_issue_prompt_label(0, &issue),
+            "[F/I/P] Item 1. [BUG] src/app.rs:1 panic on empty input"
+        );
+    }
+
+    #[test]
+    fn blocking_issue_item_action_maps_false_positive_judge_and_skip() {
+        assert_eq!(
+            blocking_issue_item_action_from_choice("F"),
+            BlockingIssueItemAction::FalsePositive
+        );
+        assert_eq!(
+            blocking_issue_item_action_from_choice("i"),
+            BlockingIssueItemAction::Judge
+        );
+        assert_eq!(
+            blocking_issue_item_action_from_choice("P"),
+            BlockingIssueItemAction::Skip
+        );
+        assert_eq!(
+            blocking_issue_item_action_from_choice("invalid"),
+            BlockingIssueItemAction::Skip
+        );
+    }
+
+    #[test]
+    fn forced_blocking_action_expands_to_per_issue_plan() {
+        let result = CodeReviewResult {
+            has_issues: true,
+            issues: vec![
+                review::CodeIssue::new("bug", "src/app.rs:1 issue", "fix it", "error"),
+                review::CodeIssue::new("security", "src/auth.rs:2 issue", "fix it", "error"),
+            ],
+            summary: "Found 2 issue(s)".to_string(),
+        };
+
+        let continue_plan =
+            blocking_issue_plan_from_forced_action(&result, BlockingIssueAction::Continue);
+        assert_eq!(continue_plan.final_action, BlockingIssueAction::Continue);
+        assert!(continue_plan
+            .decisions
+            .iter()
+            .all(|decision| { matches!(decision.action, BlockingIssueItemAction::FalsePositive) }));
+
+        let judge_plan =
+            blocking_issue_plan_from_forced_action(&result, BlockingIssueAction::Judge);
+        assert_eq!(judge_plan.final_action, BlockingIssueAction::Continue);
+        assert!(judge_plan
+            .decisions
+            .iter()
+            .all(|decision| matches!(decision.action, BlockingIssueItemAction::Judge)));
+
+        let stop_plan = blocking_issue_plan_from_forced_action(&result, BlockingIssueAction::Stop);
+        assert_eq!(stop_plan.final_action, BlockingIssueAction::Stop);
+        assert!(stop_plan
+            .decisions
+            .iter()
+            .all(|decision| matches!(decision.action, BlockingIssueItemAction::Skip)));
     }
 
     #[test]
@@ -850,6 +1230,54 @@ mod tests {
     }
 
     #[test]
+    fn judge_provider_selection_accepts_alias_and_validates_provider() {
+        assert_eq!(
+            select_judge_provider("openai", Some("claude-cli")).unwrap(),
+            "claude-cli"
+        );
+        assert!(select_judge_provider("openai", Some("invalid-provider"))
+            .unwrap_err()
+            .to_string()
+            .contains("Provedor não suportado"));
+    }
+
+    #[test]
+    fn judge_env_overrides_use_provider_metadata_for_cli_aliases() {
+        let claude = judge_env_overrides(&JudgeConfig {
+            provider: "claude-cli".to_string(),
+            model: Some("judge-model".to_string()),
+            api_key: Some("judge-key".to_string()),
+        })
+        .unwrap();
+        assert!(claude.iter().any(|(key, value)| {
+            key == "CLAUDE_MODEL" && value.as_deref() == Some("judge-model")
+        }));
+
+        let codex = judge_env_overrides(&JudgeConfig {
+            provider: "codex".to_string(),
+            model: Some("judge-model".to_string()),
+            api_key: Some("judge-key".to_string()),
+        })
+        .unwrap();
+        assert!(codex.iter().any(|(key, value)| {
+            key == "CODEX_MODEL" && value.as_deref() == Some("judge-model")
+        }));
+        assert!(codex.iter().any(|(key, value)| {
+            key == "CODEX_API_KEY" && value.as_deref() == Some("judge-key")
+        }));
+
+        let openai = judge_env_overrides(&JudgeConfig {
+            provider: "openai".to_string(),
+            model: Some("judge-model".to_string()),
+            api_key: Some("judge-key".to_string()),
+        })
+        .unwrap();
+        assert!(!openai
+            .iter()
+            .any(|(key, _)| key == "CODEX_MODEL" || key == "CLAUDE_MODEL"));
+    }
+
+    #[test]
     fn judge_config_keeps_codex_cli_model_unset_without_override() {
         let _env_lock = crate::test_env::ENV_LOCK
             .lock()
@@ -895,8 +1323,7 @@ mod tests {
 
         let (_provider, result) = run_judge_review(
             &judge,
-            "diff-body",
-            Some("prompt"),
+            &ReviewInput::new(".", "diff-body").with_custom_prompt("prompt"),
             true,
             Some("rust"),
             Some(&[".rs".to_string()]),
@@ -912,6 +1339,8 @@ mod tests {
         assert_eq!(calls[0].provider, "openai");
         assert_eq!(calls[0].kind, "review");
         assert_eq!(calls[0].diff, "diff-body");
+        assert!(calls[0].changed_files.is_empty());
+        assert!(calls[0].staged_files.is_empty());
         assert_eq!(calls[0].model.as_deref(), Some("judge-model"));
         assert_eq!(calls[0].api_key_env.as_deref(), Some("judge-key"));
         assert_eq!(calls[0].ai_model_env.as_deref(), Some("judge-model"));
@@ -989,9 +1418,19 @@ code_review:
         assert_eq!(calls.len(), 3);
         assert_eq!(calls[0].provider, "openai");
         assert_eq!(calls[0].kind, "review");
+        assert_eq!(calls[0].changed_files, vec!["src/main.rs"]);
+        assert_eq!(calls[0].staged_files.len(), 1);
+        assert_eq!(calls[0].staged_files[0].path, "src/main.rs");
+        assert_eq!(
+            calls[0].staged_files[0].staged_content.as_deref(),
+            Some("fn main() {}\n")
+        );
         assert_eq!(calls[0].model.as_deref(), Some("main-model"));
         assert_eq!(calls[1].provider, "deepseek");
         assert_eq!(calls[1].kind, "review");
+        assert_eq!(calls[1].changed_files, vec!["src/main.rs"]);
+        assert_eq!(calls[1].staged_files.len(), 1);
+        assert_eq!(calls[1].staged_files[0].path, "src/main.rs");
         assert_eq!(calls[1].model.as_deref(), Some("judge-model"));
         assert_eq!(calls[1].api_key_env.as_deref(), Some("judge-key"));
         assert_eq!(calls[2].provider, "deepseek");
@@ -1003,6 +1442,355 @@ code_review:
         .unwrap();
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].confirmed_by, "judge");
+    }
+
+    #[test]
+    fn focused_review_input_for_issue_keeps_only_relevant_context() {
+        let input = ReviewInput::new(
+            ".",
+            concat!(
+                "diff --git a/src/main.rs b/src/main.rs\n",
+                "--- a/src/main.rs\n",
+                "+++ b/src/main.rs\n",
+                "@@ -1 +1 @@\n",
+                "-old main\n",
+                "+new main\n",
+                "diff --git a/src/lib.rs b/src/lib.rs\n",
+                "--- a/src/lib.rs\n",
+                "+++ b/src/lib.rs\n",
+                "@@ -1 +1 @@\n",
+                "-old lib\n",
+                "+new lib\n",
+            ),
+        )
+        .with_changed_files(vec!["src/main.rs".to_string(), "src/lib.rs".to_string()])
+        .with_staged_files(vec![
+            crate::providers::StagedFileReviewInput {
+                path: "src/main.rs".to_string(),
+                staged_content: Some("fn main() {}\n".to_string()),
+                is_binary: false,
+                is_deleted: false,
+                was_truncated: false,
+            },
+            crate::providers::StagedFileReviewInput {
+                path: "src/lib.rs".to_string(),
+                staged_content: Some("pub fn helper() {}\n".to_string()),
+                is_binary: false,
+                is_deleted: false,
+                was_truncated: false,
+            },
+        ])
+        .with_custom_prompt("prompt");
+        let issue = review::CodeIssue::new("bug", "src/main.rs:1 panic", "Return Result", "error");
+
+        let focused = focused_review_input_for_issue(&input, &issue);
+
+        assert_eq!(focused.changed_files, vec!["src/main.rs"]);
+        assert_eq!(focused.staged_files.len(), 1);
+        assert_eq!(focused.staged_files[0].path, "src/main.rs");
+        assert!(focused.diff.contains("src/main.rs"));
+        assert!(!focused.diff.contains("src/lib.rs"));
+        assert!(focused
+            .custom_prompt
+            .as_deref()
+            .is_some_and(|prompt| prompt.contains("Original reviewer finding")));
+    }
+
+    #[test]
+    fn apply_blocking_issue_plan_allows_continue_when_all_items_are_skipped() {
+        let store = tempfile::tempdir().unwrap();
+        let store_path = store.path().join(review::FALSE_POSITIVE_STORE_NAME);
+        let diff = "diff --git a/src/main.rs b/src/main.rs\n--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1 +1 @@\n-old\n+new\n";
+        let review_input =
+            ReviewInput::new(".", diff).with_changed_files(vec!["src/main.rs".to_string()]);
+        let plan = BlockingIssuePlan {
+            final_action: BlockingIssueAction::Continue,
+            decisions: vec![BlockingIssueDecision {
+                issue: review::CodeIssue::new("bug", "src/main.rs:1 issue", "fix it", "error"),
+                action: BlockingIssueItemAction::Skip,
+            }],
+        };
+
+        let outcome = apply_blocking_issue_plan(
+            plan,
+            BlockingIssuePlanContext {
+                current_provider: "openai",
+                store_path: &store_path,
+                filtered_diff: diff,
+                review_input: &review_input,
+                verbose: false,
+                project_type: Some("rust"),
+                review_extensions: Some(&[".rs".to_string()]),
+                provider_factory: &|provider| Err(anyhow!("unexpected provider {provider}")),
+            },
+        )
+        .unwrap();
+
+        assert!(outcome.judge_provider.is_none());
+        assert!(review::load_false_positive_records(&store_path)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn apply_blocking_issue_plan_records_only_false_positive_items() {
+        let store = tempfile::tempdir().unwrap();
+        let store_path = store.path().join(review::FALSE_POSITIVE_STORE_NAME);
+        let diff = concat!(
+            "diff --git a/src/main.rs b/src/main.rs\n",
+            "--- a/src/main.rs\n",
+            "+++ b/src/main.rs\n",
+            "@@ -1 +1 @@\n",
+            "-old\n",
+            "+new\n",
+            "diff --git a/src/auth.rs b/src/auth.rs\n",
+            "--- a/src/auth.rs\n",
+            "+++ b/src/auth.rs\n",
+            "@@ -1 +1 @@\n",
+            "-bad\n",
+            "+good\n",
+        );
+        let review_input = ReviewInput::new(".", diff)
+            .with_changed_files(vec!["src/main.rs".to_string(), "src/auth.rs".to_string()]);
+        let plan = BlockingIssuePlan {
+            final_action: BlockingIssueAction::Continue,
+            decisions: vec![
+                BlockingIssueDecision {
+                    issue: review::CodeIssue::new(
+                        "bug",
+                        "src/main.rs:1 false alarm",
+                        "leave as-is",
+                        "error",
+                    ),
+                    action: BlockingIssueItemAction::FalsePositive,
+                },
+                BlockingIssueDecision {
+                    issue: review::CodeIssue::new(
+                        "security",
+                        "src/auth.rs:2 inspect later",
+                        "investigate",
+                        "error",
+                    ),
+                    action: BlockingIssueItemAction::Skip,
+                },
+            ],
+        };
+
+        let outcome = apply_blocking_issue_plan(
+            plan,
+            BlockingIssuePlanContext {
+                current_provider: "openai",
+                store_path: &store_path,
+                filtered_diff: diff,
+                review_input: &review_input,
+                verbose: false,
+                project_type: Some("rust"),
+                review_extensions: Some(&[".rs".to_string()]),
+                provider_factory: &|provider| Err(anyhow!("unexpected provider {provider}")),
+            },
+        )
+        .unwrap();
+
+        let records = review::load_false_positive_records(&store_path).unwrap();
+
+        assert!(outcome.judge_provider.is_none());
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].path, "src/main.rs");
+        assert_eq!(records[0].confirmed_by, "user");
+    }
+
+    #[test]
+    fn apply_blocking_issue_plan_runs_judge_with_single_issue_context() {
+        let _env_lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _guard = TempEnv::apply(&[
+            ("JUDGE_PROVIDER".to_string(), Some("openai".to_string())),
+            ("JUDGE_MODEL".to_string(), Some("judge-model".to_string())),
+            ("JUDGE_API_KEY".to_string(), Some("judge-key".to_string())),
+        ]);
+        let store = tempfile::tempdir().unwrap();
+        let store_path = store.path().join(review::FALSE_POSITIVE_STORE_NAME);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let calls_for_factory = calls.clone();
+        let diff = concat!(
+            "diff --git a/src/main.rs b/src/main.rs\n",
+            "--- a/src/main.rs\n",
+            "+++ b/src/main.rs\n",
+            "@@ -1 +1 @@\n",
+            "-old main\n",
+            "+new main\n",
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+            "--- a/src/lib.rs\n",
+            "+++ b/src/lib.rs\n",
+            "@@ -1 +1 @@\n",
+            "-old lib\n",
+            "+new lib\n",
+        );
+        let review_input = ReviewInput::new(".", diff)
+            .with_changed_files(vec!["src/main.rs".to_string(), "src/lib.rs".to_string()])
+            .with_staged_files(vec![
+                crate::providers::StagedFileReviewInput {
+                    path: "src/main.rs".to_string(),
+                    staged_content: Some("fn main() {}\n".to_string()),
+                    is_binary: false,
+                    is_deleted: false,
+                    was_truncated: false,
+                },
+                crate::providers::StagedFileReviewInput {
+                    path: "src/lib.rs".to_string(),
+                    staged_content: Some("pub fn helper() {}\n".to_string()),
+                    is_binary: false,
+                    is_deleted: false,
+                    was_truncated: false,
+                },
+            ]);
+        let plan = BlockingIssuePlan {
+            final_action: BlockingIssueAction::Continue,
+            decisions: vec![BlockingIssueDecision {
+                issue: review::CodeIssue::new(
+                    "bug",
+                    "src/main.rs:1 panic on empty input",
+                    "Return Result",
+                    "error",
+                ),
+                action: BlockingIssueItemAction::Judge,
+            }],
+        };
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            assert_eq!(provider, "openai");
+            Ok(Box::new(FakeProvider {
+                name: "openai",
+                review_response: "OK".to_string(),
+                commit_response: "feat: unused".to_string(),
+                calls: calls_for_factory.clone(),
+            }))
+        };
+
+        let outcome = apply_blocking_issue_plan(
+            plan,
+            BlockingIssuePlanContext {
+                current_provider: "deepseek",
+                store_path: &store_path,
+                filtered_diff: diff,
+                review_input: &review_input,
+                verbose: false,
+                project_type: Some("rust"),
+                review_extensions: Some(&[".rs".to_string()]),
+                provider_factory: &factory,
+            },
+        )
+        .unwrap();
+
+        let records = review::load_false_positive_records(&store_path).unwrap();
+        let calls = calls.lock().unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].confirmed_by, "judge");
+        assert_eq!(outcome.judge_provider_name.as_deref(), Some("openai"));
+        assert_eq!(outcome.judge_model.as_deref(), Some("judge-model"));
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].changed_files, vec!["src/main.rs"]);
+        assert_eq!(calls[0].staged_files.len(), 1);
+        assert_eq!(calls[0].staged_files[0].path, "src/main.rs");
+        assert!(calls[0].diff.contains("src/main.rs"));
+        assert!(!calls[0].diff.contains("src/lib.rs"));
+    }
+
+    #[test]
+    fn build_review_input_prefers_staged_snapshot_over_working_tree() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        fs::write(repo.path().join("src/main.rs"), "fn staged() {}\n").unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+        fs::write(repo.path().join("src/main.rs"), "fn working_tree() {}\n").unwrap();
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 10_000, 9_000, "PT-BR")
+            .unwrap();
+        let input = build_review_input(&git_client, &diff, &diff, "prompt", 200).unwrap();
+
+        assert_eq!(input.changed_files, vec!["src/main.rs"]);
+        assert_eq!(input.staged_files.len(), 1);
+        assert_eq!(input.staged_files[0].path, "src/main.rs");
+        assert_eq!(
+            input.staged_files[0].staged_content.as_deref(),
+            Some("fn staged() {}\n")
+        );
+        assert!(!input.staged_files[0].was_truncated);
+        assert!(std::fs::read_to_string(repo.path().join("src/main.rs"))
+            .unwrap()
+            .contains("working_tree"));
+    }
+
+    #[test]
+    fn build_review_input_carries_deleted_binary_and_truncated_metadata() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+
+        fs::write(repo.path().join("gone.rs"), "fn gone() {}\n").unwrap();
+        git(repo.path(), &["add", "--", "gone.rs"]);
+        git(repo.path(), &["commit", "-m", "init"]);
+
+        std::fs::remove_file(repo.path().join("gone.rs")).unwrap();
+        git(repo.path(), &["rm", "--", "gone.rs"]);
+
+        fs::write(repo.path().join("blob.bin"), [0_u8, 159, 146, 150]).unwrap();
+        git(repo.path(), &["add", "--", "blob.bin"]);
+
+        fs::write(
+            repo.path().join("large.rs"),
+            "fn main() {\n    println!(\"hello\");\n    println!(\"world\");\n}\n",
+        )
+        .unwrap();
+        git(repo.path(), &["add", "--", "large.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 10_000, 9_000, "PT-BR")
+            .unwrap();
+        let input = build_review_input(&git_client, &diff, &diff, "prompt", 40).unwrap();
+
+        let gone = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "gone.rs")
+            .unwrap();
+        assert!(gone.is_deleted);
+        assert!(!gone.is_binary);
+        assert!(gone.staged_content.is_none());
+
+        let blob = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "blob.bin")
+            .unwrap();
+        assert!(blob.is_binary);
+        assert!(!blob.is_deleted);
+        assert!(blob.staged_content.is_none());
+
+        let large = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "large.rs")
+            .unwrap();
+        assert!(large.was_truncated);
+        assert!(large
+            .staged_content
+            .as_deref()
+            .is_some_and(|content| content.contains("truncated by Seshat")));
     }
 
     #[test]
@@ -1067,6 +1855,77 @@ code_review:
         assert_eq!(calls.iter().filter(|call| call.kind == "commit").count(), 2);
     }
 
+    #[test]
+    fn file_review_mode_writes_markdown_reports_and_skips_item_flow() {
+        let repo = staged_rust_repo(
+            "\
+project_type: rust
+commit:
+  provider: openai
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: true
+  mode: files
+",
+        );
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let calls_for_factory = calls.clone();
+        let factory = move |provider: &str| -> Result<Box<dyn Provider>> {
+            assert_eq!(provider, "openai");
+            Ok(Box::new(FakeProvider {
+                name: "openai",
+                review_response: "- [BUG] src/main.rs:1 panic on empty input | Return Result"
+                    .to_string(),
+                commit_response: "feat: persist review files".to_string(),
+                calls: calls_for_factory.clone(),
+            }))
+        };
+        let options = CommitOptions {
+            repo_path: repo.path().to_path_buf(),
+            provider: "openai".to_string(),
+            model: None,
+            verbose: false,
+            skip_confirmation: true,
+            paths: None,
+            check: None,
+            code_review: false,
+            no_review: false,
+            no_check: true,
+            max_diff_size: 10_000,
+            warn_diff_size: 9_000,
+            language: "PT-BR".to_string(),
+        };
+
+        let (message, review) = commit_with_ai_with_provider_factory(&options, &factory).unwrap();
+
+        assert_eq!(message, "feat: persist review files");
+        assert!(review.is_some_and(|value| value.has_issues));
+        let branch_name = GitClient::new(repo.path()).current_branch_name().unwrap();
+        let report_path = repo
+            .path()
+            .join(".seshat")
+            .join("code_review")
+            .join(branch_name.replace(['/', '\\', ':'], "__"))
+            .join("src")
+            .join("main.rs.md");
+        let content = fs::read_to_string(report_path).unwrap();
+        assert_eq!(
+            content,
+            concat!(
+                "1. [BUG]:\n",
+                "src/main.rs:1: panic on empty input\n",
+                "Ação: <F | P>\n"
+            )
+        );
+        assert!(
+            review::load_false_positive_records(false_positive_store_path(&GitClient::new(
+                repo.path()
+            ),))
+            .unwrap()
+            .is_empty()
+        );
+    }
     #[test]
     fn judge_no_review_flag_disables_configured_review() {
         let repo = staged_rust_repo(
@@ -1137,6 +1996,8 @@ code_review:
 
     fn git(repo: &std::path::Path, args: &[&str]) {
         let output = Command::new("git")
+            .arg("-c")
+            .arg("core.hooksPath=/dev/null")
             .arg("-C")
             .arg(repo)
             .args(args)
