@@ -5,6 +5,7 @@ pub mod core;
 pub mod flow;
 pub mod git;
 pub mod json_output;
+pub mod profiles;
 pub mod providers;
 pub mod review;
 pub mod tooling;
