@@ -56,6 +56,43 @@ impl CloakProfileDiscovery {
             .iter()
             .find(|profile| profile.name == name)
     }
+
+    pub fn contains_profile(&self, name: &str) -> bool {
+        self.installed_profile(name).is_some()
+    }
+}
+
+pub fn resolve_profile_precedence(
+    base_path: impl AsRef<Path>,
+    cli_profile: Option<&str>,
+    environment_profile: Option<&str>,
+    project_profile: Option<&str>,
+    global_profile: Option<&str>,
+    cloak: Option<&CloakProfileDiscovery>,
+) -> Option<ResolvedProfile> {
+    if let Some(profile) = non_empty_profile(cli_profile) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::CliFlag));
+    }
+    if let Some(profile) = non_empty_profile(environment_profile) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::Environment));
+    }
+    if let Some(profile) = non_empty_profile(project_profile) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::ProjectConfig));
+    }
+    if let Some(profile) = find_directory_profile_binding(base_path, cloak) {
+        return Some(ResolvedProfile::new(
+            profile,
+            ProfileSource::DirectoryBinding,
+        ));
+    }
+    if let Some(profile) = cloak
+        .and_then(|discovery| non_empty_profile(discovery.default_profile.as_deref()))
+        .filter(|profile| cloak_profile_exists(cloak, profile))
+    {
+        return Some(ResolvedProfile::new(profile, ProfileSource::CloakDefault));
+    }
+    non_empty_profile(global_profile)
+        .map(|profile| ResolvedProfile::new(profile, ProfileSource::GlobalConfig))
 }
 
 pub fn discover_cloak_profiles() -> Result<Option<CloakProfileDiscovery>> {
@@ -87,6 +124,68 @@ fn current_home_dir() -> Option<PathBuf> {
     env::var_os("HOME")
         .map(PathBuf::from)
         .or_else(|| env::var_os("USERPROFILE").map(PathBuf::from))
+}
+
+fn non_empty_profile(value: Option<&str>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn find_directory_profile_binding(
+    base_path: impl AsRef<Path>,
+    cloak: Option<&CloakProfileDiscovery>,
+) -> Option<String> {
+    let mut current = base_path.as_ref().canonicalize().ok().or_else(|| {
+        let path = base_path.as_ref();
+        if path.exists() {
+            Some(path.to_path_buf())
+        } else {
+            path.parent().map(Path::to_path_buf)
+        }
+    });
+
+    while let Some(path) = current {
+        let binding_path = path.join(".cloak");
+        if let Ok(content) = fs::read_to_string(&binding_path) {
+            if let Some(profile) = parse_profile_binding(&content).filter(|profile| {
+                cloak
+                    .as_ref()
+                    .map(|discovery| discovery.contains_profile(profile))
+                    .unwrap_or(true)
+            }) {
+                return Some(profile);
+            }
+        }
+        current = path.parent().map(Path::to_path_buf);
+    }
+    None
+}
+
+fn parse_profile_binding(content: &str) -> Option<String> {
+    for raw_line in content.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = line.split_once('=')?;
+        if key.trim() != "profile" {
+            continue;
+        }
+        return parse_toml_string(value);
+    }
+    None
+}
+
+fn cloak_profile_exists(cloak: Option<&CloakProfileDiscovery>, profile: &str) -> bool {
+    cloak
+        .map(|discovery| discovery.contains_profile(profile))
+        .unwrap_or(false)
 }
 
 fn read_installed_profiles(profiles_dir: &Path) -> Result<Vec<CloakInstalledProfile>> {
@@ -241,6 +340,188 @@ binary = "codex"
         assert_eq!(
             discovery.root_dir,
             temp.path().join(".config").join("cloak")
+        );
+    }
+
+    #[test]
+    fn resolution_uses_directory_binding_before_cloak_default() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("workspace").join("project");
+        fs::create_dir_all(&project_root).unwrap();
+        fs::write(project_root.join(".cloak"), "profile = \"samwise\"").unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("samwise").join("codex")).unwrap();
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        let resolved =
+            resolve_profile_precedence(&project_root, None, None, None, None, Some(&discovery))
+                .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedProfile::new("samwise", ProfileSource::DirectoryBinding)
+        );
+    }
+
+    #[test]
+    fn resolution_falls_back_to_cloak_default_when_binding_is_missing() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("workspace").join("project");
+        fs::create_dir_all(&project_root).unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        let resolved =
+            resolve_profile_precedence(&project_root, None, None, None, None, Some(&discovery))
+                .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedProfile::new("amjr", ProfileSource::CloakDefault)
+        );
+    }
+
+    #[test]
+    fn resolution_uses_closest_directory_binding() {
+        let temp = tempdir().unwrap();
+        let workspace = temp.path().join("workspace");
+        let project_root = workspace.join("apps").join("project");
+        fs::create_dir_all(&project_root).unwrap();
+        fs::write(workspace.join(".cloak"), "profile = \"amjr\"").unwrap();
+        fs::write(project_root.join(".cloak"), "profile = \"samwise\"").unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::create_dir_all(profiles_dir.join("samwise").join("codex")).unwrap();
+
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        let resolved = resolve_profile_precedence(
+            project_root.join("src"),
+            None,
+            None,
+            None,
+            None,
+            Some(&discovery),
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedProfile::new("samwise", ProfileSource::DirectoryBinding)
+        );
+    }
+
+    #[test]
+    fn resolution_ignores_unknown_directory_binding_and_falls_back() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("workspace").join("project");
+        fs::create_dir_all(&project_root).unwrap();
+        fs::write(project_root.join(".cloak"), "profile = \"missing\"").unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        let resolved = resolve_profile_precedence(
+            &project_root,
+            None,
+            None,
+            None,
+            Some("global-profile"),
+            Some(&discovery),
+        )
+        .unwrap();
+
+        assert_eq!(
+            resolved,
+            ResolvedProfile::new("amjr", ProfileSource::CloakDefault)
+        );
+    }
+
+    #[test]
+    fn resolution_preserves_explicit_precedence_over_cloak_sources() {
+        let temp = tempdir().unwrap();
+        let project_root = temp.path().join("workspace").join("project");
+        fs::create_dir_all(&project_root).unwrap();
+        fs::write(project_root.join(".cloak"), "profile = \"samwise\"").unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("samwise").join("codex")).unwrap();
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+
+        let cli = resolve_profile_precedence(
+            &project_root,
+            Some("cli-profile"),
+            Some("env-profile"),
+            Some("project-profile"),
+            Some("global-profile"),
+            Some(&discovery),
+        )
+        .unwrap();
+        assert_eq!(
+            cli,
+            ResolvedProfile::new("cli-profile", ProfileSource::CliFlag)
+        );
+
+        let env = resolve_profile_precedence(
+            &project_root,
+            None,
+            Some("env-profile"),
+            Some("project-profile"),
+            Some("global-profile"),
+            Some(&discovery),
+        )
+        .unwrap();
+        assert_eq!(
+            env,
+            ResolvedProfile::new("env-profile", ProfileSource::Environment)
+        );
+
+        let project = resolve_profile_precedence(
+            &project_root,
+            None,
+            None,
+            Some("project-profile"),
+            Some("global-profile"),
+            Some(&discovery),
+        )
+        .unwrap();
+        assert_eq!(
+            project,
+            ResolvedProfile::new("project-profile", ProfileSource::ProjectConfig)
         );
     }
 }
