@@ -120,7 +120,7 @@ impl LanguageStrategy for TypeScriptStrategy {
             let mut tool = tool_from_default(&defaults, "jest", "test", project_config);
             if scripts.is_some_and(|scripts| scripts.contains_key("test")) {
                 tool.command = vec!["npm".into(), "run".into(), "test".into()];
-                tool.pass_files = false;
+                tool.pass_files = true;
             }
             apply_overrides(&mut tool, project_config);
             config.tools.insert("test".to_string(), tool);
@@ -128,7 +128,7 @@ impl LanguageStrategy for TypeScriptStrategy {
             let mut tool = tool_from_default(&defaults, "vitest", "test", project_config);
             if scripts.is_some_and(|scripts| scripts.contains_key("test")) {
                 tool.command = vec!["npm".into(), "run".into(), "test".into()];
-                tool.pass_files = false;
+                tool.pass_files = true;
             }
             apply_overrides(&mut tool, project_config);
             config.tools.insert("test".to_string(), tool);
