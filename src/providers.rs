@@ -16,6 +16,8 @@ use tempfile::TempDir;
 const DEFAULT_TIMEOUT_SECONDS: u64 = 60;
 const DEFAULT_CODE_REVIEW_TIMEOUT_SECONDS: u64 = 180;
 const CLI_TIMEOUT_SECONDS: u64 = 300;
+const REVIEW_CONTEXT_MAX_FILES: usize = 6;
+const REVIEW_CONTEXT_MAX_CHARS: usize = 12_000;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HttpJsonRequest {
@@ -130,18 +132,155 @@ pub trait Provider {
         model: Option<&str>,
         code_review: bool,
     ) -> Result<String>;
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String>;
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderTransportKind {
     Api,
     Cli,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderIdentity {
+    OpenAi,
+    CodexApi,
+    Deepseek,
+    ClaudeApi,
+    ClaudeCli,
+    Gemini,
+    Zai,
+    Ollama,
+    CodexCli,
+}
+
+impl ProviderIdentity {
+    fn model_env_var(self) -> Option<&'static str> {
+        match self {
+            Self::CodexCli => Some("CODEX_MODEL"),
+            Self::ClaudeCli => Some("CLAUDE_MODEL"),
+            _ => None,
+        }
+    }
+
+    fn api_key_env_var(self) -> Option<&'static str> {
+        match self {
+            Self::CodexCli => Some("CODEX_API_KEY"),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ProviderMetadata {
+    identity: ProviderIdentity,
+    transport_kind: ProviderTransportKind,
+}
+
+fn provider_metadata(provider_name: &str) -> Result<ProviderMetadata> {
+    match provider_name {
+        "openai" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::OpenAi,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "codex-api" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::CodexApi,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "deepseek" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::Deepseek,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "claude-api" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::ClaudeApi,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "claude" | "claude-cli" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::ClaudeCli,
+            transport_kind: ProviderTransportKind::Cli,
+        }),
+        "gemini" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::Gemini,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "zai" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::Zai,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "ollama" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::Ollama,
+            transport_kind: ProviderTransportKind::Api,
+        }),
+        "codex" => Ok(ProviderMetadata {
+            identity: ProviderIdentity::CodexCli,
+            transport_kind: ProviderTransportKind::Cli,
+        }),
+        _ => Err(anyhow!("Provedor não suportado: {provider_name}")),
+    }
+}
+
+pub(crate) fn provider_transport_kind_for_name(
+    provider_name: &str,
+) -> Result<ProviderTransportKind> {
+    Ok(provider_metadata(provider_name)?.transport_kind)
+}
+
+pub(crate) fn provider_model_env_var(provider_name: &str) -> Result<Option<&'static str>> {
+    Ok(provider_metadata(provider_name)?.identity.model_env_var())
+}
+
+pub(crate) fn provider_api_key_env_var(provider_name: &str) -> Result<Option<&'static str>> {
+    Ok(provider_metadata(provider_name)?.identity.api_key_env_var())
+}
+
+pub(crate) fn same_provider_identity(left: &str, right: &str) -> Result<bool> {
+    Ok(provider_metadata(left)?.identity == provider_metadata(right)?.identity)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagedFileReviewInput {
+    pub path: String,
+    pub staged_content: Option<String>,
+    pub is_binary: bool,
+    pub is_deleted: bool,
+    pub was_truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReviewInput {
+    pub repo_root: PathBuf,
+    pub diff: String,
+    pub changed_files: Vec<String>,
+    pub staged_files: Vec<StagedFileReviewInput>,
+    pub custom_prompt: Option<String>,
+}
+
+impl ReviewInput {
+    pub fn new(repo_root: impl Into<PathBuf>, diff: impl Into<String>) -> Self {
+        let diff = diff.into();
+        Self {
+            repo_root: repo_root.into(),
+            changed_files: crate::git::diff_files(&diff),
+            diff,
+            staged_files: Vec::new(),
+            custom_prompt: None,
+        }
+    }
+
+    pub fn with_changed_files(mut self, changed_files: Vec<String>) -> Self {
+        self.changed_files = changed_files;
+        self
+    }
+
+    pub fn with_staged_files(mut self, staged_files: Vec<StagedFileReviewInput>) -> Self {
+        self.staged_files = staged_files;
+        self
+    }
+
+    pub fn with_custom_prompt(mut self, custom_prompt: impl Into<String>) -> Self {
+        self.custom_prompt = Some(custom_prompt.into());
+        self
+    }
 }
 
 fn language() -> String {
@@ -157,7 +296,103 @@ fn system_prompt(code_review: bool) -> String {
 }
 
 fn review_prompt(custom_prompt: Option<&str>) -> String {
-    custom_prompt.unwrap_or(CODE_REVIEW_PROMPT).to_string()
+    let mut prompt = custom_prompt
+        .unwrap_or(CODE_REVIEW_PROMPT)
+        .trim()
+        .to_string();
+    prompt.push_str(&format!(
+        "\n\nCRITICAL LANGUAGE REQUIREMENT:\nReturn the entire code review in {}. Do not write the review in another language. Keep the structural TYPE markers exactly as specified in English: SMELL, BUG, STYLE, PERF, SECURITY.",
+        language()
+    ));
+    prompt
+}
+
+fn review_user_content(input: &ReviewInput) -> String {
+    let mut content = format!("Primary diff to review:\n{}", input.diff);
+    if let Some(context) = staged_review_context(&input.staged_files) {
+        content.push_str(
+            "\n\nAdditional staged file context:\nUse this only to disambiguate the diff above. The diff remains the source of what changed.\n",
+        );
+        content.push_str(&context);
+    }
+    content
+}
+
+fn staged_review_context(staged_files: &[StagedFileReviewInput]) -> Option<String> {
+    if staged_files.is_empty() {
+        return None;
+    }
+
+    let mut sections = Vec::new();
+    let mut used_chars = 0usize;
+    let mut omitted_files = staged_files.len().saturating_sub(REVIEW_CONTEXT_MAX_FILES);
+
+    for file in staged_files.iter().take(REVIEW_CONTEXT_MAX_FILES) {
+        let mut section = match (
+            file.is_deleted,
+            file.is_binary,
+            file.staged_content.as_deref(),
+            file.was_truncated,
+        ) {
+            (true, _, _, _) => format!("File: {}\nStatus: deleted in staged changes", file.path),
+            (false, true, _, _) => format!("File: {}\nStatus: binary staged file", file.path),
+            (false, false, Some(content), was_truncated) => {
+                let status = if was_truncated {
+                    "text staged snapshot (truncated)"
+                } else {
+                    "text staged snapshot"
+                };
+                format!("File: {}\nStatus: {status}\n{content}", file.path)
+            }
+            (false, false, None, _) => continue,
+        };
+
+        if !section.ends_with('\n') {
+            section.push('\n');
+        }
+
+        let section_len = section.chars().count();
+        if used_chars + section_len > REVIEW_CONTEXT_MAX_CHARS {
+            omitted_files += 1;
+            continue;
+        }
+
+        used_chars += section_len;
+        sections.push(section);
+    }
+
+    if sections.is_empty() {
+        return None;
+    }
+
+    let mut context = sections.join("\n");
+    if omitted_files > 0 {
+        context.push_str(&format!(
+            "\nAdditional staged files omitted for brevity: {omitted_files}\n"
+        ));
+    }
+    Some(context)
+}
+
+fn cli_review_prompt(
+    cli_name: &str,
+    system_prompt: &str,
+    input: &ReviewInput,
+    task: &str,
+) -> String {
+    let changed_files = if input.changed_files.is_empty() {
+        "(none)".to_string()
+    } else {
+        input.changed_files.join("\n")
+    };
+    let guardrails = format!(
+        "You are being called by Seshat through {cli_name}. Work non-interactively. You may inspect repository files and run read-only local inspection commands when necessary to reduce false positives. Never modify files, create commits, use the network, or perform destructive actions. The diff below defines what changed. The staged snapshot is the source of truth over files on disk whenever they differ."
+    );
+    format!(
+        "{system_prompt}\n\n{guardrails}\n\nRepository root:\n{}\n\nChanged files:\n{changed_files}\n\nReview input:\n{}\n\n{task}",
+        input.repo_root.display(),
+        review_user_content(input),
+    )
 }
 
 fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
@@ -350,16 +585,17 @@ impl Provider for OpenAICompatibleProvider {
         })
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
         let timeout = http_timeout(true)?;
+        let review_content = review_user_content(input);
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt), timeout)
-                .map(|content| clean_review_response(Some(&content)))
+            self.request(
+                &review_content,
+                model,
+                review_prompt(input.custom_prompt.as_deref()),
+                timeout,
+            )
+            .map(|content| clean_review_response(Some(&content)))
         })
     }
 }
@@ -452,16 +688,18 @@ impl Provider for AnthropicProvider {
         })
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
         let timeout = http_timeout(true)?;
+        let review_content = review_user_content(input);
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt), 2000, timeout)
-                .map(|content| clean_review_response(Some(&content)))
+            self.request(
+                &review_content,
+                model,
+                review_prompt(input.custom_prompt.as_deref()),
+                2000,
+                timeout,
+            )
+            .map(|content| clean_review_response(Some(&content)))
         })
     }
 }
@@ -552,16 +790,17 @@ impl Provider for GeminiProvider {
         })
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
         let timeout = http_timeout(true)?;
+        let review_content = review_user_content(input);
         retry(|| {
-            self.request(diff, model, review_prompt(custom_prompt), timeout)
-                .map(|content| clean_review_response(Some(&content)))
+            self.request(
+                &review_content,
+                model,
+                review_prompt(input.custom_prompt.as_deref()),
+                timeout,
+            )
+            .map(|content| clean_review_response(Some(&content)))
         })
     }
 }
@@ -656,18 +895,14 @@ impl Provider for OllamaProvider {
         })
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
         let timeout = http_timeout(true)?;
+        let review_content = review_user_content(input);
         retry(|| {
             self.request(
-                diff,
+                &review_content,
                 model,
-                review_prompt(custom_prompt),
+                review_prompt(input.custom_prompt.as_deref()),
                 "Code Review",
                 timeout,
             )
@@ -708,6 +943,8 @@ impl CodexCliProvider {
         prompt: &str,
         requested_model: Option<&str>,
         timeout: Duration,
+        workspace_root: Option<&Path>,
+        skip_git_repo_check: bool,
     ) -> Result<String> {
         validate_executable(
             &self.codex_bin,
@@ -715,8 +952,13 @@ impl CodexCliProvider {
         )?;
         let temp_dir = TempDir::new()?;
         let output_path = temp_dir.path().join("last-message.txt");
-        let args = self.build_args(&output_path, requested_model);
-        let completed = run_cli(&self.codex_bin, &args, prompt, timeout, None)?;
+        let args = self.build_args(
+            &output_path,
+            requested_model,
+            workspace_root,
+            skip_git_repo_check,
+        );
+        let completed = run_cli(&self.codex_bin, &args, prompt, timeout, workspace_root)?;
         if !completed.status.success() {
             return Err(anyhow!("Codex CLI falhou: {}", tail_error(&completed)));
         }
@@ -735,7 +977,13 @@ impl CodexCliProvider {
         }
     }
 
-    fn build_args(&self, output_path: &Path, requested_model: Option<&str>) -> Vec<OsString> {
+    fn build_args(
+        &self,
+        output_path: &Path,
+        requested_model: Option<&str>,
+        workspace_root: Option<&Path>,
+        skip_git_repo_check: bool,
+    ) -> Vec<OsString> {
         let model = self
             .model
             .as_deref()
@@ -743,8 +991,6 @@ impl CodexCliProvider {
             .or_else(|| requested_model.and_then(codex_compatible_model))
             .unwrap_or(DEFAULT_CODEX_MODEL);
         let mut args: Vec<OsString> = vec![
-            "--ask-for-approval".into(),
-            "never".into(),
             "-c".into(),
             "mcp_servers={}".into(),
             "--model".into(),
@@ -760,14 +1006,14 @@ impl CodexCliProvider {
             "read-only".into(),
             "--color".into(),
             "never".into(),
-            "-C".into(),
-            env::current_dir()
-                .unwrap_or_else(|_| PathBuf::from("."))
-                .into_os_string(),
-            "-o".into(),
-            output_path.as_os_str().into(),
-            "-".into(),
         ]);
+        if skip_git_repo_check {
+            args.push("--skip-git-repo-check".into());
+        }
+        if let Some(workspace_root) = workspace_root {
+            args.extend(["-C".into(), workspace_root.as_os_str().into()]);
+        }
+        args.extend(["-o".into(), output_path.as_os_str().into(), "-".into()]);
         args
     }
 }
@@ -819,23 +1065,25 @@ impl Provider for CodexCliProvider {
             diff,
             "Return only the final Conventional Commit message.",
         );
-        self.run_codex(&prompt, model, self.timeout)
+        self.run_codex(&prompt, model, self.timeout, None, true)
             .map(|content| clean_provider_response(Some(&content)))
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
-        let prompt = self.build_prompt(
-            &review_prompt(custom_prompt),
-            diff,
+    fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
+        let prompt = cli_review_prompt(
+            "Codex CLI",
+            &review_prompt(input.custom_prompt.as_deref()),
+            input,
             "Return only the code review in the requested format.",
         );
-        self.run_codex(&prompt, model, code_review_timeout(self.timeout)?)
-            .map(|content| clean_review_response(Some(&content)))
+        self.run_codex(
+            &prompt,
+            model,
+            code_review_timeout(self.timeout)?,
+            Some(input.repo_root.as_path()),
+            false,
+        )
+        .map(|content| clean_review_response(Some(&content)))
     }
 }
 
@@ -906,8 +1154,6 @@ impl ClaudeCliProvider {
             "--no-session-persistence".into(),
             "--permission-mode".into(),
             "dontAsk".into(),
-            "--tools".into(),
-            "".into(),
             "--disable-slash-commands".into(),
         ];
         if let Some(model) = &self.model {
@@ -947,15 +1193,11 @@ impl Provider for ClaudeCliProvider {
             .map(|content| clean_provider_response(Some(&content)))
     }
 
-    fn generate_code_review(
-        &self,
-        diff: &str,
-        _model: Option<&str>,
-        custom_prompt: Option<&str>,
-    ) -> Result<String> {
-        let prompt = self.build_prompt(
-            &review_prompt(custom_prompt),
-            diff,
+    fn generate_code_review(&self, input: &ReviewInput, _model: Option<&str>) -> Result<String> {
+        let prompt = cli_review_prompt(
+            "Claude CLI",
+            &review_prompt(input.custom_prompt.as_deref()),
+            input,
             "Return only the code review in the requested format.",
         );
         self.run_claude(&prompt, code_review_timeout(self.timeout)?)
@@ -1088,6 +1330,21 @@ fn tail_error(output: &std::process::Output) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn review_input(diff: &str) -> ReviewInput {
+        ReviewInput::new(".", diff)
+    }
+
+    fn staged_text_file(path: &str, content: &str) -> StagedFileReviewInput {
+        StagedFileReviewInput {
+            path: path.to_string(),
+            staged_content: Some(content.to_string()),
+            is_binary: false,
+            is_deleted: false,
+            was_truncated: false,
+        }
+    }
+
     use std::sync::Mutex;
 
     #[derive(Debug)]
@@ -1211,6 +1468,33 @@ mod tests {
     }
 
     #[test]
+    fn provider_identity_metadata_handles_aliases_and_cli_model_env() {
+        assert_eq!(
+            provider_transport_kind_for_name("codex").unwrap(),
+            ProviderTransportKind::Cli
+        );
+        assert_eq!(
+            provider_transport_kind_for_name("codex-api").unwrap(),
+            ProviderTransportKind::Api
+        );
+        assert_eq!(
+            provider_model_env_var("codex").unwrap(),
+            Some("CODEX_MODEL")
+        );
+        assert_eq!(
+            provider_model_env_var("claude").unwrap(),
+            Some("CLAUDE_MODEL")
+        );
+        assert_eq!(
+            provider_model_env_var("claude-cli").unwrap(),
+            Some("CLAUDE_MODEL")
+        );
+        assert_eq!(provider_model_env_var("openai").unwrap(), None);
+        assert!(same_provider_identity("claude", "claude-cli").unwrap());
+        assert!(!same_provider_identity("claude", "claude-api").unwrap());
+    }
+
+    #[test]
     fn providers_expose_transport_kind() {
         assert_eq!(
             get_provider("openai").unwrap().transport_kind(),
@@ -1232,6 +1516,55 @@ mod tests {
             get_provider("claude-cli").unwrap().transport_kind(),
             ProviderTransportKind::Cli
         );
+    }
+
+    #[test]
+    fn review_input_derives_changed_files_from_diff() {
+        let input = ReviewInput::new(
+            ".",
+            "diff --git a/src/app.rs b/src/app.rs
+--- a/src/app.rs
++++ b/src/app.rs
+@@ -1 +1 @@
+-old
++new
+",
+        );
+
+        assert_eq!(input.changed_files, vec!["src/app.rs"]);
+        assert!(input.staged_files.is_empty());
+        assert!(input.custom_prompt.is_none());
+    }
+
+    #[test]
+    fn review_user_content_keeps_diff_primary_and_serializes_staged_context() {
+        let input = review_input("diff --git a/src/app.rs b/src/app.rs").with_staged_files(vec![
+            staged_text_file("src/app.rs", "fn after() {}\n"),
+            StagedFileReviewInput {
+                path: "blob.bin".to_string(),
+                staged_content: None,
+                is_binary: true,
+                is_deleted: false,
+                was_truncated: false,
+            },
+            StagedFileReviewInput {
+                path: "gone.rs".to_string(),
+                staged_content: None,
+                is_binary: false,
+                is_deleted: true,
+                was_truncated: false,
+            },
+        ]);
+
+        let content = review_user_content(&input);
+
+        assert!(
+            content.starts_with("Primary diff to review:\ndiff --git a/src/app.rs b/src/app.rs")
+        );
+        assert!(content.contains("Additional staged file context:"));
+        assert!(content.contains("File: src/app.rs\nStatus: text staged snapshot\nfn after() {}"));
+        assert!(content.contains("File: blob.bin\nStatus: binary staged file"));
+        assert!(content.contains("File: gone.rs\nStatus: deleted in staged changes"));
     }
 
     #[test]
@@ -1296,17 +1629,26 @@ mod tests {
         );
 
         let review = provider
-            .generate_code_review("diff-body", None, Some("Custom review prompt"))
+            .generate_code_review(
+                &review_input("diff-body")
+                    .with_staged_files(vec![staged_text_file("src/app.rs", "fn after() {}\n")])
+                    .with_custom_prompt("Custom review prompt"),
+                None,
+            )
             .unwrap();
 
         let request = transport.last_post();
         assert_eq!(review, "OK");
         assert_eq!(request.url, "https://example.test/v1/chat/completions");
         assert_eq!(request.payload["model"], "gpt-default");
-        assert_eq!(
-            request.payload["messages"][0]["content"].as_str().unwrap(),
-            "Custom review prompt"
-        );
+        let review_system_prompt = request.payload["messages"][0]["content"].as_str().unwrap();
+        assert!(review_system_prompt.contains("Custom review prompt"));
+        assert!(review_system_prompt.contains("CRITICAL LANGUAGE REQUIREMENT"));
+        assert!(review_system_prompt.contains("Return the entire code review in"));
+        let review_content = request.payload["messages"][1]["content"].as_str().unwrap();
+        assert!(review_content.contains("Primary diff to review:\ndiff-body"));
+        assert!(review_content
+            .contains("File: src/app.rs\nStatus: text staged snapshot\nfn after() {}"));
     }
 
     #[test]
@@ -1326,7 +1668,10 @@ mod tests {
         );
 
         provider
-            .generate_code_review("diff-body", None, Some("Custom review prompt"))
+            .generate_code_review(
+                &review_input("diff-body").with_custom_prompt("Custom review prompt"),
+                None,
+            )
             .unwrap();
 
         assert_eq!(transport.last_post().timeout, Duration::from_secs(123));
@@ -1346,7 +1691,10 @@ mod tests {
         );
 
         let error = provider
-            .generate_code_review("diff-body", None, Some("Custom review prompt"))
+            .generate_code_review(
+                &review_input("diff-body").with_custom_prompt("Custom review prompt"),
+                None,
+            )
             .unwrap_err();
 
         assert!(error.to_string().contains("timed out"));
@@ -1460,7 +1808,12 @@ mod tests {
             .generate_commit_message("diff-body", Some("claude-override"), false)
             .unwrap();
         let review = provider
-            .generate_code_review("review-diff", None, Some("Anthropic review prompt"))
+            .generate_code_review(
+                &review_input("review-diff")
+                    .with_staged_files(vec![staged_text_file("src/lib.rs", "pub fn ready() {}\n")])
+                    .with_custom_prompt("Anthropic review prompt"),
+                None,
+            )
             .unwrap();
 
         let commit_request = transport.post_at(0);
@@ -1487,14 +1840,16 @@ mod tests {
         let review_request = transport.post_at(1);
         assert_eq!(review_request.payload["model"], "claude-default");
         assert_eq!(review_request.payload["max_tokens"], 2000);
-        assert_eq!(
-            review_request.payload["system"].as_str().unwrap(),
-            "Anthropic review prompt"
-        );
-        assert!(review_request.payload["messages"][0]["content"]
+        let review_system_prompt = review_request.payload["system"].as_str().unwrap();
+        assert!(review_system_prompt.contains("Anthropic review prompt"));
+        assert!(review_system_prompt.contains("CRITICAL LANGUAGE REQUIREMENT"));
+        assert!(review_system_prompt.contains("Return the entire code review in"));
+        let review_content = review_request.payload["messages"][0]["content"]
             .as_str()
-            .unwrap()
-            .contains("review-diff"));
+            .unwrap();
+        assert!(review_content.contains("Primary diff to review:\nreview-diff"));
+        assert!(review_content
+            .contains("File: src/lib.rs\nStatus: text staged snapshot\npub fn ready() {}"));
     }
 
     #[test]
@@ -1595,7 +1950,12 @@ mod tests {
             .generate_commit_message("diff-body", Some("gemini-override"), false)
             .unwrap();
         let review = provider
-            .generate_code_review("review-diff", None, Some("Gemini review prompt"))
+            .generate_code_review(
+                &review_input("review-diff")
+                    .with_staged_files(vec![staged_text_file("src/lib.rs", "pub fn ready() {}\n")])
+                    .with_custom_prompt("Gemini review prompt"),
+                None,
+            )
             .unwrap();
 
         let commit_request = transport.post_at(0);
@@ -1624,7 +1984,9 @@ mod tests {
             .as_str()
             .unwrap();
         assert!(review_text.contains("Gemini review prompt"));
-        assert!(review_text.contains("Diff:\nreview-diff"));
+        assert!(review_text.contains("Primary diff to review:\nreview-diff"));
+        assert!(review_text
+            .contains("File: src/lib.rs\nStatus: text staged snapshot\npub fn ready() {}"));
     }
 
     #[test]
@@ -1701,7 +2063,12 @@ mod tests {
             .generate_commit_message("diff-body", Some("llama-override"), false)
             .unwrap();
         let review = provider
-            .generate_code_review("review-diff", None, Some("Ollama review prompt"))
+            .generate_code_review(
+                &review_input("review-diff")
+                    .with_staged_files(vec![staged_text_file("src/lib.rs", "pub fn ready() {}\n")])
+                    .with_custom_prompt("Ollama review prompt"),
+                None,
+            )
             .unwrap();
 
         let get_urls = transport.get_urls();
@@ -1728,7 +2095,9 @@ mod tests {
         assert_eq!(review_request.payload["model"], "llama-default");
         let review_prompt = review_request.payload["prompt"].as_str().unwrap();
         assert!(review_prompt.contains("Ollama review prompt"));
-        assert!(review_prompt.contains("Diff:\nreview-diff"));
+        assert!(review_prompt.contains("Primary diff to review:\nreview-diff"));
+        assert!(review_prompt
+            .contains("File: src/lib.rs\nStatus: text staged snapshot\npub fn ready() {}"));
         assert!(review_prompt.contains("Code Review:"));
     }
 
@@ -1797,8 +2166,6 @@ mod tests {
         let args = read_lines(&args_path);
         let stdin = fs::read_to_string(stdin_path).unwrap();
         assert_eq!(message, "feat: use codex cli");
-        assert_eq!(args[0], "--ask-for-approval");
-        assert_eq!(args[1], "never");
         assert_arg_pair(&args, "-c", "mcp_servers={}");
         assert_arg_pair(&args, "--model", "codex-model");
         assert_arg_pair(&args, "--profile", "work-profile");
@@ -1806,11 +2173,64 @@ mod tests {
         assert!(args.contains(&"--ephemeral".to_string()));
         assert_arg_pair(&args, "--sandbox", "read-only");
         assert_arg_pair(&args, "--color", "never");
-        assert!(args.contains(&"-C".to_string()));
+        assert!(args.contains(&"--skip-git-repo-check".to_string()));
+        assert!(!args.contains(&"--ask-for-approval".to_string()));
         assert!(args.contains(&"-o".to_string()));
         assert_eq!(args.last().map(String::as_str), Some("-"));
         assert_eq!(stdin.matches("diff-body").count(), 1);
         assert!(stdin.contains("Return only the final Conventional Commit message."));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_cli_review_prompt_uses_contextual_review_input() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+
+        let repo_root = temp_dir.path().join("repo-root");
+        std::fs::create_dir_all(&repo_root).unwrap();
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_code_review(
+                &ReviewInput::new(&repo_root, "diff-body")
+                    .with_changed_files(vec!["src/app.rs".to_string()])
+                    .with_staged_files(vec![staged_text_file("src/app.rs", "fn staged() {}\n")])
+                    .with_custom_prompt("Codex review prompt"),
+                Some("gpt-5.4-mini"),
+            )
+            .unwrap();
+
+        let args = read_lines(&args_path);
+        let stdin = fs::read_to_string(stdin_path).unwrap();
+        assert_arg_pair(&args, "--model", "gpt-5.4-mini");
+        assert_arg_pair(&args, "--sandbox", "read-only");
+        assert_arg_pair(&args, "-C", repo_root.to_string_lossy().as_ref());
+        assert!(!args.contains(&"--skip-git-repo-check".to_string()));
+        assert!(!args.contains(&"--ask-for-approval".to_string()));
+        assert!(stdin.contains("Codex review prompt"));
+        assert!(stdin.contains("CRITICAL LANGUAGE REQUIREMENT"));
+        assert!(stdin.contains("Return the entire code review in"));
+        assert!(stdin.contains("Repository root:"));
+        assert!(stdin.contains("Changed files:\nsrc/app.rs"));
+        assert!(stdin.contains("Primary diff to review:\ndiff-body"));
+        assert!(stdin.contains("File: src/app.rs\nStatus: text staged snapshot\nfn staged() {}"));
+        assert!(stdin.contains(
+            "You may inspect repository files and run read-only local inspection commands"
+        ));
+        assert!(stdin.contains("The staged snapshot is the source of truth over files on disk"));
+        assert!(!stdin.contains("Use only the diff below."));
     }
 
     #[cfg(unix)]
@@ -1832,20 +2252,20 @@ mod tests {
 
         let provider = CodexCliProvider::new().unwrap();
         provider
-            .generate_code_review("diff-body", Some("gpt-5.4-mini"), None)
+            .generate_code_review(&review_input("diff-body"), Some("gpt-5.4-mini"))
             .unwrap();
         let args = read_lines(&args_path);
         assert_arg_pair(&args, "--model", "gpt-5.4-mini");
         assert_arg_pair(&args, "-c", "mcp_servers={}");
 
         provider
-            .generate_code_review("diff-body", Some("deepseek-reasoner"), None)
+            .generate_code_review(&review_input("diff-body"), Some("deepseek-reasoner"))
             .unwrap();
         let args = read_lines(&args_path);
         assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
 
         provider
-            .generate_code_review("diff-body", Some("z-ai/glm-5:free"), None)
+            .generate_code_review(&review_input("diff-body"), Some("z-ai/glm-5:free"))
             .unwrap();
         let args = read_lines(&args_path);
         assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
@@ -1859,7 +2279,7 @@ mod tests {
         env::set_var("CODEX_MODEL", "z-ai/glm-5:free");
         let provider = CodexCliProvider::new().unwrap();
         provider
-            .generate_code_review("diff-body", None, None)
+            .generate_code_review(&review_input("diff-body"), None)
             .unwrap();
         let args = read_lines(&args_path);
         assert_arg_pair(&args, "--model", crate::config::DEFAULT_CODEX_MODEL);
@@ -1942,7 +2362,13 @@ mod tests {
 
         let provider = ClaudeCliProvider::new().unwrap();
         let review = provider
-            .generate_code_review("diff-body", None, Some("Claude review prompt"))
+            .generate_code_review(
+                &ReviewInput::new(".", "diff-body")
+                    .with_changed_files(vec!["src/lib.rs".to_string()])
+                    .with_staged_files(vec![staged_text_file("src/lib.rs", "pub fn staged() {}\n")])
+                    .with_custom_prompt("Claude review prompt"),
+                None,
+            )
             .unwrap();
 
         let args = read_lines(&args_path);
@@ -1953,13 +2379,25 @@ mod tests {
         assert_arg_pair(&args, "--input-format", "text");
         assert!(args.contains(&"--no-session-persistence".to_string()));
         assert_arg_pair(&args, "--permission-mode", "dontAsk");
-        assert_arg_pair(&args, "--tools", "");
+        assert!(!args.windows(2).any(|pair| pair == ["--tools", ""]));
         assert!(args.contains(&"--disable-slash-commands".to_string()));
         assert_arg_pair(&args, "--model", "claude-model");
         assert_arg_pair(&args, "--agent", "review-agent");
         assert_arg_pair(&args, "--settings", "/tmp/claude-settings.json");
-        assert_eq!(stdin.matches("diff-body").count(), 1);
         assert!(stdin.contains("Claude review prompt"));
+        assert!(stdin.contains("CRITICAL LANGUAGE REQUIREMENT"));
+        assert!(stdin.contains("Return the entire code review in"));
+        assert!(stdin.contains("Repository root:"));
+        assert!(stdin.contains("Changed files:\nsrc/lib.rs"));
+        assert!(stdin.contains("Primary diff to review:\ndiff-body"));
+        assert!(
+            stdin.contains("File: src/lib.rs\nStatus: text staged snapshot\npub fn staged() {}")
+        );
+        assert!(stdin.contains(
+            "You may inspect repository files and run read-only local inspection commands"
+        ));
+        assert!(stdin.contains("The staged snapshot is the source of truth over files on disk"));
+        assert!(!stdin.contains("Use only the diff below."));
     }
 
     #[cfg(unix)]
@@ -2054,7 +2492,10 @@ mod tests {
 
         let provider = ClaudeCliProvider::new().unwrap();
         let error = provider
-            .generate_code_review("diff-body", None, Some("Claude review prompt"))
+            .generate_code_review(
+                &review_input("diff-body").with_custom_prompt("Claude review prompt"),
+                None,
+            )
             .unwrap_err();
 
         assert!(error.to_string().contains("CLI excedeu o timeout de 0s"));
