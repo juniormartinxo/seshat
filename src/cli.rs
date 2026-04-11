@@ -9,7 +9,7 @@ use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
 use crate::git::GitClient;
 use crate::json_output;
-use crate::profiles::{ProfileSource, ResolvedProfile};
+use crate::profiles::{discover_cloak_profiles, ProfileSource, ResolvedProfile};
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
 use crate::ui;
@@ -40,6 +40,7 @@ enum Commands {
     Fix(FixArgs),
     Flow(FlowArgs),
     Bench(BenchArgs),
+    Profile(ProfileArgs),
 }
 
 #[derive(Debug, Args)]
@@ -99,6 +100,26 @@ enum OutputFormat {
 struct BenchArgs {
     #[command(subcommand)]
     command: BenchCommands,
+}
+
+#[derive(Debug, Args)]
+struct ProfileArgs {
+    #[command(subcommand)]
+    command: ProfileCommands,
+}
+
+#[derive(Debug, Args)]
+struct ProfileCurrentArgs {
+    #[arg(long)]
+    profile: Option<String>,
+    #[arg(long)]
+    provider: Option<String>,
+}
+
+#[derive(Debug, Subcommand)]
+enum ProfileCommands {
+    List,
+    Current(ProfileCurrentArgs),
 }
 
 #[derive(Debug, Subcommand)]
@@ -233,6 +254,7 @@ pub fn run() -> Result<()> {
         Some(Commands::Fix(args)) => run_fix(args),
         Some(Commands::Flow(args)) => run_flow(args),
         Some(Commands::Bench(args)) => run_bench(args),
+        Some(Commands::Profile(args)) => run_profile(args),
         None => {
             println!("seshat, version {VERSION}");
             Ok(())
@@ -250,6 +272,85 @@ fn run_bench(args: BenchArgs) -> Result<()> {
     match args.command {
         BenchCommands::Agents(args) => run_bench_agents(args),
     }
+}
+
+fn run_profile(args: ProfileArgs) -> Result<()> {
+    match args.command {
+        ProfileCommands::List => run_profile_list(),
+        ProfileCommands::Current(args) => run_profile_current(args),
+    }
+}
+
+fn run_profile_list() -> Result<()> {
+    let Some(discovery) = discover_cloak_profiles()? else {
+        ui::warning("Nenhum profile detectado.");
+        return Ok(());
+    };
+
+    if discovery.installed_profiles.is_empty() {
+        ui::warning("Nenhum profile detectado.");
+        return Ok(());
+    }
+
+    let rows = discovery
+        .installed_profiles
+        .iter()
+        .map(|profile| {
+            vec![
+                profile.name.clone(),
+                if discovery.default_profile.as_deref() == Some(profile.name.as_str()) {
+                    "yes".to_string()
+                } else {
+                    String::new()
+                },
+                if profile.cli_homes.codex_home.is_some() {
+                    "yes".to_string()
+                } else {
+                    String::new()
+                },
+                if profile.cli_homes.claude_config_dir.is_some() {
+                    "yes".to_string()
+                } else {
+                    String::new()
+                },
+            ]
+        })
+        .collect::<Vec<_>>();
+
+    ui::table(
+        "Profiles",
+        &["Profile", "Default", "Codex", "Claude"],
+        &rows,
+    );
+    Ok(())
+}
+
+fn run_profile_current(args: ProfileCurrentArgs) -> Result<()> {
+    let project_config = ProjectConfig::load(".");
+    let effective = resolve_effective_config(
+        ".",
+        &project_config,
+        CliConfigOverrides {
+            provider: args.provider,
+            model: None,
+            profile: args.profile,
+            max_diff_size: None,
+        },
+    )?;
+
+    let mut items = BTreeMap::from([("Provider".to_string(), effective.provider.clone())]);
+    if let Some(profile) = &effective.profile {
+        items.insert("Profile".to_string(), profile.name.clone());
+        items.insert(
+            "Source".to_string(),
+            profile_source_label(profile.source).to_string(),
+        );
+    } else {
+        items.insert("Profile".to_string(), "não configurado".to_string());
+    }
+
+    ui::summary("Current Profile", &items);
+    Ok(())
 }
 
 fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
@@ -863,5 +964,38 @@ mod tests {
         };
         assert_eq!(args.provider.as_deref(), Some("claude"));
         assert_eq!(args.profile.as_deref(), Some("samwise"));
+    }
+
+    #[test]
+    fn profile_list_command_parses() {
+        let cli = Cli::try_parse_from(["seshat", "profile", "list"]).unwrap();
+
+        let Commands::Profile(args) = cli.command.expect("profile command") else {
+            panic!("expected profile command");
+        };
+        assert!(matches!(args.command, ProfileCommands::List));
+    }
+
+    #[test]
+    fn profile_current_command_accepts_overrides() {
+        let cli = Cli::try_parse_from([
+            "seshat",
+            "profile",
+            "current",
+            "--profile",
+            "samwise",
+            "--provider",
+            "codex",
+        ])
+        .unwrap();
+
+        let Commands::Profile(args) = cli.command.expect("profile command") else {
+            panic!("expected profile command");
+        };
+        let ProfileCommands::Current(args) = args.command else {
+            panic!("expected current command");
+        };
+        assert_eq!(args.profile.as_deref(), Some("samwise"));
+        assert_eq!(args.provider.as_deref(), Some("codex"));
     }
 }
