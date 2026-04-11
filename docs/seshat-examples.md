@@ -11,6 +11,7 @@ commit:
   language: PT-BR
   provider: codex
   model: gpt-5.4
+  profile: amjr
   no_ai_extensions: [".md", ".mdx"]
   no_ai_paths: ["docs/"]
 
@@ -29,12 +30,15 @@ checks:
 code_review:
   enabled: true
   blocking: true
+  mode: interactive
   prompt: .seshat/review.md
   extensions: [".rs"]
 
 ui:
   force_rich: true
 ```
+
+Esse perfil usa a resolucao normal do Cloak quando `amjr` existir no ambiente local.
 
 ## Rust com lint automatico desligado
 
@@ -174,6 +178,49 @@ Esse padrao e util quando o time quer:
 - mensagens automaticas para docs
 - IA apenas para codigo
 - `flow` sem parar em arquivos de documentacao
+
+## Code review menos interativo
+
+Use este formato quando quiser logs de review por arquivo em vez de um fluxo intenso no terminal:
+
+```yaml
+code_review:
+  enabled: true
+  blocking: true
+  mode: files
+  prompt: .seshat/review.md
+  extensions: [".rs", ".ts", ".tsx"]
+```
+
+Os findings vao para:
+
+- `.seshat/code_review/<branch>/<arquivo>.md`
+
+Cada item sai no formato:
+
+```text
+1. [BUG]:
+src/app.rs:10: descricao do finding
+Ação: <F | P>
+```
+
+## Projeto usando profiles do Cloak
+
+```yaml
+project_type: rust
+
+commit:
+  provider: codex
+  profile: amjr
+  language: PT-BR
+```
+
+Fluxo operacional recomendado:
+
+- `seshat profile list`
+- `seshat profile current`
+- `seshat profile doctor`
+- `seshat commit --yes`
 
 ## UI com icones customizados
 
