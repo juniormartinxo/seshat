@@ -60,8 +60,9 @@ Se o keyring falhar, a CLI oferece fallback para gravar o segredo em texto plano
 - `CODEX_PROFILE`
 - `CODEX_TIMEOUT`
 - `CODEX_API_KEY`
+- `CODEX_HOME`
 
-O provider `codex` usa a CLI local e nao exige `API_KEY`. Em automacao com `codex exec`, a credencial dedicada suportada pela CLI e `CODEX_API_KEY`.
+O provider `codex` usa a CLI local e nao exige `API_KEY`. Em automacao com `codex exec`, a credencial dedicada suportada pela CLI e `CODEX_API_KEY`. Se `CODEX_HOME` nao for definido explicitamente, o Seshat tenta resolvelo a partir do profile do Cloak.
 
 ### Claude CLI
 
@@ -70,8 +71,9 @@ O provider `codex` usa a CLI local e nao exige `API_KEY`. Em automacao com `code
 - `CLAUDE_AGENT`
 - `CLAUDE_SETTINGS`
 - `CLAUDE_TIMEOUT`
+- `CLAUDE_CONFIG_DIR`
 
-O provider `claude` usa a CLI local e nao exige `API_KEY`. `claude-cli` continua aceito como alias legado.
+O provider `claude` usa a CLI local e nao exige `API_KEY`. `claude-cli` continua aceito como alias legado. Se `CLAUDE_CONFIG_DIR` nao for definido explicitamente, o Seshat tenta resolvelo a partir do profile do Cloak.
 
 ### Aliases de chave por provider
 
@@ -114,6 +116,37 @@ Regras operacionais:
 - providers CLI recebem review contextual com `diff` + arquivos + staged snapshot.
 - se o working tree divergir do staged, o staged snapshot e a fonte de verdade do commit.
 - em CLI, o agente pode ler contexto local para reduzir falso positivo por falta de contexto, mas o review continua focado no que o `diff` staged mostra.
+
+## Profiles do Cloak e storage proprio
+
+O Cloak e uma aplicacao separada do Seshat.
+Repositorio oficial: https://github.com/juniormartinxo/cloak
+
+Layout padrao considerado pelo Seshat:
+- config global: `~/.config/cloak/config.toml`
+- perfis instalados: `~/.config/cloak/profiles/<profile>/`
+- binding local por diretorio: arquivo `.cloak`
+
+A integracao com o Cloak obedece estas regras:
+
+- descoberta em modo leitura de `~/.config/cloak/config.toml` e `~/.config/cloak/profiles/*`
+- nenhuma escrita em `.cloak`
+- nenhuma escrita em `~/.config/cloak/**` durante operacao normal
+- fallback seguro quando o Cloak nao existe
+- fallback seguro para profiles incompletos, sem injetar `CODEX_HOME` ou `CLAUDE_CONFIG_DIR` indevidos
+
+Comandos de introspeccao:
+
+- `seshat profile list`
+- `seshat profile current`
+- `seshat profile doctor`
+
+Import opcional:
+
+- `seshat profile import cloak`
+- destino: `~/.config/seshat/profiles.json`
+- o import registra proveniencia (`source = "cloak"`) e metadados do profile importado
+- o import e idempotente e nao duplica profiles por reexecucao
 
 ## Riscos e limites conhecidos
 
@@ -264,7 +297,11 @@ Campos suportados:
 Notas:
 
 - `mode: interactive` mostra o review completo no terminal e mantem o fluxo interativo.
+- no modo `interactive`, cada finding bloqueante aceita `F` (falso positivo), `I` (JUDGE IA) ou `P` (pular).
+- `I` envia apenas o item bloqueante para o JUDGE, nao o review inteiro.
+- se todos os itens bloqueantes forem `P`, o commit continua mesmo assim.
 - `mode: files` grava os findings em `.seshat/code_review/<branch>/<path_relativo>.md`, com campo `Ação: <F | P>`, e reduz a interacao no terminal.
+- no modo `files`, esse campo `Ação` e documental hoje; ele nao e reimportado automaticamente para o store de falsos positivos.
 - `prompt` aponta para o prompt customizado do projeto.
 - `seshat init` gera `.seshat/review.md` automaticamente.
 - quando `blocking: true`, findings `[BUG]` e `[SECURITY]` bloqueiam o commit.
