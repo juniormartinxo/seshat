@@ -2340,6 +2340,45 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn codex_cli_provider_keeps_empty_codex_home_for_incomplete_cloak_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        let codex_home_path = temp_dir.path().join("codex-home.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("HOME", temp_dir.path());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CODEX_HOME_FILE", &codex_home_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+        env::set_var("SESHAT_PROFILE", "amjr");
+
+        let profile_claude_dir = temp_dir
+            .path()
+            .join(".config")
+            .join("cloak")
+            .join("profiles")
+            .join("amjr")
+            .join("claude");
+        std::fs::create_dir_all(&profile_claude_dir).unwrap();
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let codex_home = fs::read_to_string(codex_home_path).unwrap();
+        assert!(codex_home.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn codex_cli_provider_keeps_empty_codex_home_without_profile() {
         let _lock = crate::test_env::ENV_LOCK
             .lock()
@@ -2570,6 +2609,45 @@ mod tests {
 
         let config_dir = fs::read_to_string(config_dir_path).unwrap();
         assert_eq!(PathBuf::from(config_dir), profile_claude_config_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn claude_cli_provider_keeps_empty_config_dir_for_incomplete_cloak_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("claude-fake");
+        let args_path = temp_dir.path().join("claude-args.txt");
+        let stdin_path = temp_dir.path().join("claude-stdin.txt");
+        let config_dir_path = temp_dir.path().join("claude-config-dir.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("HOME", temp_dir.path());
+        env::set_var("CLAUDE_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CLAUDE_CONFIG_DIR_FILE", &config_dir_path);
+        env::set_var("FAKE_RESPONSE", "Review OK");
+        env::set_var("SESHAT_PROFILE", "amjr");
+
+        let profile_codex_home = temp_dir
+            .path()
+            .join(".config")
+            .join("cloak")
+            .join("profiles")
+            .join("amjr")
+            .join("codex");
+        std::fs::create_dir_all(&profile_codex_home).unwrap();
+
+        let provider = ClaudeCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let config_dir = fs::read_to_string(config_dir_path).unwrap();
+        assert!(config_dir.is_empty());
     }
 
     #[cfg(unix)]
