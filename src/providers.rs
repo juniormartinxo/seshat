@@ -1,4 +1,5 @@
 use crate::config::DEFAULT_CODEX_MODEL;
+use crate::profiles::discover_cloak_profiles;
 use crate::review::{CODE_REVIEW_PROMPT, CODE_REVIEW_PROMPT_ADDON};
 use crate::utils::{clean_provider_response, clean_review_response};
 use anyhow::{anyhow, Context, Result};
@@ -916,6 +917,7 @@ pub struct CodexCliProvider {
     codex_bin: String,
     model: Option<String>,
     profile: Option<String>,
+    codex_home: Option<PathBuf>,
     timeout: Duration,
 }
 
@@ -929,6 +931,7 @@ impl CodexCliProvider {
             profile: env::var("CODEX_PROFILE")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
+            codex_home: resolved_codex_home(),
             timeout: Duration::from_secs(parse_timeout("CODEX_TIMEOUT")?),
         })
     }
@@ -958,7 +961,19 @@ impl CodexCliProvider {
             workspace_root,
             skip_git_repo_check,
         );
-        let completed = run_cli(&self.codex_bin, &args, prompt, timeout, workspace_root)?;
+        let env_overrides = self
+            .codex_home
+            .as_ref()
+            .map(|codex_home| vec![("CODEX_HOME", codex_home.clone().into_os_string())])
+            .unwrap_or_default();
+        let completed = run_cli_with_env(
+            &self.codex_bin,
+            &args,
+            prompt,
+            timeout,
+            workspace_root,
+            &env_overrides,
+        )?;
         if !completed.status.success() {
             return Err(anyhow!("Codex CLI falhou: {}", tail_error(&completed)));
         }
@@ -1016,6 +1031,26 @@ impl CodexCliProvider {
         args.extend(["-o".into(), output_path.as_os_str().into(), "-".into()]);
         args
     }
+}
+
+fn resolved_codex_home() -> Option<PathBuf> {
+    if let Some(explicit_home) = env::var_os("CODEX_HOME").filter(|value| !value.is_empty()) {
+        return Some(PathBuf::from(explicit_home));
+    }
+
+    let profile_name = env::var("SESHAT_PROFILE")
+        .ok()
+        .or_else(|| env::var("CODEX_PROFILE").ok())?;
+    let profile_name = profile_name.trim();
+    if profile_name.is_empty() {
+        return None;
+    }
+
+    discover_cloak_profiles()
+        .ok()
+        .flatten()
+        .and_then(|discovery| discovery.installed_profile(profile_name).cloned())
+        .and_then(|profile| profile.cli_homes.codex_home)
 }
 
 fn codex_compatible_model(model: &str) -> Option<&str> {
@@ -1277,6 +1312,17 @@ fn run_cli(
     timeout: Duration,
     cwd: Option<&Path>,
 ) -> Result<std::process::Output> {
+    run_cli_with_env(executable, args, input, timeout, cwd, &[])
+}
+
+fn run_cli_with_env(
+    executable: &str,
+    args: &[OsString],
+    input: &str,
+    timeout: Duration,
+    cwd: Option<&Path>,
+    env_overrides: &[(&str, OsString)],
+) -> Result<std::process::Output> {
     let mut command = Command::new(executable);
     command
         .args(args)
@@ -1285,6 +1331,9 @@ fn run_cli(
         .stderr(Stdio::piped());
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
+    }
+    for (key, value) in env_overrides {
+        command.env(key, value);
     }
     let mut child = command
         .spawn()
@@ -2232,6 +2281,72 @@ mod tests {
         assert!(stdin.contains("The staged snapshot is the source of truth over files on disk"));
         assert!(!stdin.contains("Use only the diff below."));
     }
+    #[cfg(unix)]
+    #[test]
+    fn codex_cli_provider_sets_codex_home_from_seshat_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        let codex_home_path = temp_dir.path().join("codex-home.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("HOME", temp_dir.path());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CODEX_HOME_FILE", &codex_home_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+        env::set_var("SESHAT_PROFILE", "amjr");
+
+        let profile_codex_home = temp_dir
+            .path()
+            .join(".config")
+            .join("cloak")
+            .join("profiles")
+            .join("amjr")
+            .join("codex");
+        std::fs::create_dir_all(&profile_codex_home).unwrap();
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let codex_home = fs::read_to_string(codex_home_path).unwrap();
+        assert_eq!(PathBuf::from(codex_home), profile_codex_home);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_cli_provider_keeps_empty_codex_home_without_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        let codex_home_path = temp_dir.path().join("codex-home.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CODEX_HOME_FILE", &codex_home_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let codex_home = fs::read_to_string(codex_home_path).unwrap();
+        assert!(codex_home.is_empty());
+    }
 
     #[cfg(unix)]
     #[test]
@@ -2530,9 +2645,13 @@ mod tests {
             "ZHIPU_API_KEY",
             "ZAI_BASE_URL",
             "COMMIT_LANGUAGE",
+            "SESHAT_PROFILE",
+            "HOME",
+            "USERPROFILE",
             "CODEX_BIN",
             "CODEX_MODEL",
             "CODEX_PROFILE",
+            "CODEX_HOME",
             "CODEX_TIMEOUT",
             "CLAUDE_BIN",
             "CLAUDE_MODEL",
@@ -2541,6 +2660,7 @@ mod tests {
             "CLAUDE_TIMEOUT",
             "FAKE_ARGS_FILE",
             "FAKE_STDIN_FILE",
+            "FAKE_CODEX_HOME_FILE",
             "FAKE_RESPONSE",
             "FAKE_EMPTY_RESPONSE",
             "FAKE_EXIT_CODE",
@@ -2588,6 +2708,9 @@ mod tests {
 printf '%s\n' "$@" > "$FAKE_ARGS_FILE"
 stdin=$(cat)
 printf '%s' "$stdin" > "$FAKE_STDIN_FILE"
+if [ -n "$FAKE_CODEX_HOME_FILE" ]; then
+  printf '%s' "${CODEX_HOME:-}" > "$FAKE_CODEX_HOME_FILE"
+fi
 if [ -n "$FAKE_STDERR" ]; then
   printf '%s' "$FAKE_STDERR" >&2
 fi
