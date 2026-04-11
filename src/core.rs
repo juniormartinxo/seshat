@@ -713,6 +713,10 @@ mod tests {
             self.name
         }
 
+        fn transport_kind(&self) -> crate::providers::ProviderTransportKind {
+            crate::providers::ProviderTransportKind::Api
+        }
+
         fn generate_commit_message(
             &self,
             diff: &str,
