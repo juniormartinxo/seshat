@@ -358,8 +358,10 @@ fn parse_review_section(review: &str) -> CodeReviewResult {
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        if let Some(stripped) = line.strip_prefix('-') {
-            line = stripped.trim();
+
+        line = strip_review_issue_prefix(line);
+        if !starts_with_issue_marker(line) {
+            continue;
         }
 
         let (issue_type, mut description, severity) = parse_issue_type(line);
@@ -387,6 +389,40 @@ fn parse_review_section(review: &str) -> CodeReviewResult {
         },
         issues,
     }
+}
+
+fn strip_review_issue_prefix(mut line: &str) -> &str {
+    loop {
+        let trimmed = line.trim_start();
+        if let Some(stripped) = trimmed
+            .strip_prefix('-')
+            .or_else(|| trimmed.strip_prefix('*'))
+        {
+            line = stripped.trim_start();
+            continue;
+        }
+
+        let digits_len = trimmed
+            .bytes()
+            .take_while(|byte| byte.is_ascii_digit())
+            .count();
+        if digits_len > 0 {
+            let rest = &trimmed[digits_len..];
+            if let Some(stripped) = rest.strip_prefix('.').or_else(|| rest.strip_prefix(')')) {
+                line = stripped.trim_start();
+                continue;
+            }
+        }
+
+        return trimmed;
+    }
+}
+
+fn starts_with_issue_marker(line: &str) -> bool {
+    let upper = line.to_ascii_uppercase();
+    ["[SMELL]", "[BUG]", "[STYLE]", "[PERF]", "[SECURITY]"]
+        .iter()
+        .any(|marker| upper.starts_with(marker))
 }
 
 fn parse_issue_type(line: &str) -> (&'static str, &str, &'static str) {
@@ -602,6 +638,138 @@ pub fn save_review_to_log(
     Ok(created)
 }
 
+pub fn save_review_to_markdown_files(
+    result: &CodeReviewResult,
+    output_root: impl AsRef<Path>,
+    branch_name: &str,
+) -> Result<Vec<PathBuf>> {
+    if !result.has_issues {
+        return Ok(Vec::new());
+    }
+
+    let branch_dir = output_root
+        .as_ref()
+        .join(sanitize_review_branch_name(branch_name));
+    let mut grouped: BTreeMap<String, Vec<&CodeIssue>> = BTreeMap::new();
+    for issue in &result.issues {
+        let (relative_path, _, _) = review_issue_location_and_detail(&issue.description);
+        grouped.entry(relative_path).or_default().push(issue);
+    }
+
+    let mut created = Vec::new();
+    for (relative_path, issues) in grouped {
+        let path = review_markdown_path(&branch_dir, &relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut content = String::new();
+        for (index, issue) in issues.iter().enumerate() {
+            let (_, location, detail) = review_issue_location_and_detail(&issue.description);
+            content.push_str(&format!(
+                "{}. [{}]:\n",
+                index + 1,
+                issue_type_label(&issue.issue_type)
+            ));
+            if location == "unknown" {
+                content.push_str(&format!("unknown: {}\n", issue.description.trim()));
+            } else if detail.is_empty() {
+                content.push_str(&format!("{location}\n"));
+            } else {
+                content.push_str(&format!("{location}: {detail}\n"));
+            }
+            content.push_str("Ação: <F | P>\n");
+            if index + 1 < issues.len() {
+                content.push('\n');
+            }
+        }
+
+        fs::write(&path, content)?;
+        created.push(path);
+    }
+
+    Ok(created)
+}
+
+fn sanitize_review_branch_name(branch_name: &str) -> String {
+    let trimmed = branch_name.trim();
+    if trimmed.is_empty() {
+        return "unknown-branch".to_string();
+    }
+    trimmed.replace(['/', '\\', ':'], "__")
+}
+
+fn review_markdown_path(branch_dir: &Path, relative_path: &str) -> PathBuf {
+    let relative_path = sanitize_review_relative_path(relative_path);
+    if relative_path.as_os_str().is_empty() {
+        return branch_dir.join("unknown.md");
+    }
+
+    let mut final_path = branch_dir.to_path_buf();
+    if let Some(parent) = relative_path.parent() {
+        final_path.push(parent);
+    }
+    let file_name = relative_path
+        .file_name()
+        .map(|value| value.to_string_lossy().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    final_path.join(format!("{file_name}.md"))
+}
+
+fn sanitize_review_relative_path(relative_path: &str) -> PathBuf {
+    let mut sanitized = PathBuf::new();
+    for segment in relative_path.split(['/', '\\']) {
+        let cleaned = segment
+            .trim()
+            .trim_matches(|ch| "`'\"()[]{}<>".contains(ch))
+            .replace(':', "_");
+        if cleaned.is_empty() || cleaned == "." || cleaned == ".." {
+            continue;
+        }
+        sanitized.push(cleaned);
+    }
+    sanitized
+}
+
+fn review_issue_location_and_detail(description: &str) -> (String, String, String) {
+    let patterns = [
+        r#"^\s*[`'"](?P<location>[^\n]+?:\d+(?:(?:-|:)\d+)?)[`'"]\s*(?P<detail>.*)$"#,
+        r#"^\s*(?P<location>(?:[A-Za-z]:[\\/])?[^:\n]*\S:\d+(?:(?:-|:)\d+)?)\s+(?P<detail>.*)$"#,
+    ];
+    let path_re =
+        Regex::new(r#"^(?P<path>.+):\d+(?:(?:-|:)\d+)?$"#).expect("valid review issue path regex");
+    for pattern in patterns {
+        let re = Regex::new(pattern).expect("valid review issue regex");
+        if let Some(captures) = re.captures(description.trim()) {
+            let location = captures
+                .name("location")
+                .map(|value| value.as_str().trim().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            let detail = captures
+                .name("detail")
+                .map(|value| value.as_str().trim().to_string())
+                .unwrap_or_default();
+            let relative_path = path_re
+                .captures(&location)
+                .and_then(|caps| caps.name("path"))
+                .map(|value| {
+                    value
+                        .as_str()
+                        .trim()
+                        .trim_matches(|ch| "`'\"()[]{}<>".contains(ch))
+                        .to_string()
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            return (relative_path, location, detail);
+        }
+    }
+
+    (
+        "unknown".to_string(),
+        "unknown".to_string(),
+        description.trim().to_string(),
+    )
+}
 fn extract_issue_filename(description: &str) -> String {
     let type_re = Regex::new(r"^\s*-?\s*\[[A-Z]+\]\s*").expect("valid type regex");
     let text = type_re.replace(description.trim(), "");
@@ -624,6 +792,14 @@ fn extract_issue_filename(description: &str) -> String {
         }
     }
     "unknown".to_string()
+}
+
+pub fn issue_path(issue: &CodeIssue) -> String {
+    extract_issue_filename(&issue.description)
+}
+
+pub fn diff_section_for_file(diff: &str, path: &str) -> Option<String> {
+    diff_section_for_path(diff, path).map(ToOwned::to_owned)
 }
 
 pub fn load_false_positive_records(path: impl AsRef<Path>) -> Result<Vec<FalsePositiveRecord>> {
@@ -883,6 +1059,26 @@ mod tests {
     }
 
     #[test]
+    fn parse_standalone_review_ignores_intro_lines_before_structured_items() {
+        let result = parse_standalone_review(
+            "Here is my review:\n\n1. [BUG] src/app.rs:10 panic on empty input | Return Result\nAqui está a revisão:\n- [SMELL] src/lib.rs:20 duplicated branch | Extract helper",
+        );
+
+        assert!(result.has_issues);
+        assert_eq!(result.issues.len(), 2);
+        assert_eq!(result.issues[0].issue_type, "bug");
+        assert_eq!(
+            result.issues[0].description,
+            "src/app.rs:10 panic on empty input"
+        );
+        assert_eq!(result.issues[1].issue_type, "code_smell");
+        assert_eq!(
+            result.issues[1].description,
+            "src/lib.rs:20 duplicated branch"
+        );
+    }
+
+    #[test]
     fn prepare_diff_for_review_keeps_small_diff_intact() {
         let diff = "diff --git a/src/app.rs b/src/app.rs\n@@ -1 +1 @@\n-old\n+new\n";
 
@@ -1090,6 +1286,48 @@ mod tests {
     }
 
     #[test]
+    fn save_review_to_markdown_files_groups_by_branch_and_relative_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let result = CodeReviewResult {
+            has_issues: true,
+            summary: "Found 2 issue(s)".to_string(),
+            issues: vec![
+                CodeIssue::new(
+                    "bug",
+                    "src/app.rs:10 panic on empty input",
+                    "return Result instead",
+                    "error",
+                ),
+                CodeIssue::new(
+                    "code_smell",
+                    "`src/app.rs:20-22` duplicated branch",
+                    "extract helper",
+                    "warning",
+                ),
+            ],
+        };
+
+        let created =
+            save_review_to_markdown_files(&result, dir.path(), "feature/wrapper-panel").unwrap();
+
+        assert_eq!(created.len(), 1);
+        let path = &created[0];
+        assert!(path.ends_with("feature__wrapper-panel/src/app.rs.md"));
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(
+            content,
+            concat!(
+                "1. [BUG]:\n",
+                "src/app.rs:10: panic on empty input\n",
+                "Ação: <F | P>\n",
+                "\n",
+                "2. [CODE SMELL]:\n",
+                "src/app.rs:20-22: duplicated branch\n",
+                "Ação: <F | P>\n"
+            )
+        );
+    }
+    #[test]
     fn false_positive_records_are_small_and_suppress_matching_issue() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join(FALSE_POSITIVE_STORE_NAME);
@@ -1119,6 +1357,39 @@ mod tests {
         assert_eq!(suppressed, 1);
         assert_eq!(filtered.issues.len(), 1);
         assert_eq!(filtered.issues[0].description, "src/auth.rs:2 real issue");
+    }
+
+    #[test]
+    fn public_issue_path_and_diff_section_helpers_follow_internal_rules() {
+        let issue = CodeIssue::new(
+            "bug",
+            "src/app.rs:12 panic on empty input",
+            "Return Result",
+            "error",
+        );
+        let diff = concat!(
+            "diff --git a/src/app.rs b/src/app.rs\n",
+            "--- a/src/app.rs\n",
+            "+++ b/src/app.rs\n",
+            "@@ -1 +1 @@\n",
+            "-old\n",
+            "+new\n",
+            "diff --git a/src/other.rs b/src/other.rs\n",
+            "--- a/src/other.rs\n",
+            "+++ b/src/other.rs\n",
+            "@@ -1 +1 @@\n",
+            "-x\n",
+            "+y\n",
+        );
+
+        assert_eq!(issue_path(&issue), "src/app.rs");
+        assert_eq!(
+            diff_section_for_file(diff, "src/app.rs").as_deref(),
+            Some(
+                "diff --git a/src/app.rs b/src/app.rs\n--- a/src/app.rs\n+++ b/src/app.rs\n@@ -1 +1 @@\n-old\n+new\n"
+            )
+        );
+        assert!(diff_section_for_file(diff, "missing.rs").is_none());
     }
 
     #[test]
