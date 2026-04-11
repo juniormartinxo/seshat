@@ -47,6 +47,8 @@ struct CommitArgs {
     provider: Option<String>,
     #[arg(long)]
     model: Option<String>,
+    #[arg(long)]
+    profile: Option<String>,
     #[arg(long, short = 'y')]
     yes: bool,
     #[arg(long, short = 'v')]
@@ -203,6 +205,8 @@ struct FlowArgs {
     provider: Option<String>,
     #[arg(long)]
     model: Option<String>,
+    #[arg(long)]
+    profile: Option<String>,
     #[arg(long, short = 'y')]
     yes: bool,
     #[arg(long, short = 'v')]
@@ -300,6 +304,7 @@ fn run_commit(args: CommitArgs) -> Result<()> {
         CliConfigOverrides {
             provider: args.provider,
             model: args.model,
+            profile: args.profile,
             max_diff_size: args.max_diff,
         },
     )?;
@@ -669,6 +674,7 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         CliConfigOverrides {
             provider: args.provider,
             model: args.model,
+            profile: args.profile,
             max_diff_size: None,
         },
     )?;
@@ -746,5 +752,49 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         Err(anyhow!("Flow finalizado com falhas"))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+
+    #[test]
+    fn commit_command_accepts_profile_override() {
+        let cli = Cli::try_parse_from([
+            "seshat",
+            "commit",
+            "--provider",
+            "codex",
+            "--profile",
+            "amjr",
+        ])
+        .unwrap();
+
+        let Commands::Commit(args) = cli.command.expect("commit command") else {
+            panic!("expected commit command");
+        };
+        assert_eq!(args.provider.as_deref(), Some("codex"));
+        assert_eq!(args.profile.as_deref(), Some("amjr"));
+    }
+
+    #[test]
+    fn flow_command_accepts_profile_override() {
+        let cli = Cli::try_parse_from([
+            "seshat",
+            "flow",
+            "--provider",
+            "claude",
+            "--profile",
+            "samwise",
+        ])
+        .unwrap();
+
+        let Commands::Flow(args) = cli.command.expect("flow command") else {
+            panic!("expected flow command");
+        };
+        assert_eq!(args.provider.as_deref(), Some("claude"));
+        assert_eq!(args.profile.as_deref(), Some("samwise"));
     }
 }
