@@ -1,3 +1,4 @@
+use crate::profiles::{ProfileSource, ResolvedProfile};
 use crate::ui;
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -68,6 +69,7 @@ pub type GlobalConfig = AppConfig;
 pub struct CliConfigOverrides {
     pub provider: Option<String>,
     pub model: Option<String>,
+    pub profile: Option<String>,
     pub max_diff_size: Option<usize>,
 }
 
@@ -75,6 +77,7 @@ pub struct CliConfigOverrides {
 pub struct EffectiveConfig {
     pub config: AppConfig,
     pub provider: String,
+    pub profile: Option<ResolvedProfile>,
 }
 
 impl EffectiveConfig {
@@ -99,6 +102,8 @@ pub struct AppConfig {
     pub judge_provider: Option<String>,
     #[serde(rename = "JUDGE_MODEL", skip_serializing_if = "Option::is_none")]
     pub judge_model: Option<String>,
+    #[serde(rename = "SESHAT_PROFILE", skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     #[serde(rename = "MAX_DIFF_SIZE")]
     pub max_diff_size: usize,
     #[serde(rename = "WARN_DIFF_SIZE")]
@@ -118,6 +123,7 @@ impl Default for AppConfig {
             ai_model: None,
             judge_provider: None,
             judge_model: None,
+            profile: None,
             max_diff_size: 3000,
             warn_diff_size: 2500,
             commit_language: "PT-BR".to_string(),
@@ -142,6 +148,7 @@ impl AppConfig {
         push_opt(&mut values, "AI_MODEL", &self.ai_model);
         push_opt(&mut values, "JUDGE_PROVIDER", &self.judge_provider);
         push_opt(&mut values, "JUDGE_MODEL", &self.judge_model);
+        push_opt(&mut values, "SESHAT_PROFILE", &self.profile);
         push_opt(&mut values, "DEFAULT_DATE", &self.default_date);
         values
     }
@@ -160,6 +167,7 @@ pub struct CommitConfig {
     pub warn_diff_size: Option<usize>,
     pub provider: Option<String>,
     pub model: Option<String>,
+    pub profile: Option<String>,
     #[serde(default)]
     pub no_ai_extensions: Vec<String>,
     #[serde(default)]
@@ -237,12 +245,22 @@ impl CommandOverride {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeReviewMode {
+    #[default]
+    Interactive,
+    Files,
+}
+
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct CodeReviewConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub blocking: bool,
+    #[serde(default)]
+    pub mode: CodeReviewMode,
     pub max_diff_size: Option<usize>,
     pub prompt: Option<String>,
     pub log_dir: Option<String>,
@@ -562,15 +580,24 @@ pub fn resolve_effective_config_with_store(
     secret_store: &dyn SecretStore,
 ) -> Result<EffectiveConfig> {
     let global_config: GlobalConfig = load_config_for_path_with_store(base_path, secret_store);
+    let resolved_profile =
+        resolve_profile_precedence(&global_config, &project_config.commit, &overrides);
     let mut config = apply_project_overrides(global_config, &project_config.commit);
     apply_cli_overrides(&mut config, overrides);
+    if let Some(profile) = &resolved_profile {
+        config.profile = Some(profile.name.clone());
+    }
     config = normalize_config(config);
     validate_config(&config)?;
     let provider = config
         .ai_provider
         .clone()
         .unwrap_or_else(|| "openai".to_string());
-    Ok(EffectiveConfig { config, provider })
+    Ok(EffectiveConfig {
+        config,
+        provider,
+        profile: resolved_profile,
+    })
 }
 
 fn apply_cli_overrides(config: &mut AppConfig, overrides: CliConfigOverrides) {
@@ -579,6 +606,9 @@ fn apply_cli_overrides(config: &mut AppConfig, overrides: CliConfigOverrides) {
     }
     if let Some(model) = overrides.model {
         config.ai_model = Some(model);
+    }
+    if let Some(profile) = overrides.profile.filter(|value| !value.trim().is_empty()) {
+        config.profile = Some(profile);
     }
     if let Some(max_diff_size) = overrides.max_diff_size {
         config.max_diff_size = max_diff_size;
@@ -654,6 +684,9 @@ fn apply_config_values(config: &mut AppConfig, mut get: impl FnMut(&str) -> Opti
     }
     if let Some(value) = get("JUDGE_MODEL") {
         config.judge_model = Some(value);
+    }
+    if let Some(value) = get("SESHAT_PROFILE") {
+        config.profile = Some(value);
     }
     if let Some(value) = get("MAX_DIFF_SIZE") {
         config.max_diff_size = value.parse().unwrap_or(config.max_diff_size);
@@ -760,6 +793,7 @@ fn load_global_config(path: &Path) -> Result<AppConfig> {
     config.ai_model = json_str(&json, "AI_MODEL");
     config.judge_provider = json_str(&json, "JUDGE_PROVIDER");
     config.judge_model = json_str(&json, "JUDGE_MODEL");
+    config.profile = json_str(&json, "SESHAT_PROFILE");
     config.max_diff_size = json_usize(&json, "MAX_DIFF_SIZE").unwrap_or(config.max_diff_size);
     config.warn_diff_size = json_usize(&json, "WARN_DIFF_SIZE").unwrap_or(config.warn_diff_size);
     config.commit_language = json_str(&json, "COMMIT_LANGUAGE").unwrap_or(config.commit_language);
@@ -779,6 +813,35 @@ fn json_usize(json: &JsonValue, key: &str) -> Option<usize> {
         JsonValue::String(value) => value.parse().ok(),
         _ => None,
     })
+}
+
+fn non_empty_profile(value: Option<&str>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    })
+}
+
+fn resolve_profile_precedence(
+    global_config: &AppConfig,
+    commit: &CommitConfig,
+    overrides: &CliConfigOverrides,
+) -> Option<ResolvedProfile> {
+    if let Some(profile) = non_empty_profile(overrides.profile.as_deref()) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::CliFlag));
+    }
+    if let Some(profile) = non_empty_profile(env::var("SESHAT_PROFILE").ok().as_deref()) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::Environment));
+    }
+    if let Some(profile) = non_empty_profile(commit.profile.as_deref()) {
+        return Some(ResolvedProfile::new(profile, ProfileSource::ProjectConfig));
+    }
+    non_empty_profile(global_config.profile.as_deref())
+        .map(|profile| ResolvedProfile::new(profile, ProfileSource::GlobalConfig))
 }
 
 pub fn normalize_config(mut config: AppConfig) -> AppConfig {
@@ -1014,6 +1077,13 @@ pub fn apply_project_overrides(mut config: AppConfig, commit: &CommitConfig) -> 
     {
         config.ai_model = Some(model.to_string());
     }
+    if let Some(profile) = commit
+        .profile
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        config.profile = Some(profile.to_string());
+    }
     config
 }
 
@@ -1054,6 +1124,7 @@ mod tests {
             "WARN_DIFF_SIZE",
             "COMMIT_LANGUAGE",
             "DEFAULT_DATE",
+            "SESHAT_PROFILE",
             "GEMINI_API_KEY",
             "ZAI_API_KEY",
             "ZHIPU_API_KEY",
@@ -1123,6 +1194,7 @@ mod tests {
             warn_diff_size: Some(3500),
             provider: Some("OpenAI".to_string()),
             model: Some("gpt-4".to_string()),
+            profile: Some("dev.amjr".to_string()),
             ..CommitConfig::default()
         };
         let result = apply_project_overrides(config, &overrides);
@@ -1131,6 +1203,7 @@ mod tests {
         assert_eq!(result.warn_diff_size, 3500);
         assert_eq!(result.ai_provider.as_deref(), Some("openai"));
         assert_eq!(result.ai_model.as_deref(), Some("gpt-4"));
+        assert_eq!(result.profile.as_deref(), Some("dev.amjr"));
     }
 
     #[test]
@@ -1160,8 +1233,10 @@ project_type: typescript
 commit:
   language: ENG
   max_diff_size: 4000
+  profile: dev.amjr
   no_ai_paths: ["docs/"]
 code_review:
+  mode: files
   max_diff_size: 16000
 checks:
   lint:
@@ -1172,8 +1247,10 @@ checks:
         .unwrap();
         let config = ProjectConfig::load(dir.path());
         assert_eq!(config.project_type.as_deref(), Some("typescript"));
+        assert_eq!(config.commit.profile.as_deref(), Some("dev.amjr"));
         assert_eq!(config.commit.language.as_deref(), Some("ENG"));
         assert_eq!(config.commit.max_diff_size, Some(4000));
+        assert_eq!(config.code_review.mode, CodeReviewMode::Files);
         assert_eq!(config.code_review.max_diff_size, Some(16000));
         assert_eq!(config.commit.no_ai_paths, vec!["docs/"]);
         assert!(!config.checks["lint"].blocking);
@@ -1493,6 +1570,7 @@ GEMINI_API_KEY=dotenv-key
   "API_KEY": "global-key",
   "AI_PROVIDER": "openai",
   "AI_MODEL": "global-model",
+  "SESHAT_PROFILE": "global-profile",
   "MAX_DIFF_SIZE": 1000,
   "WARN_DIFF_SIZE": 1000,
   "COMMIT_LANGUAGE": "PT-BR"
@@ -1506,6 +1584,7 @@ GEMINI_API_KEY=dotenv-key
 API_KEY=dotenv-key
 AI_PROVIDER=gemini
 AI_MODEL=dotenv-model
+SESHAT_PROFILE=dotenv-profile
 MAX_DIFF_SIZE=2000
 WARN_DIFF_SIZE=2000
 ",
@@ -1516,6 +1595,7 @@ WARN_DIFF_SIZE=2000
                     language: Some("ENG".to_string()),
                     provider: Some("ollama".to_string()),
                     model: Some("project-model".to_string()),
+                    profile: Some("project-profile".to_string()),
                     max_diff_size: Some(4000),
                     warn_diff_size: Some(3500),
                     ..CommitConfig::default()
@@ -1525,6 +1605,7 @@ WARN_DIFF_SIZE=2000
             let store = FakeSecretStore::with_secret("API_KEY", "keyring-key");
             env::set_var("API_KEY", "env-key");
             env::set_var("AI_MODEL", "env-model");
+            env::set_var("SESHAT_PROFILE", "env-profile");
             env::set_var("WARN_DIFF_SIZE", "3000");
 
             let effective = resolve_effective_config_with_store(
@@ -1533,6 +1614,7 @@ WARN_DIFF_SIZE=2000
                 CliConfigOverrides {
                     provider: Some("codex".to_string()),
                     model: Some("flag-model".to_string()),
+                    profile: Some("flag-profile".to_string()),
                     max_diff_size: Some(5000),
                 },
                 &store,
@@ -1542,9 +1624,95 @@ WARN_DIFF_SIZE=2000
             assert_eq!(effective.provider, "codex");
             assert_eq!(effective.config.api_key.as_deref(), Some("env-key"));
             assert_eq!(effective.config.ai_model.as_deref(), Some("flag-model"));
+            assert_eq!(effective.config.profile.as_deref(), Some("flag-profile"));
+            assert_eq!(
+                effective.profile,
+                Some(ResolvedProfile::new("flag-profile", ProfileSource::CliFlag,))
+            );
             assert_eq!(effective.config.max_diff_size, 5000);
             assert_eq!(effective.config.warn_diff_size, 3500);
             assert_eq!(effective.config.commit_language, "ENG");
+        });
+    }
+
+    #[test]
+    fn effective_config_prefers_environment_profile_when_flag_is_absent() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{
+  "AI_PROVIDER": "codex",
+  "SESHAT_PROFILE": "global-profile"
+}"#,
+            )
+            .unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let project = ProjectConfig {
+                commit: CommitConfig {
+                    profile: Some("project-profile".to_string()),
+                    provider: Some("codex".to_string()),
+                    ..CommitConfig::default()
+                },
+                ..ProjectConfig::default()
+            };
+            env::set_var("SESHAT_PROFILE", "env-profile");
+
+            let effective = resolve_effective_config_with_store(
+                dir.path(),
+                &project,
+                CliConfigOverrides::default(),
+                &FakeSecretStore::default(),
+            )
+            .unwrap();
+
+            assert_eq!(effective.config.profile.as_deref(), Some("env-profile"));
+            assert_eq!(
+                effective.profile,
+                Some(ResolvedProfile::new(
+                    "env-profile",
+                    ProfileSource::Environment,
+                ))
+            );
+        });
+    }
+
+    #[test]
+    fn effective_config_prefers_project_profile_when_env_is_absent() {
+        with_clean_env(|home| {
+            fs::write(
+                home.join(".seshat"),
+                r#"{
+  "AI_PROVIDER": "codex",
+  "SESHAT_PROFILE": "global-profile"
+}"#,
+            )
+            .unwrap();
+            let dir = tempfile::tempdir().unwrap();
+            let project = ProjectConfig {
+                commit: CommitConfig {
+                    profile: Some("project-profile".to_string()),
+                    provider: Some("codex".to_string()),
+                    ..CommitConfig::default()
+                },
+                ..ProjectConfig::default()
+            };
+
+            let effective = resolve_effective_config_with_store(
+                dir.path(),
+                &project,
+                CliConfigOverrides::default(),
+                &FakeSecretStore::default(),
+            )
+            .unwrap();
+
+            assert_eq!(effective.config.profile.as_deref(), Some("project-profile"));
+            assert_eq!(
+                effective.profile,
+                Some(ResolvedProfile::new(
+                    "project-profile",
+                    ProfileSource::ProjectConfig,
+                ))
+            );
         });
     }
 }
