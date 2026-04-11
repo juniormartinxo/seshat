@@ -1,8 +1,10 @@
-# Seshat RS
+# Seshat 🤖🦀
 
 Implementacao Rust do Seshat, mantida em repo separado da versao Python em `~/apps/jm/seshat`.
 
-Desde 2026-04-10, este repo e a fonte de verdade da implementacao Rust. A versao Python permanece em repo separado, conforme `docs/cutover-decision.md`.
+🦀 Este projeto foi atualizado para Rust e, desde 2026-04-10, este repo e a fonte de verdade da implementacao atual.
+
+📦 A versao Python permanece em repo separado como referencia historica e para comparacao de comportamento, conforme `docs/cutover-decision.md`.
 
 O binario final se chama `seshat` e oferece os comandos:
 
@@ -13,7 +15,7 @@ O binario final se chama `seshat` e oferece os comandos:
 - `flow`
 - `bench agents`
 
-## Instalacao Local
+## 🚀 Instalacao Local
 
 Para instalar a partir deste diretorio:
 
@@ -36,7 +38,7 @@ cargo run -- init --path . --force
 cargo run -- commit --yes
 ```
 
-## Uso Rapido
+## ⚡ Uso Rapido
 
 Crie uma configuracao local no projeto:
 
@@ -86,7 +88,7 @@ Compare agentes em fixtures temporarias:
 seshat bench agents --agents codex,claude --fixtures rust,python,typescript --iterations 3 --pt-br
 ```
 
-## Configuracao
+## ⚙️ Configuracao
 
 O `commit` exige um arquivo `.seshat/config.yaml` no projeto atual. O `flow` usa `.seshat/config.yaml` quando existir, mas pode rodar sem ele.
 
@@ -134,7 +136,7 @@ Campos principais:
 - `code_review.max_diff_size`: limite de caracteres enviado ao provider de code review; quando excedido, o diff e compactado.
 - `ui.force_rich` e `ui.icons`: controlam renderizacao humana.
 
-## Variaveis de Ambiente
+## 🌍 Variaveis de Ambiente
 
 - `API_KEY`: chave do provider principal.
 - `AI_PROVIDER`: provider padrao.
@@ -155,7 +157,7 @@ Campos principais:
 - `CODEX_BIN`, `CODEX_MODEL`, `CODEX_PROFILE`, `CODEX_TIMEOUT`: configuracao do Codex CLI.
 - `CLAUDE_BIN`, `CLAUDE_MODEL`, `CLAUDE_AGENT`, `CLAUDE_SETTINGS`, `CLAUDE_TIMEOUT`: configuracao do Claude CLI.
 
-## Providers
+## 🤖 Providers
 
 Providers HTTP cobertos:
 
@@ -174,7 +176,7 @@ Providers CLI cobertos:
 
 Providers `codex`, `claude` e `ollama` nao exigem `API_KEY` global.
 
-## Benchmark de Agentes
+## 📊 Benchmark de Agentes
 
 O comando `bench agents` mede agentes/providers usando fixtures Git temporarias. Ele nao altera o repo atual.
 
@@ -202,7 +204,7 @@ Metricas principais:
 
 O setup da fixture Git fica fora da medicao. Cada iteracao usa um repo temporario novo com diff controlado.
 
-## Git e GPG
+## 🔐 Git e GPG
 
 O Seshat executa Git com repo explicito e faz pre-auth de GPG antes de chamar IA quando `commit.gpgsign=true`.
 
@@ -213,7 +215,7 @@ Comportamento GPG:
 - Falha de pinentry ou do programa GPG interrompe antes do provider.
 - A assinatura descartavel usa arquivo em diretorio temporario seguro.
 
-## JSONL
+## 🧾 JSONL
 
 `commit` suporta JSON lines:
 
@@ -230,7 +232,7 @@ Eventos emitidos:
 
 Schema detalhado: `docs/json-contract.md`.
 
-## Migracao Python -> Rust
+## 🔄 Migracao Python -> Rust
 
 Decisao de organizacao: Python e Rust ficam em repos separados. Este repo documenta, testa e distribui a implementacao Rust; o repo Python continua independente.
 
@@ -250,7 +252,7 @@ Diferencas conhecidas:
 - Publicacao em crates.io e instaladores nativos ainda estao fora do escopo atual.
 - A escolha de qual implementacao fica como `seshat` no ambiente local deve ser feita por `PATH`, pacote, alias ou gerenciador de versao.
 
-## Documentacao
+## 📚 Documentacao
 
 - Configuracao detalhada: `docs/configuracao.md`
 - CLI e comportamento real: `docs/cli.md`
