@@ -1,6 +1,6 @@
 # Seshat 🤖🦀
 
-🦀 Este projeto foi atualizado para Rust e, desde 2026-04-10, este repo e a fonte de verdade da implementacao atual.
+🦀 Seshat agora é Rust. Foi atualizado em `10/04/2026`, mas você ainda pode usar a versao Python na branch `main-py`.
 
 📦 A versao Python permanece em repo separado como referencia historica e para comparacao de comportamento, conforme `docs/cutover-decision.md`.
 
