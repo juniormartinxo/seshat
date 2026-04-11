@@ -243,6 +243,18 @@ fn create_cloak_codex_profile(home: &Path, profile: &str) -> PathBuf {
 }
 
 #[cfg(unix)]
+fn create_cloak_claude_profile(home: &Path, profile: &str) -> PathBuf {
+    let claude_dir = home
+        .join(".config")
+        .join("cloak")
+        .join("profiles")
+        .join(profile)
+        .join("claude");
+    fs::create_dir_all(&claude_dir).expect("create cloak claude profile");
+    claude_dir
+}
+
+#[cfg(unix)]
 fn write_fake_gpg(bin_path: &Path) {
     let script = r#"#!/bin/sh
 for arg in "$@"; do
@@ -483,6 +495,19 @@ fn config_e2e_prints_current_config_from_isolated_home() {
 
 #[cfg(unix)]
 #[test]
+fn profile_list_e2e_warns_when_cloak_is_missing() {
+    let home = tempfile::tempdir().expect("create home");
+
+    seshat()
+        .env("HOME", home.path())
+        .args(["profile", "list"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Nenhum profile detectado."));
+}
+
+#[cfg(unix)]
+#[test]
 fn profile_list_e2e_lists_detected_profiles_and_default() {
     let home = tempfile::tempdir().expect("create home");
     write_cloak_default_profile(home.path(), "amjr");
@@ -543,6 +568,28 @@ fn profile_current_e2e_shows_environment_source() {
 }
 
 #[test]
+fn profile_current_e2e_falls_back_to_global_profile_without_cloak() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    fs::write(
+        home.path().join(".seshat"),
+        r#"{"SESHAT_PROFILE":"imported-profile","AI_PROVIDER":"codex"}"#,
+    )
+    .expect("write global config");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .args(["profile", "current"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: imported-profile"))
+        .stdout(predicate::str::contains("Source: global-config"))
+        .stdout(predicate::str::contains("Provider: codex"));
+}
+
+#[test]
 fn profile_current_e2e_shows_project_config_source() {
     let project = tempfile::tempdir().expect("create project");
     write_project_seshat(
@@ -579,6 +626,143 @@ fn profile_current_e2e_shows_cloak_default_source() {
         .stdout(predicate::str::contains("Profile: amjr"))
         .stdout(predicate::str::contains("Source: cloak-default"))
         .stdout(predicate::str::contains("Provider: openai"));
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_doctor_e2e_reports_valid_profile_diagnostics() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+    let codex_home = create_cloak_codex_profile(home.path(), "amjr");
+    let claude_dir = create_cloak_claude_profile(home.path(), "amjr");
+    fs::write(codex_home.join("auth.json"), r#"{"auth_mode":"chatgpt"}"#)
+        .expect("write codex auth");
+    fs::write(
+        claude_dir.join(".credentials.json"),
+        r#"{"claudeAiOauth":{"subscriptionType":"max"}}"#,
+    )
+    .expect("write claude credentials");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .args(["profile", "doctor"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile Doctor"))
+        .stdout(predicate::str::contains("Profile: amjr"))
+        .stdout(predicate::str::contains("Source: cloak-default"))
+        .stdout(predicate::str::contains("Exists: yes"))
+        .stdout(predicate::str::contains("Codex Auth: yes"))
+        .stdout(predicate::str::contains("Claude Auth: yes"));
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_doctor_e2e_fails_for_unknown_profile() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .args(["profile", "doctor", "--profile", "ghost"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "Profile 'ghost' não encontrado no Cloak.",
+        ));
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_import_cloak_e2e_is_idempotent() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+    let codex_home = create_cloak_codex_profile(home.path(), "amjr");
+    let _claude_dir = create_cloak_claude_profile(home.path(), "samwise");
+    fs::write(codex_home.join("auth.json"), r#"{"auth_mode":"chatgpt"}"#)
+        .expect("write codex auth");
+
+    let storage_path = home
+        .path()
+        .join(".config")
+        .join("seshat")
+        .join("profiles.json");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["profile", "import", "cloak"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile Import"))
+        .stdout(predicate::str::contains("Source: cloak"))
+        .stdout(predicate::str::contains("Imported: 2"))
+        .stdout(predicate::str::contains("Updated: 0"))
+        .stdout(predicate::str::contains("Unchanged: 0"))
+        .stdout(predicate::str::contains("Total: 2"));
+
+    let first = fs::read_to_string(&storage_path).expect("read imported profiles");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["profile", "import", "cloak"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Imported: 0"))
+        .stdout(predicate::str::contains("Updated: 0"))
+        .stdout(predicate::str::contains("Unchanged: 2"));
+
+    let second = fs::read_to_string(&storage_path).expect("read imported profiles after rerun");
+    let parsed: Value = serde_json::from_str(&second).expect("parse imported profiles");
+
+    assert_eq!(first, second);
+    assert_eq!(parsed["version"], 1);
+    assert_eq!(
+        parsed["profiles"].as_array().expect("profiles array").len(),
+        2
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_import_cloak_e2e_does_not_write_to_cloak_storage_or_project_binding() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+    let codex_home = create_cloak_codex_profile(home.path(), "amjr");
+    fs::write(codex_home.join("auth.json"), r#"{"auth_mode":"chatgpt"}"#)
+        .expect("write codex auth");
+
+    let cloak_root = home.path().join(".config").join("cloak");
+    let cloak_config_before = fs::read_to_string(cloak_root.join("config.toml")).unwrap();
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .args(["profile", "import", "cloak"])
+        .assert()
+        .success();
+
+    assert_eq!(
+        fs::read_to_string(cloak_root.join("config.toml")).unwrap(),
+        cloak_config_before
+    );
+    assert!(!project.path().join(".cloak").exists());
+    assert!(!cloak_root.join("profiles.json").exists());
+    assert!(home
+        .path()
+        .join(".config")
+        .join("seshat")
+        .join("profiles.json")
+        .exists());
 }
 
 #[test]
