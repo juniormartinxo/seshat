@@ -1128,6 +1128,7 @@ pub struct ClaudeCliProvider {
     model: Option<String>,
     agent: Option<String>,
     settings: Option<String>,
+    config_dir: Option<PathBuf>,
     timeout: Duration,
 }
 
@@ -1144,6 +1145,7 @@ impl ClaudeCliProvider {
             settings: env::var("CLAUDE_SETTINGS")
                 .ok()
                 .filter(|value| !value.trim().is_empty()),
+            config_dir: resolved_claude_config_dir(),
             timeout: Duration::from_secs(parse_timeout("CLAUDE_TIMEOUT")?),
         })
     }
@@ -1159,12 +1161,18 @@ impl ClaudeCliProvider {
             "Claude CLI não encontrada. Instale a CLI do Claude ou defina CLAUDE_BIN.",
         )?;
         let args = self.build_args();
-        let completed = run_cli(
+        let env_overrides = self
+            .config_dir
+            .as_ref()
+            .map(|config_dir| vec![("CLAUDE_CONFIG_DIR", config_dir.clone().into_os_string())])
+            .unwrap_or_default();
+        let completed = run_cli_with_env(
             &self.claude_bin,
             &args,
             prompt,
             timeout,
             env::current_dir().ok().as_deref(),
+            &env_overrides,
         )?;
         if !completed.status.success() {
             return Err(anyhow!("Claude CLI falhou: {}", tail_error(&completed)));
@@ -1202,6 +1210,26 @@ impl ClaudeCliProvider {
         }
         args
     }
+}
+
+fn resolved_claude_config_dir() -> Option<PathBuf> {
+    if let Some(explicit_config_dir) =
+        env::var_os("CLAUDE_CONFIG_DIR").filter(|value| !value.is_empty())
+    {
+        return Some(PathBuf::from(explicit_config_dir));
+    }
+
+    let profile_name = env::var("SESHAT_PROFILE").ok()?;
+    let profile_name = profile_name.trim();
+    if profile_name.is_empty() {
+        return None;
+    }
+
+    discover_cloak_profiles()
+        .ok()
+        .flatten()
+        .and_then(|discovery| discovery.installed_profile(profile_name).cloned())
+        .and_then(|profile| profile.cli_homes.claude_config_dir)
 }
 
 impl Provider for ClaudeCliProvider {
@@ -1303,16 +1331,6 @@ fn validate_executable(executable: &str, message: &str) -> Result<()> {
         }
     }
     Err(anyhow!(message.to_string()))
-}
-
-fn run_cli(
-    executable: &str,
-    args: &[OsString],
-    input: &str,
-    timeout: Duration,
-    cwd: Option<&Path>,
-) -> Result<std::process::Output> {
-    run_cli_with_env(executable, args, input, timeout, cwd, &[])
 }
 
 fn run_cli_with_env(
@@ -2517,6 +2535,73 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn claude_cli_provider_sets_config_dir_from_seshat_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("claude-fake");
+        let args_path = temp_dir.path().join("claude-args.txt");
+        let stdin_path = temp_dir.path().join("claude-stdin.txt");
+        let config_dir_path = temp_dir.path().join("claude-config-dir.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("HOME", temp_dir.path());
+        env::set_var("CLAUDE_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CLAUDE_CONFIG_DIR_FILE", &config_dir_path);
+        env::set_var("FAKE_RESPONSE", "Review OK");
+        env::set_var("SESHAT_PROFILE", "amjr");
+
+        let profile_claude_config_dir = temp_dir
+            .path()
+            .join(".config")
+            .join("cloak")
+            .join("profiles")
+            .join("amjr")
+            .join("claude");
+        std::fs::create_dir_all(&profile_claude_config_dir).unwrap();
+
+        let provider = ClaudeCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let config_dir = fs::read_to_string(config_dir_path).unwrap();
+        assert_eq!(PathBuf::from(config_dir), profile_claude_config_dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn claude_cli_provider_keeps_empty_config_dir_without_profile() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("claude-fake");
+        let args_path = temp_dir.path().join("claude-args.txt");
+        let stdin_path = temp_dir.path().join("claude-stdin.txt");
+        let config_dir_path = temp_dir.path().join("claude-config-dir.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CLAUDE_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_CLAUDE_CONFIG_DIR_FILE", &config_dir_path);
+        env::set_var("FAKE_RESPONSE", "Review OK");
+
+        let provider = ClaudeCliProvider::new().unwrap();
+        provider
+            .generate_commit_message("diff-body", None, false)
+            .unwrap();
+
+        let config_dir = fs::read_to_string(config_dir_path).unwrap();
+        assert!(config_dir.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn claude_cli_provider_reports_login_failure() {
         let _lock = crate::test_env::ENV_LOCK
             .lock()
@@ -2657,10 +2742,12 @@ mod tests {
             "CLAUDE_MODEL",
             "CLAUDE_AGENT",
             "CLAUDE_SETTINGS",
+            "CLAUDE_CONFIG_DIR",
             "CLAUDE_TIMEOUT",
             "FAKE_ARGS_FILE",
             "FAKE_STDIN_FILE",
             "FAKE_CODEX_HOME_FILE",
+            "FAKE_CLAUDE_CONFIG_DIR_FILE",
             "FAKE_RESPONSE",
             "FAKE_EMPTY_RESPONSE",
             "FAKE_EXIT_CODE",
@@ -2710,6 +2797,9 @@ stdin=$(cat)
 printf '%s' "$stdin" > "$FAKE_STDIN_FILE"
 if [ -n "$FAKE_CODEX_HOME_FILE" ]; then
   printf '%s' "${CODEX_HOME:-}" > "$FAKE_CODEX_HOME_FILE"
+fi
+if [ -n "$FAKE_CLAUDE_CONFIG_DIR_FILE" ]; then
+  printf '%s' "${CLAUDE_CONFIG_DIR:-}" > "$FAKE_CLAUDE_CONFIG_DIR_FILE"
 fi
 if [ -n "$FAKE_STDERR" ]; then
   printf '%s' "$FAKE_STDERR" >&2
