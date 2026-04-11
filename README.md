@@ -252,6 +252,11 @@ Diferencas conhecidas:
 
 ## Documentacao
 
+- Configuracao detalhada: `docs/configuracao.md`
+- CLI e comportamento real: `docs/cli.md`
+- Exemplos de `.seshat/config.yaml`: `docs/seshat-examples.md`
+- Arquitetura do tooling: `docs/tooling-architecture.md`
+- Customizacao da UI: `docs/ui-customization.md`
 - Plano macro: `docs/refactor-plan.md`
 - Backlog: `docs/refactor-tasks/`
 - Matriz de paridade: `docs/parity-matrix.md`
