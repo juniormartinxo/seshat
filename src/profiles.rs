@@ -1,4 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use chrono::Local;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -62,6 +65,32 @@ impl CloakProfileDiscovery {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ImportedProfileRecord {
+    pub name: String,
+    pub source: String,
+    pub source_root: PathBuf,
+    pub imported_at: String,
+    pub cloak_default: bool,
+    pub codex_home: Option<PathBuf>,
+    pub claude_config_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct ImportedProfilesStore {
+    pub version: u8,
+    pub profiles: Vec<ImportedProfileRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CloakImportReport {
+    pub storage_path: PathBuf,
+    pub imported: usize,
+    pub updated: usize,
+    pub unchanged: usize,
+    pub total: usize,
+}
+
 pub fn resolve_profile_precedence(
     base_path: impl AsRef<Path>,
     cli_profile: Option<&str>,
@@ -118,6 +147,118 @@ pub fn discover_cloak_profiles_in(home_dir: impl AsRef<Path>) -> Result<CloakPro
         default_profile,
         installed_profiles,
     })
+}
+
+pub fn imported_profiles_path() -> PathBuf {
+    current_home_dir()
+        .map(|home| home.join(".config").join("seshat").join("profiles.json"))
+        .unwrap_or_else(|| PathBuf::from(".seshat-profiles.json"))
+}
+
+pub fn import_cloak_profiles() -> Result<CloakImportReport> {
+    let discovery = discover_cloak_profiles()?
+        .ok_or_else(|| anyhow::anyhow!("Nenhum profile do Cloak detectado."))?;
+    import_cloak_profiles_to(&imported_profiles_path(), &discovery)
+}
+
+pub fn import_cloak_profiles_to(
+    storage_path: &Path,
+    discovery: &CloakProfileDiscovery,
+) -> Result<CloakImportReport> {
+    let existing = load_imported_profiles(storage_path)?;
+    let existing_by_name = existing
+        .profiles
+        .into_iter()
+        .map(|profile| (profile.name.clone(), profile))
+        .collect::<BTreeMap<_, _>>();
+    let imported_at = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut imported = 0usize;
+    let mut updated = 0usize;
+    let mut unchanged = 0usize;
+    let mut profiles = Vec::with_capacity(discovery.installed_profiles.len());
+
+    for installed in &discovery.installed_profiles {
+        let next =
+            build_imported_profile_record(discovery, installed, &existing_by_name, &imported_at);
+        match existing_by_name.get(&installed.name) {
+            Some(previous) if imported_profile_metadata_eq(previous, &next) => unchanged += 1,
+            Some(_) => updated += 1,
+            None => imported += 1,
+        }
+        profiles.push(next);
+    }
+
+    profiles.sort_by(|left, right| left.name.cmp(&right.name));
+    let store = ImportedProfilesStore {
+        version: 1,
+        profiles,
+    };
+    save_imported_profiles(storage_path, &store)?;
+
+    Ok(CloakImportReport {
+        storage_path: storage_path.to_path_buf(),
+        imported,
+        updated,
+        unchanged,
+        total: store.profiles.len(),
+    })
+}
+
+fn build_imported_profile_record(
+    discovery: &CloakProfileDiscovery,
+    installed: &CloakInstalledProfile,
+    existing_by_name: &BTreeMap<String, ImportedProfileRecord>,
+    imported_at: &str,
+) -> ImportedProfileRecord {
+    ImportedProfileRecord {
+        name: installed.name.clone(),
+        source: "cloak".to_string(),
+        source_root: discovery.root_dir.clone(),
+        imported_at: existing_by_name
+            .get(&installed.name)
+            .map(|profile| profile.imported_at.clone())
+            .unwrap_or_else(|| imported_at.to_string()),
+        cloak_default: discovery.default_profile.as_deref() == Some(installed.name.as_str()),
+        codex_home: installed.cli_homes.codex_home.clone(),
+        claude_config_dir: installed.cli_homes.claude_config_dir.clone(),
+    }
+}
+
+fn imported_profile_metadata_eq(
+    left: &ImportedProfileRecord,
+    right: &ImportedProfileRecord,
+) -> bool {
+    left.name == right.name
+        && left.source == right.source
+        && left.source_root == right.source_root
+        && left.cloak_default == right.cloak_default
+        && left.codex_home == right.codex_home
+        && left.claude_config_dir == right.claude_config_dir
+}
+
+fn load_imported_profiles(path: &Path) -> Result<ImportedProfilesStore> {
+    if !path.exists() {
+        return Ok(ImportedProfilesStore::default());
+    }
+    let content =
+        fs::read_to_string(path).with_context(|| format!("falha ao ler {}", path.display()))?;
+    serde_json::from_str(&content)
+        .with_context(|| format!("falha ao interpretar {}", path.display()))
+}
+
+fn save_imported_profiles(path: &Path, store: &ImportedProfilesStore) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string_pretty(store)?;
+    fs::write(
+        path,
+        format!(
+            "{content}
+"
+        ),
+    )?;
+    Ok(())
 }
 
 fn current_home_dir() -> Option<PathBuf> {
@@ -459,6 +600,128 @@ binary = "codex"
         assert_eq!(
             resolved,
             ResolvedProfile::new("amjr", ProfileSource::CloakDefault)
+        );
+    }
+
+    #[test]
+    fn imported_profiles_path_uses_seshat_namespace_not_cloak() {
+        let temp = tempdir().unwrap();
+        env::set_var("HOME", temp.path());
+
+        let path = imported_profiles_path();
+
+        assert_eq!(
+            path,
+            temp.path()
+                .join(".config")
+                .join("seshat")
+                .join("profiles.json")
+        );
+        assert!(!path.starts_with(temp.path().join(".config").join("cloak")));
+    }
+
+    #[test]
+    fn import_cloak_profiles_never_writes_inside_cloak_root() {
+        let temp = tempdir().unwrap();
+        let cloak_root = temp.path().join(".config").join("cloak");
+        let profiles_dir = cloak_root.join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            cloak_root.join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+        let storage_path = temp
+            .path()
+            .join(".config")
+            .join("seshat")
+            .join("profiles.json");
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+
+        let report = import_cloak_profiles_to(&storage_path, &discovery).unwrap();
+
+        assert_eq!(report.storage_path, storage_path);
+        assert!(storage_path.exists());
+        assert!(!cloak_root.join("profiles.json").exists());
+        assert!(cloak_root.join("config.toml").exists());
+    }
+
+    #[test]
+    fn import_cloak_profiles_is_idempotent() {
+        let temp = tempdir().unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+        let storage_path = temp
+            .path()
+            .join(".config")
+            .join("seshat")
+            .join("profiles.json");
+        let discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+
+        let first = import_cloak_profiles_to(&storage_path, &discovery).unwrap();
+        let first_content = fs::read_to_string(&storage_path).unwrap();
+        let second = import_cloak_profiles_to(&storage_path, &discovery).unwrap();
+        let second_content = fs::read_to_string(&storage_path).unwrap();
+        let stored: ImportedProfilesStore = serde_json::from_str(&second_content).unwrap();
+
+        assert_eq!(first.imported, 1);
+        assert_eq!(first.updated, 0);
+        assert_eq!(first.unchanged, 0);
+        assert_eq!(second.imported, 0);
+        assert_eq!(second.updated, 0);
+        assert_eq!(second.unchanged, 1);
+        assert_eq!(first_content, second_content);
+        assert_eq!(stored.profiles.len(), 1);
+        assert_eq!(stored.profiles[0].name, "amjr");
+        assert_eq!(stored.profiles[0].source, "cloak");
+        assert!(stored.profiles[0].cloak_default);
+    }
+
+    #[test]
+    fn import_cloak_profiles_reexecutes_without_duplicates() {
+        let temp = tempdir().unwrap();
+        let profiles_dir = temp.path().join(".config").join("cloak").join("profiles");
+        fs::create_dir_all(profiles_dir.join("amjr").join("codex")).unwrap();
+        fs::write(
+            temp.path()
+                .join(".config")
+                .join("cloak")
+                .join("config.toml"),
+            "[general]\ndefault_profile = \"amjr\"\n",
+        )
+        .unwrap();
+        let storage_path = temp
+            .path()
+            .join(".config")
+            .join("seshat")
+            .join("profiles.json");
+
+        let first_discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        import_cloak_profiles_to(&storage_path, &first_discovery).unwrap();
+
+        fs::create_dir_all(profiles_dir.join("samwise").join("claude")).unwrap();
+        let second_discovery = discover_cloak_profiles_in(temp.path()).unwrap();
+        let report = import_cloak_profiles_to(&storage_path, &second_discovery).unwrap();
+        let stored: ImportedProfilesStore =
+            serde_json::from_str(&fs::read_to_string(&storage_path).unwrap()).unwrap();
+
+        assert_eq!(report.imported, 1);
+        assert_eq!(report.total, 2);
+        assert_eq!(
+            stored
+                .profiles
+                .iter()
+                .map(|profile| profile.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["amjr", "samwise"]
         );
     }
 
