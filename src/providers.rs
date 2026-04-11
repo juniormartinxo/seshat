@@ -123,6 +123,7 @@ Analyze the provided diff and generate ONLY the commit message. No explanations.
 
 pub trait Provider {
     fn name(&self) -> &'static str;
+    fn transport_kind(&self) -> ProviderTransportKind;
     fn generate_commit_message(
         &self,
         diff: &str,
@@ -135,6 +136,12 @@ pub trait Provider {
         model: Option<&str>,
         custom_prompt: Option<&str>,
     ) -> Result<String>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderTransportKind {
+    Api,
+    Cli,
 }
 
 fn language() -> String {
@@ -326,6 +333,10 @@ impl Provider for OpenAICompatibleProvider {
         self.name
     }
 
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Api
+    }
+
     fn generate_commit_message(
         &self,
         diff: &str,
@@ -424,6 +435,10 @@ impl Provider for AnthropicProvider {
         "claude-api"
     }
 
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Api
+    }
+
     fn generate_commit_message(
         &self,
         diff: &str,
@@ -520,6 +535,10 @@ impl Provider for GeminiProvider {
         "gemini"
     }
 
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Api
+    }
+
     fn generate_commit_message(
         &self,
         diff: &str,
@@ -612,6 +631,10 @@ impl Default for OllamaProvider {
 impl Provider for OllamaProvider {
     fn name(&self) -> &'static str {
         "ollama"
+    }
+
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Api
     }
 
     fn generate_commit_message(
@@ -781,6 +804,10 @@ impl Provider for CodexCliProvider {
         "codex"
     }
 
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Cli
+    }
+
     fn generate_commit_message(
         &self,
         diff: &str,
@@ -899,6 +926,10 @@ impl ClaudeCliProvider {
 impl Provider for ClaudeCliProvider {
     fn name(&self) -> &'static str {
         "claude"
+    }
+
+    fn transport_kind(&self) -> ProviderTransportKind {
+        ProviderTransportKind::Cli
     }
 
     fn generate_commit_message(
@@ -1177,6 +1208,30 @@ mod tests {
         assert_eq!(get_provider("claude-cli").unwrap().name(), "claude");
         assert_eq!(get_provider("claude-api").unwrap().name(), "claude-api");
         assert_eq!(get_provider("codex-api").unwrap().name(), "codex-api");
+    }
+
+    #[test]
+    fn providers_expose_transport_kind() {
+        assert_eq!(
+            get_provider("openai").unwrap().transport_kind(),
+            ProviderTransportKind::Api
+        );
+        assert_eq!(
+            get_provider("codex-api").unwrap().transport_kind(),
+            ProviderTransportKind::Api
+        );
+        assert_eq!(
+            get_provider("codex").unwrap().transport_kind(),
+            ProviderTransportKind::Cli
+        );
+        assert_eq!(
+            get_provider("claude").unwrap().transport_kind(),
+            ProviderTransportKind::Cli
+        );
+        assert_eq!(
+            get_provider("claude-cli").unwrap().transport_kind(),
+            ProviderTransportKind::Cli
+        );
     }
 
     #[test]
