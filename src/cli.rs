@@ -9,7 +9,9 @@ use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
 use crate::git::GitClient;
 use crate::json_output;
-use crate::profiles::{discover_cloak_profiles, ProfileSource, ResolvedProfile};
+use crate::profiles::{
+    discover_cloak_profiles, resolve_profile_precedence, ProfileSource, ResolvedProfile,
+};
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
 use crate::ui;
@@ -22,6 +24,7 @@ use anyhow::{anyhow, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap};
+use std::env;
 use std::fs;
 use std::path::PathBuf;
 
@@ -327,19 +330,25 @@ fn run_profile_list() -> Result<()> {
 
 fn run_profile_current(args: ProfileCurrentArgs) -> Result<()> {
     let project_config = ProjectConfig::load(".");
-    let effective = resolve_effective_config(
+    let global_config = load_config_for_path(".");
+    let cloak_discovery = discover_cloak_profiles()?;
+    let resolved_profile = resolve_profile_precedence(
         ".",
-        &project_config,
-        CliConfigOverrides {
-            provider: args.provider,
-            model: None,
-            profile: args.profile,
-            max_diff_size: None,
-        },
-    )?;
+        args.profile.as_deref(),
+        env::var("SESHAT_PROFILE").ok().as_deref(),
+        project_config.commit.profile.as_deref(),
+        global_config.profile.as_deref(),
+        cloak_discovery.as_ref(),
+    );
+    let provider = args
+        .provider
+        .clone()
+        .or_else(|| project_config.commit.provider.clone())
+        .or_else(|| global_config.ai_provider.clone())
+        .unwrap_or_else(|| "openai".to_string());
 
-    let mut items = BTreeMap::from([("Provider".to_string(), effective.provider.clone())]);
-    if let Some(profile) = &effective.profile {
+    let mut items = BTreeMap::from([("Provider".to_string(), provider)]);
+    if let Some(profile) = &resolved_profile {
         items.insert("Profile".to_string(), profile.name.clone());
         items.insert(
             "Source".to_string(),
