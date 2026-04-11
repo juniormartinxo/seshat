@@ -12,6 +12,10 @@ O binario final se chama `seshat` e oferece os comandos:
 - `fix`
 - `flow`
 - `bench agents`
+- `profile list`
+- `profile current`
+- `profile doctor`
+- `profile import cloak`
 
 ## 🚀 Instalacao Local
 
@@ -81,6 +85,15 @@ seshat flow 3 --yes --check lint
 seshat commit --profile amjr --yes
 ```
 
+Inspecione e importe profiles do Cloak:
+
+```bash
+seshat profile list
+seshat profile current
+seshat profile doctor
+seshat profile import cloak
+```
+
 Compare agentes em fixtures temporarias:
 
 ```bash
@@ -123,7 +136,7 @@ Campos principais:
 - `project_type`: `rust`, `python`, `typescript` ou omitido para autodeteccao.
 - `commit.provider`: `codex`, `codex-api`, `claude`, `claude-api`, `openai`, `deepseek`, `gemini`, `zai`, `ollama` ou `claude-cli` (alias legado de `claude`).
 - `commit.model`: modelo especifico do provider.
-- `commit.profile`: profile logico do Seshat; nesta fase ele define a escolha explicita do profile antes da integracao com resolucao do Cloak.
+- `commit.profile`: profile logico do Seshat; precedencia atual: `--profile` > `SESHAT_PROFILE` > `commit.profile` > binding local `.cloak` > `default_profile` do Cloak > config global `~/.seshat`.
 - `commit.language`: `PT-BR`, `ENG`, `ESP`, `FRA`, `DEU` ou `ITA`.
 - `commit.max_diff_size` e `commit.warn_diff_size`: limites de diff.
 - `commit.no_ai_extensions` e `commit.no_ai_paths`: arquivos que usam mensagem automatica sem IA.
@@ -136,6 +149,7 @@ Campos principais:
 - `checks.*.auto_fix`: usa `fix_command` durante o check.
 - `code_review.*`: ativa review por IA, bloqueio, prompt, logs, modo de entrega e extensoes.
 - `code_review.mode`: `interactive` mostra os findings no terminal; `files` gera markdowns em `.seshat/code_review/<branch>/<arquivo>.md` e reduz a interacao na tela.
+- `profile` tambem pode ser inspecionado pela CLI com `seshat profile list|current|doctor`.
 - `code_review.max_diff_size`: limite de caracteres enviado ao provider de code review; quando excedido, o diff e compactado.
 - `ui.force_rich` e `ui.icons`: controlam renderizacao humana.
 
@@ -153,6 +167,8 @@ Campos principais:
 - `WARN_DIFF_SIZE`: limite de aviso de diff.
 - `COMMIT_LANGUAGE`: linguagem padrao.
 - `SESHAT_PROFILE`: profile explicito do Seshat; precedencia atual: `--profile` > `SESHAT_PROFILE` > `commit.profile` > binding local `.cloak` > `default_profile` do Cloak > config global `~/.seshat`.
+- `CODEX_HOME`: override explicito do home do Codex CLI; quando ausente, o Seshat tenta resolver a partir do profile do Cloak.
+- `CLAUDE_CONFIG_DIR`: override explicito do config dir do Claude CLI; quando ausente, o Seshat tenta resolver a partir do profile do Cloak.
 - `DEFAULT_DATE`: data padrao do commit.
 - `GEMINI_API_KEY`: fallback para provider Gemini.
 - `ZAI_API_KEY` ou `ZHIPU_API_KEY`: fallback para provider Zai.
@@ -180,6 +196,31 @@ Providers CLI cobertos:
 
 Providers `codex`, `claude` e `ollama` nao exigem `API_KEY` global.
 
+## Profiles do Cloak
+
+O Cloak e uma aplicacao separada do Seshat, usada aqui apenas como fonte de discovery e compatibilidade de profiles.
+Repositorio oficial: https://github.com/juniormartinxo/cloak
+
+Diretorio padrao do Cloak no Linux:
+- configuracao global: `~/.config/cloak/config.toml`
+- perfis: `~/.config/cloak/profiles/<profile>/`
+- binding de projeto: arquivo local `.cloak`
+
+A integracao do Seshat com o Cloak e somente leitura durante a execucao normal.
+
+- `codex` resolve `CODEX_HOME` a partir de `~/.config/cloak/profiles/<profile>/codex`.
+- `claude` resolve `CLAUDE_CONFIG_DIR` a partir de `~/.config/cloak/profiles/<profile>/claude`.
+- profiles incompletos nao quebram a execucao: se o diretorio esperado nao existir, o Seshat simplesmente nao injeta a env var correspondente.
+- a operacao normal nao escreve em `.cloak` nem em `~/.config/cloak/**`.
+
+Comandos disponiveis:
+
+- `seshat profile list`: lista profiles detectados e marca o default do Cloak.
+- `seshat profile current`: mostra o profile efetivo do diretorio atual e a origem da decisao.
+- `seshat profile doctor`: valida existencia do profile, homes/config dirs e auth minima detectavel para `codex` e `claude`.
+- `seshat profile import cloak`: importa metadados para storage proprio do Seshat em `~/.config/seshat/profiles.json`.
+
+
 ## Review contextual
 
 O pipeline de code review continua usando o `diff` como referencia principal do que mudou, mas o contrato interno agora e estruturado.
@@ -195,6 +236,21 @@ Compatibilidade:
 
 - `claude` e `claude-cli` continuam aceitos publicamente.
 - A identidade do provider e compartilhada para comparacoes internas e overrides do JUDGE, mas o alias legado nao foi removido.
+
+## Review bloqueante
+
+Quando `code_review.blocking=true`, findings `[BUG]` e `[SECURITY]` entram no fluxo de decisao bloqueante.
+
+No modo `interactive`:
+- cada item bloqueante pode receber `F` (falso positivo), `I` (enviar para JUDGE IA) ou `P` (pular).
+- se o usuario escolher continuar, o Seshat aplica as decisoes por item.
+- se todos os itens forem `P`, o commit continua mesmo assim.
+- o JUDGE recebe o finding mastigado por item, nao o review inteiro, e em providers CLI continua podendo inspecionar contexto local em modo somente leitura.
+
+No modo `files`:
+- o review e gravado em `.seshat/code_review/<branch>/<arquivo>.md`.
+- cada finding sai com o template `Ação: <F | P>`.
+- esse campo hoje e documental para revisao humana; ele nao e reimportado automaticamente para o store de falsos positivos.
 
 Limites conhecidos:
 
