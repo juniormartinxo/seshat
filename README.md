@@ -1,7 +1,5 @@
 # Seshat 🤖🦀
 
-Implementacao Rust do Seshat, mantida em repo separado da versao Python em `~/apps/jm/seshat`.
-
 🦀 Este projeto foi atualizado para Rust e, desde 2026-04-10, este repo e a fonte de verdade da implementacao atual.
 
 📦 A versao Python permanece em repo separado como referencia historica e para comparacao de comportamento, conforme `docs/cutover-decision.md`.
