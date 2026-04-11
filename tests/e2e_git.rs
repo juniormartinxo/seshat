@@ -133,10 +133,44 @@ for arg in "$@"; do
   fi
   previous="$arg"
 done
-if [ -n "$out" ]; then
-  printf '%s' "$FAKE_CODEX_RESPONSE" > "$out"
+
+stdin_file="$FAKE_CODEX_STDIN_FILE"
+if [ -n "$stdin_file" ]; then
+  count_file="$stdin_file.count"
+  if [ -f "$count_file" ]; then
+    count=$(cat "$count_file")
+  else
+    count=0
+  fi
+  next=$((count + 1))
+  printf '%s' "$next" > "$count_file"
+  cat > "${stdin_file}.${next}"
 else
-  printf '%s' "$FAKE_CODEX_RESPONSE"
+  input=$(cat)
+fi
+
+if [ -n "$stdin_file" ]; then
+  input=$(cat "${stdin_file}.${next}")
+fi
+
+response="$FAKE_CODEX_RESPONSE"
+case "$input" in
+  *"Return only the code review in the requested format."*)
+    if [ -n "$FAKE_CODEX_REVIEW_RESPONSE" ]; then
+      response="$FAKE_CODEX_REVIEW_RESPONSE"
+    fi
+    ;;
+  *"Return only the final Conventional Commit message."*)
+    if [ -n "$FAKE_CODEX_COMMIT_RESPONSE" ]; then
+      response="$FAKE_CODEX_COMMIT_RESPONSE"
+    fi
+    ;;
+esac
+
+if [ -n "$out" ]; then
+  printf '%s' "$response" > "$out"
+else
+  printf '%s' "$response"
 fi
 "#;
     fs::write(bin_path, script).expect("write fake codex");
@@ -297,6 +331,62 @@ code_review:
         ));
 
     assert_eq!(repo.last_subject(), "chore: seed");
+}
+
+#[cfg(unix)]
+#[test]
+fn review_cli_e2e_uses_staged_snapshot_and_filtered_context() {
+    let repo = GitRepo::init();
+    repo.write(
+        ".seshat/config.yaml",
+        "\
+project_type: rust
+commit:
+  provider: codex
+  model: fake-model
+  language: PT-BR
+code_review:
+  enabled: true
+  blocking: false
+",
+    );
+    repo.seed_commit("README.md", "seed\n");
+    repo.write("README.md", "workspace readme change\n");
+    repo.stage("README.md");
+    repo.write("src/main.rs", "fn staged_version() {}\n");
+    repo.stage("src/main.rs");
+    repo.write("src/main.rs", "fn workspace_version() {}\n");
+
+    let fake_dir = tempfile::tempdir().expect("create fake bin dir");
+    let fake_codex = fake_dir.path().join("codex");
+    let stdin_prefix = fake_dir.path().join("codex-stdin");
+    write_fake_codex(&fake_codex);
+
+    repo.seshat()
+        .env("CODEX_BIN", &fake_codex)
+        .env("FAKE_CODEX_STDIN_FILE", &stdin_prefix)
+        .env("FAKE_CODEX_REVIEW_RESPONSE", "OK")
+        .env("FAKE_CODEX_COMMIT_RESPONSE", "feat: e2e review context")
+        .args(["commit", "--yes"])
+        .assert()
+        .success();
+
+    assert_eq!(repo.last_subject(), "feat: e2e review context");
+
+    let review_prompt =
+        fs::read_to_string(format!("{}.1", stdin_prefix.display())).expect("read review prompt");
+    let commit_prompt =
+        fs::read_to_string(format!("{}.2", stdin_prefix.display())).expect("read commit prompt");
+
+    assert!(review_prompt.contains("Return only the code review in the requested format."));
+    assert!(review_prompt.contains("Primary diff to review:"));
+    assert!(review_prompt.contains("src/main.rs"));
+    assert!(review_prompt.contains("fn staged_version() {}"));
+    assert!(!review_prompt.contains("fn workspace_version() {}"));
+    assert!(!review_prompt.contains("workspace readme change"));
+    assert!(review_prompt.contains("The staged snapshot is the source of truth over files on disk"));
+    assert!(review_prompt.contains("Changed files:\nsrc/main.rs"));
+    assert!(commit_prompt.contains("Return only the final Conventional Commit message."));
 }
 
 #[test]
