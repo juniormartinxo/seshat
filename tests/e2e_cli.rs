@@ -506,6 +506,82 @@ fn profile_list_e2e_lists_detected_profiles_and_default() {
 }
 
 #[test]
+fn profile_current_e2e_shows_cli_flag_source() {
+    let project = tempfile::tempdir().expect("create project");
+
+    seshat()
+        .current_dir(project.path())
+        .env_remove("SESHAT_PROFILE")
+        .args([
+            "profile",
+            "current",
+            "--profile",
+            "samwise",
+            "--provider",
+            "codex",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Current Profile"))
+        .stdout(predicate::str::contains("Profile: samwise"))
+        .stdout(predicate::str::contains("Source: cli-flag"))
+        .stdout(predicate::str::contains("Provider: codex"));
+}
+
+#[test]
+fn profile_current_e2e_shows_environment_source() {
+    let project = tempfile::tempdir().expect("create project");
+
+    seshat()
+        .current_dir(project.path())
+        .env("SESHAT_PROFILE", "env-profile")
+        .args(["profile", "current"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: env-profile"))
+        .stdout(predicate::str::contains("Source: environment"));
+}
+
+#[test]
+fn profile_current_e2e_shows_project_config_source() {
+    let project = tempfile::tempdir().expect("create project");
+    write_project_seshat(
+        project.path(),
+        "project_type: rust\ncommit:\n  provider: claude\n  profile: project-profile\n  language: PT-BR\ncode_review:\n  enabled: false\n",
+    );
+
+    seshat()
+        .current_dir(project.path())
+        .env_remove("SESHAT_PROFILE")
+        .args(["profile", "current"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: project-profile"))
+        .stdout(predicate::str::contains("Source: project-config"))
+        .stdout(predicate::str::contains("Provider: claude"));
+}
+
+#[cfg(unix)]
+#[test]
+fn profile_current_e2e_shows_cloak_default_source() {
+    let project = tempfile::tempdir().expect("create project");
+    let home = tempfile::tempdir().expect("create home");
+    write_cloak_default_profile(home.path(), "amjr");
+    let _ = create_cloak_codex_profile(home.path(), "amjr");
+
+    seshat()
+        .current_dir(project.path())
+        .env("HOME", home.path())
+        .env_remove("SESHAT_PROFILE")
+        .args(["profile", "current"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Profile: amjr"))
+        .stdout(predicate::str::contains("Source: cloak-default"))
+        .stdout(predicate::str::contains("Provider: openai"));
+}
+
+#[test]
 fn json_e2e_errors_without_seshat() {
     let project = tempfile::tempdir().expect("create project");
 
