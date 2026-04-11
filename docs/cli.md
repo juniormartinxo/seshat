@@ -20,6 +20,7 @@ Gera mensagem de commit e executa `git commit`.
 - Se `commit.gpgsign=true` e `gpg.format=openpgp`, o Seshat faz pre-auth de GPG antes de chamar provider.
 - `--no-review` desliga review mesmo que `code_review.enabled=true`.
 - `--no-check` desliga checks mesmo que existam defaults configurados.
+- `--profile` sobrescreve a resolucao de profile para aquele comando.
 
 ### Fast paths sem IA
 
@@ -74,6 +75,24 @@ Comportamento:
 - com arquivos posicionais, usa os arquivos explicitados
 - com `--all`, roda no projeto inteiro
 
+## `seshat profile`
+
+Comandos disponiveis:
+
+- `seshat profile list`
+- `seshat profile current`
+- `seshat profile doctor`
+- `seshat profile import cloak`
+
+Comportamento:
+
+- o Cloak e uma aplicacao separada do Seshat: https://github.com/juniormartinxo/cloak
+- o Seshat considera o layout padrao do Cloak em `~/.config/cloak/`, incluindo `config.toml`, `profiles/<profile>/` e o arquivo local `.cloak`
+- `list` inspeciona perfis detectados no Cloak em modo leitura.
+- `current` mostra o profile efetivo e a origem da resolucao, sem exigir credenciais de provider.
+- `doctor` valida existencia do profile, dirs de runtime e auth minima detectavel para `codex` e `claude`.
+- `import cloak` grava metadados importados em `~/.config/seshat/profiles.json`, sem escrever em `.cloak` nem em `~/.config/cloak/**`.
+
 ## `seshat config`
 
 Atualiza a configuracao global em `~/.seshat` e tenta salvar segredos no keyring.
@@ -116,6 +135,7 @@ Usage: seshat commit [OPTIONS]
 Options:
       --provider <PROVIDER>
       --model <MODEL>
+      --profile <PROFILE>
   -y, --yes
   -v, --verbose
   -d, --date <DATE>
@@ -138,6 +158,7 @@ Flags:
 - `COUNT`
 - `--provider`
 - `--model`
+- `--profile`
 - `--yes`
 - `--verbose`
 - `--date`
@@ -145,6 +166,19 @@ Flags:
 - `--check`
 - `--review`
 - `--no-check`
+
+### `profile`
+
+```text
+Usage: seshat profile <COMMAND>
+```
+
+Subcomandos:
+
+- `list`
+- `current [--profile <PROFILE>] [--provider <PROVIDER>]`
+- `doctor [--profile <PROFILE>]`
+- `import cloak`
 
 ### `init`
 
@@ -178,6 +212,18 @@ Quando `--format json` esta ativo, `commit` emite eventos como:
 - `error`
 
 O contrato detalhado esta em `docs/json-contract.md`.
+
+## Code review bloqueante
+
+Quando `code_review.blocking=true`, findings `[BUG]` e `[SECURITY]` entram em fluxo bloqueante.
+
+- no modo `interactive`, cada item recebe decisao individual: `F`, `I` ou `P`.
+- `F` registra falso positivo no fluxo normal.
+- `I` envia apenas aquele item para o JUDGE.
+- `P` nao toma acao sobre o item.
+- se todos os itens forem `P`, o commit pode continuar.
+
+Quando `code_review.mode=files`, os findings sao gravados em `.seshat/code_review/<branch>/<arquivo>.md` e a interacao do terminal e reduzida.
 
 ## Diferencas relevantes para quem vinha do repo Python
 
