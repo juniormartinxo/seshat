@@ -12,10 +12,11 @@ Para provider, modelo, limites de diff, linguagem e segredos, a ordem efetiva e:
 4. Arquivo local `.env`
 5. Variaveis de ambiente reais
 6. `commit.*` em `.seshat/config.yaml`
-7. Flags da CLI (`--provider`, `--model`, `--max-diff`)
+7. Flags da CLI (`--provider`, `--model`, `--max-diff`, `--profile`)
 
 Observacoes:
 
+- para `profile`, a precedencia base implementada agora e: `--profile` > `SESHAT_PROFILE` real > `commit.profile` > `~/.seshat`.
 - `checks`, `commands`, `code_review` e `ui` vivem apenas no arquivo de projeto.
 - `seshat commit` exige `.seshat/config.yaml`.
 - `seshat flow` pode rodar sem config de projeto, mas usa o arquivo se ele existir.
@@ -40,6 +41,7 @@ Se o keyring falhar, a CLI oferece fallback para gravar o segredo em texto plano
 - `WARN_DIFF_SIZE`
 - `COMMIT_LANGUAGE`
 - `DEFAULT_DATE`
+- `SESHAT_PROFILE`
 
 ### Timeouts e providers HTTP
 
@@ -57,8 +59,9 @@ Se o keyring falhar, a CLI oferece fallback para gravar o segredo em texto plano
 - `CODEX_MODEL`
 - `CODEX_PROFILE`
 - `CODEX_TIMEOUT`
+- `CODEX_API_KEY`
 
-O provider `codex` usa a CLI local e nao exige `API_KEY`.
+O provider `codex` usa a CLI local e nao exige `API_KEY`. Em automacao com `codex exec`, a credencial dedicada suportada pela CLI e `CODEX_API_KEY`.
 
 ### Claude CLI
 
@@ -79,6 +82,46 @@ O provider `claude` usa a CLI local e nao exige `API_KEY`. `claude-cli` continua
 
 Os aliases funcionam para o provider principal e para o JUDGE.
 
+## Classificacao explicita de providers
+
+O runtime agora classifica providers com `ProviderTransportKind`:
+
+- `Api`: providers HTTP como `openai`, `codex-api`, `claude-api`, `deepseek`, `gemini`, `zai` e `ollama`.
+- `Cli`: providers locais como `codex` e `claude`.
+
+Essa separacao e usada pelo pipeline de review e pelo fluxo do JUDGE. A diferenca entre API e CLI nao depende mais de comparar strings de nome de provider espalhadas pelo codigo.
+
+Compatibilidade de aliases:
+
+- `claude-cli` continua aceito como alias legado de `claude`.
+- aliases publicos continuam validos, mas comparacoes internas usam a identidade compartilhada do provider family.
+
+## Semantica do review contextual
+
+O review usa um `ReviewInput` estruturado. O `diff` continua sendo a referencia do que mudou; o contexto adicional existe para interpretacao, nao para ampliar arbitrariamente o escopo do review.
+
+Campos principais:
+
+- `diff`: recorte principal da mudanca.
+- `changed_files`: arquivos staged ou explicitamente selecionados.
+- `staged_files`: staged snapshot por arquivo, com metadados para texto, binario, delecao e truncation.
+- `repo_root`: raiz do repo usada pelos providers CLI para inspecao contextual controlada.
+- `custom_prompt`: prompt opcional do projeto.
+
+Regras operacionais:
+
+- providers HTTP recebem uma serializacao compacta desse payload.
+- providers CLI recebem review contextual com `diff` + arquivos + staged snapshot.
+- se o working tree divergir do staged, o staged snapshot e a fonte de verdade do commit.
+- em CLI, o agente pode ler contexto local para reduzir falso positivo por falta de contexto, mas o review continua focado no que o `diff` staged mostra.
+
+## Riscos e limites conhecidos
+
+- staged snapshot pode ser truncado por arquivo para respeitar limite de contexto.
+- arquivos binarios e delecoes sao descritos por metadados, nao por conteudo integral.
+- prompts de review contextual em CLI reduzem falso positivo, mas nao eliminam julgamento ruim do modelo.
+- overrides de ambiente do JUDGE continuam baseados na identidade do provider family para preservar compatibilidade com `CODEX_MODEL`, `CLAUDE_MODEL` e `CODEX_API_KEY` para o provider `codex`.
+
 ## Schema de `.seshat/config.yaml`
 
 ### Exemplo completo
@@ -92,6 +135,7 @@ commit:
   warn_diff_size: 2500
   provider: codex
   model: gpt-5.4
+  profile: amjr
   no_ai_extensions: [".md", ".mdx"]
   no_ai_paths: ["docs/", ".github/", "CHANGELOG.md", ".env", ".nvmrc"]
 
@@ -114,6 +158,7 @@ checks:
 code_review:
   enabled: true
   blocking: true
+  mode: interactive
   max_diff_size: 16000
   prompt: .seshat/review.md
   extensions: [".rs"]
@@ -158,6 +203,7 @@ Campos suportados:
 - `warn_diff_size`
 - `provider`
 - `model`
+- `profile`
 - `no_ai_extensions`
 - `no_ai_paths`
 
@@ -166,6 +212,7 @@ Os campos legados no topo do YAML ainda sao lidos para compatibilidade:
 - `language`, `commit_language`, `COMMIT_LANGUAGE`
 - `provider`, `ai_provider`, `AI_PROVIDER`
 - `model`, `ai_model`, `AI_MODEL`
+- `profile`, `SESHAT_PROFILE`
 - `max_diff_size`, `MAX_DIFF_SIZE`
 - `warn_diff_size`, `WARN_DIFF_SIZE`
 
@@ -208,6 +255,7 @@ Campos suportados:
 
 - `enabled`
 - `blocking`
+- `mode`
 - `max_diff_size`
 - `prompt`
 - `log_dir`
@@ -215,6 +263,8 @@ Campos suportados:
 
 Notas:
 
+- `mode: interactive` mostra o review completo no terminal e mantem o fluxo interativo.
+- `mode: files` grava os findings em `.seshat/code_review/<branch>/<path_relativo>.md`, com campo `Ação: <F | P>`, e reduz a interacao no terminal.
 - `prompt` aponta para o prompt customizado do projeto.
 - `seshat init` gera `.seshat/review.md` automaticamente.
 - quando `blocking: true`, findings `[BUG]` e `[SECURITY]` bloqueiam o commit.
