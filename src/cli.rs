@@ -9,6 +9,7 @@ use crate::core::{commit_with_ai, CommitOptions};
 use crate::flow::{BatchCommitService, ProcessFileOptions};
 use crate::git::GitClient;
 use crate::json_output;
+use crate::profiles::{ProfileSource, ResolvedProfile};
 use crate::review::{default_extensions, get_review_prompt};
 use crate::tooling::ToolingRunner;
 use crate::ui;
@@ -286,6 +287,34 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
     Ok(())
 }
 
+fn profile_source_label(source: ProfileSource) -> &'static str {
+    match source {
+        ProfileSource::CliFlag => "cli-flag",
+        ProfileSource::Environment => "environment",
+        ProfileSource::ProjectConfig => "project-config",
+        ProfileSource::GlobalConfig => "global-config",
+        ProfileSource::DirectoryBinding => "directory-binding",
+        ProfileSource::CloakDefault => "cloak-default",
+    }
+}
+
+fn apply_profile_summary(
+    summary: &mut BTreeMap<String, String>,
+    profile: Option<&ResolvedProfile>,
+    verbose: bool,
+) {
+    let Some(profile) = profile else {
+        return;
+    };
+    summary.insert("Profile".to_string(), profile.name.clone());
+    if verbose {
+        summary.insert(
+            "Profile Source".to_string(),
+            profile_source_label(profile.source).to_string(),
+        );
+    }
+}
+
 fn run_commit(args: CommitArgs) -> Result<()> {
     let git = GitClient::new(".");
     let json_mode = matches!(args.format, Some(OutputFormat::Json));
@@ -309,6 +338,7 @@ fn run_commit(args: CommitArgs) -> Result<()> {
         },
     )?;
     effective.apply_to_env();
+    let resolved_profile = effective.profile.clone();
     let config = effective.config;
     let provider = effective.provider;
     let mut date = args.date.or(config.default_date.clone());
@@ -317,6 +347,7 @@ fn run_commit(args: CommitArgs) -> Result<()> {
         ("Provider".to_string(), provider.clone()),
         ("Language".to_string(), config.commit_language.clone()),
     ]);
+    apply_profile_summary(&mut summary, resolved_profile.as_ref(), args.verbose);
     if let Some(project_type) = &project_config.project_type {
         summary.insert("Project".to_string(), project_type.clone());
     }
@@ -679,6 +710,7 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         },
     )?;
     effective.apply_to_env();
+    let resolved_profile = effective.profile.clone();
     let config = effective.config;
     let provider = effective.provider;
 
@@ -700,11 +732,12 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         files.truncate(args.count);
     }
 
-    let summary = BTreeMap::from([
+    let mut summary = BTreeMap::from([
         ("Provider".to_string(), service.provider.clone()),
         ("Language".to_string(), service.language.clone()),
         ("Files".to_string(), files.len().to_string()),
     ]);
+    apply_profile_summary(&mut summary, resolved_profile.as_ref(), args.verbose);
     ui::summary("Seshat Flow", &summary);
 
     if !args.yes {
@@ -759,6 +792,40 @@ fn run_flow(args: FlowArgs) -> Result<()> {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn apply_profile_summary_adds_profile() {
+        let mut summary = BTreeMap::new();
+
+        apply_profile_summary(
+            &mut summary,
+            Some(&ResolvedProfile::new("amjr", ProfileSource::CloakDefault)),
+            false,
+        );
+
+        assert_eq!(summary.get("Profile").map(String::as_str), Some("amjr"));
+        assert!(!summary.contains_key("Profile Source"));
+    }
+
+    #[test]
+    fn apply_profile_summary_adds_source_in_verbose_mode() {
+        let mut summary = BTreeMap::new();
+
+        apply_profile_summary(
+            &mut summary,
+            Some(&ResolvedProfile::new(
+                "samwise",
+                ProfileSource::DirectoryBinding,
+            )),
+            true,
+        );
+
+        assert_eq!(summary.get("Profile").map(String::as_str), Some("samwise"));
+        assert_eq!(
+            summary.get("Profile Source").map(String::as_str),
+            Some("directory-binding")
+        );
+    }
 
     #[test]
     fn commit_command_accepts_profile_override() {
