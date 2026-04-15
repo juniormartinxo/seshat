@@ -1,5 +1,5 @@
 use crate::core::{commit_with_ai, CommitOptions};
-use crate::git::GitClient;
+use crate::git::{self, GitClient};
 use crate::utils::{build_gpg_env, get_last_commit_summary_for_repo};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -176,6 +176,12 @@ impl BatchCommitService {
                             "Arquivo não está mais em stage.",
                         ));
                     }
+                    if is_git_lock_error(&message) {
+                        return Ok(ProcessResult::skipped(
+                            file,
+                            "Arquivo em processamento por outro agente.",
+                        ));
+                    }
                     return Ok(ProcessResult::failed(
                         file,
                         format!("Erro na geração: {message}"),
@@ -319,8 +325,7 @@ fn is_ignored_path_error(output: &str) -> bool {
 }
 
 fn is_git_lock_error(output: &str) -> bool {
-    let lower = output.to_ascii_lowercase();
-    lower.contains("index.lock") || lower.contains("another git process")
+    git::is_git_lock_output(output)
 }
 
 fn is_nothing_to_commit(output: &str) -> bool {
@@ -417,5 +422,39 @@ mod sha1_fallback {
         out[12..16].copy_from_slice(&h3.to_be_bytes());
         out[16..20].copy_from_slice(&h4.to_be_bytes());
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn git_lock_error_matches_commit_with_ai_restage_failure() {
+        // The exact surface error propagated from core::restage_paths when
+        // another agent is holding .git/index.lock. We rely on this being
+        // classified as a git lock so process_file skips the file instead
+        // of failing the whole flow.
+        let message = "git add -- src/app.ts falhou: fatal: Unable to create '/repo/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, e.g.\nan editor opened by 'git commit'. Please make sure all processes\nare terminated then try again.";
+        assert!(is_git_lock_error(message));
+    }
+
+    #[test]
+    fn git_lock_error_does_not_match_unrelated_failures() {
+        assert!(!is_git_lock_error("Mensagem gerada inválida: feat"));
+        assert!(!is_git_lock_error(
+            "error: pathspec 'missing.rs' did not match any files"
+        ));
+    }
+
+    #[test]
+    fn nothing_to_commit_matches_common_git_messages() {
+        assert!(is_nothing_to_commit(
+            "nothing to commit, working tree clean"
+        ));
+        assert!(is_nothing_to_commit(
+            "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
+        ));
+        assert!(!is_nothing_to_commit("error: something else"));
     }
 }
