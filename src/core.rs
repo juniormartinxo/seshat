@@ -78,7 +78,7 @@ pub fn run_pre_commit_checks(
 
 fn restage_paths(git: &GitClient, paths: &[String]) -> Result<()> {
     for path in paths {
-        let output = git.add_path(path)?;
+        let output = git.add_path_retrying_on_lock(path)?;
         if !output.status.success() {
             return Err(anyhow!(
                 "git add -- {} falhou: {}",
