@@ -6,6 +6,7 @@ use crate::config::{CommandConfig, CommandOverride, ProjectConfig};
 use anyhow::Result;
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::env;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -142,6 +143,7 @@ impl ToolingRunner {
         };
         let mut process = Command::new(program);
         process.args(&command[1..]).current_dir(&self.path);
+        scrub_sensitive_tool_env(&mut process);
         let output = match run_with_timeout(process, Duration::from_secs(300)) {
             Ok(output) => output,
             Err(error) => return failed_result(tool, error.to_string()),
@@ -400,6 +402,46 @@ pub(super) fn is_tool_available(tool_name: &str) -> bool {
         .arg("--version")
         .output()
         .is_ok_and(|output| output.status.success())
+}
+
+fn scrub_sensitive_tool_env(command: &mut Command) {
+    for (key, _) in env::vars_os() {
+        if key.to_str().is_some_and(is_sensitive_tool_env_key) {
+            command.env_remove(&key);
+        }
+    }
+}
+
+fn is_sensitive_tool_env_key(key: &str) -> bool {
+    matches!(
+        key,
+        "API_KEY"
+            | "JUDGE_API_KEY"
+            | "AI_PROVIDER"
+            | "AI_MODEL"
+            | "JUDGE_PROVIDER"
+            | "JUDGE_MODEL"
+            | "MAX_DIFF_SIZE"
+            | "WARN_DIFF_SIZE"
+            | "COMMIT_LANGUAGE"
+            | "DEFAULT_DATE"
+            | "CODEX_HOME"
+            | "CODEX_MODEL"
+            | "CODEX_PROFILE"
+            | "CODEX_TIMEOUT"
+            | "CLAUDE_CONFIG_DIR"
+            | "CLAUDE_MODEL"
+            | "CLAUDE_AGENT"
+            | "CLAUDE_SETTINGS"
+            | "CLAUDE_TIMEOUT"
+    ) || key == "OPENAI_API_KEY"
+        || key == "ANTHROPIC_API_KEY"
+        || key == "CLAUDE_API_KEY"
+        || key == "GEMINI_API_KEY"
+        || key == "ZAI_API_KEY"
+        || key == "ZHIPU_API_KEY"
+        || key == "CODEX_API_KEY"
+        || key.starts_with("SESHAT_")
 }
 
 fn run_with_timeout(mut command: Command, timeout: Duration) -> Result<std::process::Output> {
@@ -730,6 +772,93 @@ mod tests {
                 "2021".to_string()
             ]
         );
+    }
+
+    #[test]
+    fn strips_sensitive_tool_env_keys() {
+        assert!(is_sensitive_tool_env_key("API_KEY"));
+        assert!(is_sensitive_tool_env_key("JUDGE_API_KEY"));
+        assert!(is_sensitive_tool_env_key("OPENAI_API_KEY"));
+        assert!(is_sensitive_tool_env_key("SESHAT_PROFILE"));
+        assert!(is_sensitive_tool_env_key("CODEX_HOME"));
+        assert!(is_sensitive_tool_env_key("CLAUDE_CONFIG_DIR"));
+        assert!(!is_sensitive_tool_env_key("PATH"));
+        assert!(!is_sensitive_tool_env_key("HOME"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_tool_strips_sensitive_env_vars_from_project_commands() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("Cargo.toml"), "[package]\nname = \"x\"").unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let fake_tool = dir.path().join("fake-tool");
+        let env_log = dir.path().join("tool-env.log");
+        let script = r#"#!/bin/sh
+printf 'API_KEY=%s\n' "${API_KEY:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'JUDGE_API_KEY=%s\n' "${JUDGE_API_KEY:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'OPENAI_API_KEY=%s\n' "${OPENAI_API_KEY:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'CODEX_API_KEY=%s\n' "${CODEX_API_KEY:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'SESHAT_PROFILE=%s\n' "${SESHAT_PROFILE:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'CODEX_HOME=%s\n' "${CODEX_HOME:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+printf 'CLAUDE_CONFIG_DIR=%s\n' "${CLAUDE_CONFIG_DIR:-<unset>}" >> "$FAKE_TOOL_ENV_LOG"
+"#;
+        fs::write(&fake_tool, script).unwrap();
+        let mut permissions = fs::metadata(&fake_tool).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_tool, permissions).unwrap();
+
+        let saved = [
+            ("FAKE_TOOL_ENV_LOG", env::var_os("FAKE_TOOL_ENV_LOG")),
+            ("API_KEY", env::var_os("API_KEY")),
+            ("JUDGE_API_KEY", env::var_os("JUDGE_API_KEY")),
+            ("OPENAI_API_KEY", env::var_os("OPENAI_API_KEY")),
+            ("CODEX_API_KEY", env::var_os("CODEX_API_KEY")),
+            ("SESHAT_PROFILE", env::var_os("SESHAT_PROFILE")),
+            ("CODEX_HOME", env::var_os("CODEX_HOME")),
+            ("CLAUDE_CONFIG_DIR", env::var_os("CLAUDE_CONFIG_DIR")),
+        ];
+
+        env::set_var("FAKE_TOOL_ENV_LOG", &env_log);
+        env::set_var("API_KEY", "main-key");
+        env::set_var("JUDGE_API_KEY", "judge-key");
+        env::set_var("OPENAI_API_KEY", "openai-key");
+        env::set_var("CODEX_API_KEY", "codex-key");
+        env::set_var("SESHAT_PROFILE", "samwise");
+        env::set_var("CODEX_HOME", "/tmp/secret-codex-home");
+        env::set_var("CLAUDE_CONFIG_DIR", "/tmp/secret-claude-config");
+
+        let tool = ToolCommand {
+            name: "fake".to_string(),
+            command: vec![fake_tool.display().to_string()],
+            check_type: "lint".to_string(),
+            blocking: true,
+            pass_files: false,
+            extensions: None,
+            fix_command: None,
+            auto_fix: false,
+        };
+        let result = runner.run_tool(&tool, None);
+
+        for (key, value) in saved {
+            if let Some(value) = value {
+                env::set_var(key, value);
+            } else {
+                env::remove_var(key);
+            }
+        }
+
+        assert!(result.success);
+        let log = fs::read_to_string(env_log).unwrap();
+        assert!(log.contains("API_KEY=<unset>"));
+        assert!(log.contains("JUDGE_API_KEY=<unset>"));
+        assert!(log.contains("OPENAI_API_KEY=<unset>"));
+        assert!(log.contains("CODEX_API_KEY=<unset>"));
+        assert!(log.contains("SESHAT_PROFILE=<unset>"));
+        assert!(log.contains("CODEX_HOME=<unset>"));
+        assert!(log.contains("CLAUDE_CONFIG_DIR=<unset>"));
     }
 
     #[test]
