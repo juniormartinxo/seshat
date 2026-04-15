@@ -1232,7 +1232,7 @@ fn tooling_e2e_commit_check_lint_success_runs_fake_command() {
     write_rust_seshat(
         repo.path(),
         &format!(
-            "    blocking: true\n    command:\n      - {}\n    pass_files: true\n    extensions:\n      - .rs\n",
+            "    blocking: true\n    auto_fix: false\n    command:\n      - {}\n    pass_files: true\n    extensions:\n      - .rs\n",
             fake_tool.display()
         ),
     );
