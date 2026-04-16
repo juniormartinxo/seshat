@@ -1,6 +1,6 @@
 [package]
 name = "seshat"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "CLI para commits automatizados usando Conventional Commits e IA"
 license = "MIT"
