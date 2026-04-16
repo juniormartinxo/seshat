@@ -7,6 +7,10 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus, Output};
+use std::thread;
+use std::time::Duration;
+
+const ADD_PATH_LOCK_RETRY_DELAYS_MS: &[u64] = &[100, 200, 400, 800, 1600];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GitClient {
@@ -232,6 +236,29 @@ impl GitClient {
 
     pub fn add_path(&self, file: &str) -> Result<Output> {
         self.raw_output(["add", "--", file])
+    }
+
+    /// Wrap `git add -- <file>` with retries when the failure is caused by
+    /// another git process holding `.git/index.lock`. The lock is typically
+    /// held for a fraction of a second, so a short exponential backoff is
+    /// enough to overcome collisions between concurrent Seshat agents
+    /// commiting different files in the same repository.
+    pub fn add_path_retrying_on_lock(&self, file: &str) -> Result<Output> {
+        let mut output = self.add_path(file)?;
+        if output.status.success() {
+            return Ok(output);
+        }
+        for delay_ms in ADD_PATH_LOCK_RETRY_DELAYS_MS {
+            if !is_git_lock_output(&output_stderr_or_stdout(&output)) {
+                return Ok(output);
+            }
+            thread::sleep(Duration::from_millis(*delay_ms));
+            output = self.add_path(file)?;
+            if output.status.success() {
+                return Ok(output);
+            }
+        }
+        Ok(output)
     }
 
     pub fn reset_head(&self, file: &str) -> Result<Output> {
@@ -483,7 +510,12 @@ fn parse_lines(output: &str) -> Result<Vec<String>> {
         .collect())
 }
 
-fn truncate_review_content(content: &str, max_chars: usize) -> (String, bool) {
+/// Trim a staged-file snapshot to `max_chars`, appending a visible marker
+/// so the AI knows the text is incomplete. Returns `(content, was_truncated)`.
+/// Made public so `core::build_review_input` can re-truncate after the rtk
+/// filter shrinks the input — truncating first and filtering later would
+/// waste the room the filter reclaims.
+pub fn truncate_review_content(content: &str, max_chars: usize) -> (String, bool) {
     let total_chars = content.chars().count();
     if total_chars <= max_chars {
         return (content.to_string(), false);
@@ -549,6 +581,24 @@ fn display_args(args: &[OsString]) -> String {
         .map(|arg| arg.to_string_lossy())
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Detects whether a git command output indicates that the repository's
+/// `.git/index.lock` is held by another process (the hallmark of concurrent
+/// git operations). The detection is output-based because git does not
+/// expose a dedicated exit code for this condition.
+pub fn is_git_lock_output(output: &str) -> bool {
+    let lower = output.to_ascii_lowercase();
+    lower.contains("index.lock") || lower.contains("another git process")
+}
+
+fn output_stderr_or_stdout(output: &Output) -> String {
+    let bytes = if output.stderr.is_empty() {
+        &output.stdout
+    } else {
+        &output.stderr
+    };
+    String::from_utf8_lossy(bytes).to_string()
 }
 
 pub fn is_markdown_file(file_path: &str) -> bool {
@@ -758,6 +808,75 @@ mod tests {
         assert!(is_lock_file("nested/pnpm-lock.yaml"));
         assert!(is_dotfile_path(".github/workflows/ci.yml"));
         assert!(!is_dotfile_path("README.md"));
+    }
+
+    #[test]
+    fn detects_git_index_lock_contention() {
+        assert!(is_git_lock_output(
+            "fatal: Unable to create '/repo/.git/index.lock': File exists."
+        ));
+        assert!(is_git_lock_output(
+            "Another git process seems to be running in this repository"
+        ));
+        assert!(is_git_lock_output("FATAL: INDEX.LOCK EXISTS"));
+        assert!(!is_git_lock_output(
+            "error: pathspec 'missing.rs' did not match any files"
+        ));
+        assert!(!is_git_lock_output(""));
+    }
+
+    #[test]
+    fn add_path_retrying_succeeds_after_transient_index_lock() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        let git_dir = repo.path().join(".git");
+        let index_lock = git_dir.join("index.lock");
+        fs::write(repo.path().join("new.rs"), "fn new_file() {}\n").unwrap();
+        fs::write(&index_lock, b"").unwrap();
+
+        let index_lock_path = index_lock.clone();
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            let _ = fs::remove_file(&index_lock_path);
+        });
+
+        let client = GitClient::new(repo.path());
+        let output = client.add_path_retrying_on_lock("new.rs").unwrap();
+
+        releaser.join().unwrap();
+
+        assert!(output.status.success());
+        assert!(
+            !index_lock.exists(),
+            "git should have succeeded after retry"
+        );
+        assert!(client.has_staged_changes_for_file("new.rs"));
+    }
+
+    #[test]
+    fn add_path_retrying_returns_last_output_when_lock_persists() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        let index_lock = repo.path().join(".git").join("index.lock");
+        fs::write(repo.path().join("new.rs"), "fn new_file() {}\n").unwrap();
+        fs::write(&index_lock, b"").unwrap();
+
+        let client = GitClient::new(repo.path());
+        let output = client.add_path_retrying_on_lock("new.rs").unwrap();
+
+        assert!(!output.status.success());
+        assert!(is_git_lock_output(&String::from_utf8_lossy(&output.stderr)));
+        let _ = fs::remove_file(&index_lock);
     }
 
     #[test]
