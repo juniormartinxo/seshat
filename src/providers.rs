@@ -396,6 +396,70 @@ fn cli_review_prompt(
     )
 }
 
+/// Slash-command style review prompt for CLI agents. Mirrors the shape of a
+/// chat `/review` request: the diff goes inline (it is the minimum the
+/// reviewer needs and usually small post-condense), but the 12k-char staged
+/// file context bundle is dropped — CLIs can fetch any extra context
+/// themselves via `git show :<path>` or by reading files. This is the real
+/// fix for the Codex CLI 300s timeouts: a ~30k payload was consistently
+/// over-budget, while diff-only typically fits in single-digit kB.
+///
+/// An earlier version of this helper shipped NOTHING inline (pure "figure
+/// it out" prompt) and caused Codex to hang — likely because the
+/// `--sandbox read-only` mode blocks `git diff --staged` from running. The
+/// diff-inline-only shape keeps CLIs operational regardless of sandbox.
+fn cli_thin_review_prompt(
+    cli_name: &str,
+    system_prompt: &str,
+    input: &ReviewInput,
+    task: &str,
+) -> String {
+    let file_block = if input.changed_files.is_empty() {
+        "  - (all currently staged files)".to_string()
+    } else {
+        input
+            .changed_files
+            .iter()
+            .map(|file| format!("  - {file}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    format!(
+        "/review Review the staged changes in the following file(s):\n\
+         {file_block}\n\
+         \n\
+         You are running inside {cli_name} at the repository root `{repo_root}`.\n\
+         If extra context is needed beyond the diff, you MAY inspect files with `git show :<path>` \
+         or read-only commands; do not rely on these working under strict sandboxes.\n\
+         \n\
+         Review rubric:\n\
+         {system_prompt}\n\
+         \n\
+         Primary diff to review:\n\
+         {diff}\n\
+         \n\
+         Rules: read-only operations only — do not modify files, do not create commits, no network access.\n\
+         {task}",
+        repo_root = input.repo_root.display(),
+        diff = input.diff,
+    )
+}
+
+/// Whether CLI providers should keep shipping the diff inline instead of
+/// using the slash-command thin prompt. Reads the `SESHAT_CLI_INLINE_REVIEW`
+/// env var; any value other than `true`/`1`/`yes` keeps the default (thin).
+fn cli_inline_review_requested() -> bool {
+    env::var("SESHAT_CLI_INLINE_REVIEW")
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "true" | "1" | "yes"
+            )
+        })
+        .unwrap_or(false)
+}
+
 fn retry<T>(mut f: impl FnMut() -> Result<T>) -> Result<T> {
     let mut last = None;
     for attempt in 0..3 {
@@ -1105,7 +1169,12 @@ impl Provider for CodexCliProvider {
     }
 
     fn generate_code_review(&self, input: &ReviewInput, model: Option<&str>) -> Result<String> {
-        let prompt = cli_review_prompt(
+        let prompt_builder = if cli_inline_review_requested() {
+            cli_review_prompt
+        } else {
+            cli_thin_review_prompt
+        };
+        let prompt = prompt_builder(
             "Codex CLI",
             &review_prompt(input.custom_prompt.as_deref()),
             input,
@@ -1257,7 +1326,12 @@ impl Provider for ClaudeCliProvider {
     }
 
     fn generate_code_review(&self, input: &ReviewInput, _model: Option<&str>) -> Result<String> {
-        let prompt = cli_review_prompt(
+        let prompt_builder = if cli_inline_review_requested() {
+            cli_review_prompt
+        } else {
+            cli_thin_review_prompt
+        };
+        let prompt = prompt_builder(
             "Claude CLI",
             &review_prompt(input.custom_prompt.as_deref()),
             input,
@@ -2250,11 +2324,14 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn codex_cli_review_prompt_uses_contextual_review_input() {
+    fn codex_cli_review_prompt_uses_contextual_review_input_when_inline_opt_in() {
+        // Inline mode is opt-in via SESHAT_CLI_INLINE_REVIEW=true; this test
+        // covers that escape hatch. The default (thin) is covered separately.
         let _lock = crate::test_env::ENV_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
+        env::set_var("SESHAT_CLI_INLINE_REVIEW", "true");
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("codex-fake");
         let args_path = temp_dir.path().join("codex-args.txt");
@@ -2299,6 +2376,111 @@ mod tests {
         assert!(stdin.contains("The staged snapshot is the source of truth over files on disk"));
         assert!(!stdin.contains("Use only the diff below."));
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn codex_cli_review_uses_thin_prompt_by_default() {
+        // By default the CLI review prompt is a slash-command style
+        // instruction ("/review ...") that includes the diff inline (the
+        // minimum the reviewer needs) but drops the 12k-char staged context
+        // bundle. That bundle was the main trigger of 300s Codex timeouts.
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("codex-fake");
+        let args_path = temp_dir.path().join("codex-args.txt");
+        let stdin_path = temp_dir.path().join("codex-stdin.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CODEX_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+
+        let repo_root = temp_dir.path().join("repo-root");
+        std::fs::create_dir_all(&repo_root).unwrap();
+
+        let provider = CodexCliProvider::new().unwrap();
+        provider
+            .generate_code_review(
+                &ReviewInput::new(&repo_root, "diff-body-inline-please")
+                    .with_changed_files(vec!["src/app.rs".to_string()])
+                    .with_staged_files(vec![staged_text_file(
+                        "src/app.rs",
+                        "fn staged_context_not_inline() {}\n",
+                    )])
+                    .with_custom_prompt("Codex review prompt"),
+                Some("gpt-5.4-mini"),
+            )
+            .unwrap();
+
+        let stdin = fs::read_to_string(stdin_path).unwrap();
+        // Slash-command framing present
+        assert!(
+            stdin.starts_with("/review Review the staged changes"),
+            "thin prompt must start with /review, got:\n{stdin}"
+        );
+        assert!(stdin.contains(&format!("repository root `{}`", repo_root.display())));
+        // Diff IS inline — agents need it and it is small post-condense
+        assert!(
+            stdin.contains("diff-body-inline-please"),
+            "thin prompt must inline the diff, got:\n{stdin}"
+        );
+        // Staged snapshot NOT inline — that was the 12k bundle blowing
+        // up the payload
+        assert!(
+            !stdin.contains("fn staged_context_not_inline"),
+            "thin prompt must not inline the staged snapshot bundle, got:\n{stdin}"
+        );
+        // Rubric (from review_prompt) is still present so the agent knows
+        // what to grade.
+        assert!(stdin.contains("Codex review prompt"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn claude_cli_review_uses_thin_prompt_by_default() {
+        let _lock = crate::test_env::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        let _env_guard = cleared_provider_env();
+        let temp_dir = TempDir::new().unwrap();
+        let bin_path = temp_dir.path().join("claude-fake");
+        let args_path = temp_dir.path().join("claude-args.txt");
+        let stdin_path = temp_dir.path().join("claude-stdin.txt");
+        write_fake_executable(&bin_path, fake_cli_script());
+        env::set_var("CLAUDE_BIN", &bin_path);
+        env::set_var("FAKE_ARGS_FILE", &args_path);
+        env::set_var("FAKE_STDIN_FILE", &stdin_path);
+        env::set_var("FAKE_RESPONSE", "OK");
+
+        let provider = ClaudeCliProvider::new().unwrap();
+        provider
+            .generate_code_review(
+                &ReviewInput::new(".", "diff-body-inline-please")
+                    .with_changed_files(vec!["src/lib.rs".to_string()])
+                    .with_staged_files(vec![staged_text_file(
+                        "src/lib.rs",
+                        "pub fn staged_context_not_inline() {}\n",
+                    )])
+                    .with_custom_prompt("Claude review prompt"),
+                None,
+            )
+            .unwrap();
+
+        let stdin = fs::read_to_string(stdin_path).unwrap();
+        assert!(stdin.starts_with("/review Review the staged changes"));
+        assert!(
+            stdin.contains("diff-body-inline-please"),
+            "thin prompt must inline the diff"
+        );
+        assert!(
+            !stdin.contains("fn staged_context_not_inline"),
+            "thin prompt must not inline the staged snapshot bundle"
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn codex_cli_provider_sets_codex_home_from_seshat_profile() {
@@ -2515,10 +2697,14 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn claude_cli_provider_invokes_fake_binary_with_expected_args() {
+        // Covers the inline opt-out path (SESHAT_CLI_INLINE_REVIEW=true) —
+        // exercises legacy assertions on `Primary diff to review:` and
+        // `File: … Status: text staged snapshot`. Thin mode has its own test.
         let _lock = crate::test_env::ENV_LOCK
             .lock()
             .unwrap_or_else(|poison| poison.into_inner());
         let _env_guard = cleared_provider_env();
+        env::set_var("SESHAT_CLI_INLINE_REVIEW", "true");
         let temp_dir = TempDir::new().unwrap();
         let bin_path = temp_dir.path().join("claude-fake");
         let args_path = temp_dir.path().join("claude-args.txt");
@@ -2830,6 +3016,7 @@ mod tests {
             "FAKE_EMPTY_RESPONSE",
             "FAKE_EXIT_CODE",
             "FAKE_STDERR",
+            "SESHAT_CLI_INLINE_REVIEW",
         ]
     }
 
