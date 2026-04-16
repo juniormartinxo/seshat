@@ -1,5 +1,6 @@
 use crate::config::{
     default_models, project_false_positive_path, valid_providers, CodeReviewMode, ProjectConfig,
+    RtkConfig, RtkFilterLevel,
 };
 use crate::git::{self, GitClient};
 use crate::providers::{
@@ -348,6 +349,7 @@ fn commit_with_ai_with_provider_factory_and_action(
                     .code_review
                     .max_diff_size
                     .unwrap_or(review::DEFAULT_CODE_REVIEW_MAX_DIFF_SIZE),
+                &project_config.code_review.rtk,
             )?)
         };
         let result = if let Some(review_input) = &review_input {
@@ -904,13 +906,134 @@ fn build_review_input(
     prepared_diff: &str,
     custom_prompt: &str,
     staged_file_max_chars: usize,
+    rtk_config: &RtkConfig,
 ) -> Result<ReviewInput> {
     let changed_files = git::diff_files(filtered_diff);
-    let staged_files = git.staged_review_inputs(&changed_files, staged_file_max_chars)?;
-    Ok(ReviewInput::new(git.repo_path(), prepared_diff.to_string())
+    let rtk_will_filter =
+        rtk_config.enabled && !matches!(rtk_config.filter_level, RtkFilterLevel::None);
+
+    // When rtk will filter, read the full staged snapshot so the filter
+    // operates on the complete file; truncation happens after filtering so
+    // the `max_chars` budget holds actually-useful bytes instead of being
+    // burned on comments the filter would have stripped anyway.
+    let read_budget = if rtk_will_filter {
+        usize::MAX
+    } else {
+        staged_file_max_chars
+    };
+    let staged_files = git.staged_review_inputs(&changed_files, read_budget)?;
+    let staged_files = maybe_apply_rtk_filter_to_staged(staged_files, rtk_config);
+    let staged_files = if rtk_will_filter {
+        retruncate_staged_files(staged_files, staged_file_max_chars)
+    } else {
+        staged_files
+    };
+
+    let final_diff = maybe_condense_diff_for_review(prepared_diff, rtk_config);
+    Ok(ReviewInput::new(git.repo_path(), final_diff)
         .with_changed_files(changed_files)
         .with_staged_files(staged_files)
         .with_custom_prompt(custom_prompt.to_string()))
+}
+
+/// Truncate each staged-file snapshot to `max_chars`, updating
+/// `was_truncated` so downstream consumers still know whether the reviewer
+/// is seeing the full file. Used after the rtk filter runs on the
+/// un-truncated content.
+fn retruncate_staged_files(
+    staged_files: Vec<crate::providers::StagedFileReviewInput>,
+    max_chars: usize,
+) -> Vec<crate::providers::StagedFileReviewInput> {
+    staged_files
+        .into_iter()
+        .map(|mut file| {
+            let Some(content) = file.staged_content.take() else {
+                return file;
+            };
+            let (trimmed, was_truncated_now) = git::truncate_review_content(&content, max_chars);
+            file.staged_content = Some(trimmed);
+            // Preserve "was truncated" once true: if rtk-filtered content
+            // fit entirely we should not claim it was truncated, but if the
+            // earlier reader flagged it we keep that flag.
+            file.was_truncated = file.was_truncated || was_truncated_now;
+            file
+        })
+        .collect()
+}
+
+/// Apply the vendored rtk content filter to each staged file snapshot when
+/// opted in via `.seshat/config.yaml`. The filter runs **after** the diff
+/// has already been truncated to `staged_file_max_chars`, so callers see a
+/// smaller payload but never a larger one than originally requested.
+///
+/// Returns the inputs untouched when rtk is disabled, the level is `none`,
+/// or the filter would emit an empty string (the original snapshot is a
+/// more useful signal than silence).
+fn maybe_apply_rtk_filter_to_staged(
+    staged_files: Vec<crate::providers::StagedFileReviewInput>,
+    rtk_config: &RtkConfig,
+) -> Vec<crate::providers::StagedFileReviewInput> {
+    if !rtk_config.enabled || matches!(rtk_config.filter_level, RtkFilterLevel::None) {
+        return staged_files;
+    }
+    let level: crate::rtk::FilterLevel = rtk_config.filter_level.into();
+    let filter = crate::rtk::get_filter(level);
+    let mut total_before = 0usize;
+    let mut total_after = 0usize;
+    let filtered = staged_files
+        .into_iter()
+        .map(|mut file| {
+            let Some(content) = file.staged_content.take() else {
+                return file;
+            };
+            let lang = Path::new(&file.path)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .map(crate::rtk::Language::from_extension)
+                .unwrap_or(crate::rtk::Language::Unknown);
+            let before = content.chars().count();
+            let stripped = filter.filter(&content, &lang);
+            total_before += before;
+            if stripped.trim().is_empty() {
+                // Filter wiped a non-empty file (e.g. aggressive mode on a
+                // file with no signatures). Keep the original to avoid
+                // starving the reviewer of context.
+                file.staged_content = Some(content);
+                total_after += before;
+            } else {
+                total_after += stripped.chars().count();
+                file.staged_content = Some(stripped);
+            }
+            file
+        })
+        .collect();
+    if total_before > 0 && total_after < total_before {
+        ui::info(format!(
+            "RTK filter ({}): arquivos staged {} -> {} caracteres",
+            level, total_before, total_after
+        ));
+    }
+    filtered
+}
+
+/// Condense the already-prepared diff via rtk when opted in. If the output
+/// would be empty or larger than the input, keep the original — the
+/// condenser is meant to reduce noise, never to amplify it.
+fn maybe_condense_diff_for_review(prepared_diff: &str, rtk_config: &RtkConfig) -> String {
+    if !rtk_config.enabled || !rtk_config.condense_diff {
+        return prepared_diff.to_string();
+    }
+    let condensed = crate::rtk::condense_unified_diff(prepared_diff);
+    let before = prepared_diff.chars().count();
+    let after = condensed.chars().count();
+    if condensed.trim().is_empty() || after >= before {
+        return prepared_diff.to_string();
+    }
+    ui::info(format!(
+        "RTK condense: diff {} -> {} caracteres",
+        before, after
+    ));
+    condensed
 }
 
 fn run_judge_review(
@@ -1362,6 +1485,8 @@ commit:
 code_review:
   enabled: true
   blocking: true
+  rtk:
+    enabled: false
 ",
         );
         let _env = TempEnv::apply(&[
@@ -1715,7 +1840,11 @@ code_review:
         let diff = git_client
             .git_diff(true, None, 10_000, 9_000, "PT-BR")
             .unwrap();
-        let input = build_review_input(&git_client, &diff, &diff, "prompt", 200).unwrap();
+        // This test is about the staged-vs-working-tree selection in
+        // `git show :path`; we disable rtk so assertions can compare the
+        // verbatim snapshot (minimal filter trims trailing newlines).
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 200, &rtk_disabled()).unwrap();
 
         assert_eq!(input.changed_files, vec!["src/main.rs"]);
         assert_eq!(input.staged_files.len(), 1);
@@ -1761,7 +1890,8 @@ code_review:
         let diff = git_client
             .git_diff(true, None, 10_000, 9_000, "PT-BR")
             .unwrap();
-        let input = build_review_input(&git_client, &diff, &diff, "prompt", 40).unwrap();
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 40, &rtk_disabled()).unwrap();
 
         let gone = input
             .staged_files
@@ -1791,6 +1921,285 @@ code_review:
             .staged_content
             .as_deref()
             .is_some_and(|content| content.contains("truncated by Seshat")));
+    }
+
+    #[test]
+    fn build_review_input_default_rtk_config_strips_comments_and_condenses_diff() {
+        // Confirms the shipped defaults (enabled + minimal + condense_diff):
+        // trivial `//` comments are stripped from staged files and the diff
+        // loses its `@@` hunks. Anyone needing the legacy passthrough must
+        // opt out explicitly.
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        let code = "// a trivial line comment\nfn main() {}\n";
+        fs::write(repo.path().join("src/main.rs"), code).unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 10_000, 9_000, "PT-BR")
+            .unwrap();
+        let input = build_review_input(
+            &git_client,
+            &diff,
+            &diff,
+            "prompt",
+            10_000,
+            &RtkConfig::default(),
+        )
+        .unwrap();
+
+        let staged = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "src/main.rs")
+            .unwrap();
+        let stripped = staged.staged_content.as_deref().unwrap();
+        assert!(
+            !stripped.contains("trivial line comment"),
+            "default minimal filter should drop line comments, got:\n{stripped}"
+        );
+        assert!(
+            stripped.contains("fn main()"),
+            "default minimal filter must preserve signatures, got:\n{stripped}"
+        );
+        assert!(
+            !input.diff.contains("@@ "),
+            "default condense_diff should strip @@ hunks, got:\n{}",
+            input.diff
+        );
+    }
+
+    #[test]
+    fn build_review_input_disabled_rtk_leaves_content_unchanged() {
+        // Explicit opt-out path: setting `enabled: false` must preserve the
+        // byte-exact diff and staged content that seshat used before rtk.
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        let code = "// keep this\nfn main() {}\n";
+        fs::write(repo.path().join("src/main.rs"), code).unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 10_000, 9_000, "PT-BR")
+            .unwrap();
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 10_000, &rtk_disabled())
+                .unwrap();
+
+        assert_eq!(input.diff, diff, "diff must be untouched when rtk disabled");
+        let staged = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "src/main.rs")
+            .unwrap();
+        assert_eq!(staged.staged_content.as_deref(), Some(code));
+    }
+
+    #[test]
+    fn build_review_input_with_rtk_minimal_strips_comments_from_staged_content() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        let code =
+            "// trivial comment\nfn main() {\n    // inline comment\n    println!(\"ok\");\n}\n";
+        fs::write(repo.path().join("src/main.rs"), code).unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 10_000, 9_000, "PT-BR")
+            .unwrap();
+        let rtk_config = RtkConfig {
+            enabled: true,
+            filter_level: RtkFilterLevel::Minimal,
+            condense_diff: false,
+        };
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 10_000, &rtk_config).unwrap();
+
+        let staged = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "src/main.rs")
+            .unwrap();
+        let stripped = staged.staged_content.as_deref().unwrap();
+        assert!(
+            !stripped.contains("trivial comment"),
+            "minimal filter should drop line comments, got:\n{stripped}"
+        );
+        assert!(
+            stripped.contains("fn main()"),
+            "minimal filter must preserve code signatures, got:\n{stripped}"
+        );
+        assert!(
+            stripped.contains("println!"),
+            "minimal filter must preserve executable lines, got:\n{stripped}"
+        );
+    }
+
+    #[test]
+    fn build_review_input_rtk_filter_runs_before_truncation() {
+        // Regression: the filter was running *after* `staged_review_inputs`
+        // already truncated to `max_chars`, so comment-heavy files never got
+        // compressed enough to fit extra code. With the fixed ordering the
+        // filter sees the full file, strips trivial `//` comments, and only
+        // then do we trim to `max_chars` — meaning the reviewer keeps more
+        // useful signatures instead of comment chatter.
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+
+        // 200 `// noise` comment lines (~1600 chars) followed by a small
+        // block of real code. With max_chars=600 and filter-after-truncate
+        // we'd see only the noise; with filter-before-truncate we see the
+        // actual functions.
+        let mut body = String::new();
+        for _ in 0..200 {
+            body.push_str("// noise comment that rtk should strip\n");
+        }
+        body.push_str("fn real_function_after_noise() {}\n");
+        body.push_str("fn another_signature() {}\n");
+        fs::write(repo.path().join("src/main.rs"), &body).unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 100_000, 90_000, "PT-BR")
+            .unwrap();
+        let rtk_config = RtkConfig {
+            enabled: true,
+            filter_level: RtkFilterLevel::Minimal,
+            condense_diff: false,
+        };
+        // 600-char budget: far too small for the raw file, but plenty once
+        // the comments are stripped.
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 600, &rtk_config).unwrap();
+
+        let staged = input
+            .staged_files
+            .iter()
+            .find(|file| file.path == "src/main.rs")
+            .unwrap();
+        let stripped = staged.staged_content.as_deref().unwrap();
+        assert!(
+            stripped.contains("fn real_function_after_noise()"),
+            "filter must run before truncation so post-comment code survives, got:\n{stripped}"
+        );
+        assert!(
+            stripped.contains("fn another_signature()"),
+            "second signature must also survive, got:\n{stripped}"
+        );
+        assert!(
+            !stripped.contains("// noise"),
+            "filter must have stripped the leading comments, got:\n{stripped}"
+        );
+    }
+
+    #[test]
+    fn build_review_input_with_rtk_condense_shrinks_diff() {
+        let repo = tempfile::tempdir().unwrap();
+        git(repo.path(), &["init"]);
+        git(repo.path(), &["config", "user.name", "Seshat Test"]);
+        git(
+            repo.path(),
+            &["config", "user.email", "seshat@example.test"],
+        );
+        fs::create_dir_all(repo.path().join("src")).unwrap();
+        // Large hunk header + context-free additions means condense wins
+        let lines: String = (0..40).map(|i| format!("fn f{i}() {{}}\n")).collect();
+        fs::write(repo.path().join("src/main.rs"), &lines).unwrap();
+        git(repo.path(), &["add", "--", "src/main.rs"]);
+
+        let git_client = GitClient::new(repo.path());
+        let diff = git_client
+            .git_diff(true, None, 100_000, 90_000, "PT-BR")
+            .unwrap();
+        let rtk_config = RtkConfig {
+            enabled: true,
+            filter_level: RtkFilterLevel::None,
+            condense_diff: true,
+        };
+        let input =
+            build_review_input(&git_client, &diff, &diff, "prompt", 10_000, &rtk_config).unwrap();
+
+        assert!(
+            input.diff.len() < diff.len(),
+            "condensed diff should be smaller: original={} condensed={}",
+            diff.len(),
+            input.diff.len()
+        );
+        assert!(
+            input.diff.contains("src/main.rs"),
+            "condensed diff must still reference the file"
+        );
+        assert!(
+            !input.diff.contains("@@ "),
+            "condensed diff should strip @@ hunks, got:\n{}",
+            input.diff
+        );
+    }
+
+    #[test]
+    fn maybe_condense_diff_for_review_falls_back_when_condense_would_be_empty() {
+        // No `diff --git` header → condense emits empty string → we must keep original
+        let rtk_config = RtkConfig {
+            enabled: true,
+            filter_level: RtkFilterLevel::None,
+            condense_diff: true,
+        };
+        let raw = "some text that is not a git diff at all\n";
+        let out = maybe_condense_diff_for_review(raw, &rtk_config);
+        assert_eq!(out, raw);
+    }
+
+    #[test]
+    fn maybe_apply_rtk_filter_to_staged_preserves_content_when_filter_would_empty_it() {
+        // Aggressive filter on a file without any signatures or imports
+        // returns an empty result; the helper must fall back to the raw
+        // staged content so the reviewer still has something to inspect.
+        let staged = vec![crate::providers::StagedFileReviewInput {
+            path: "src/data.rs".to_string(),
+            staged_content: Some("// just a comment\n// another line\n".to_string()),
+            is_binary: false,
+            is_deleted: false,
+            was_truncated: false,
+        }];
+        let rtk_config = RtkConfig {
+            enabled: true,
+            filter_level: RtkFilterLevel::Aggressive,
+            condense_diff: false,
+        };
+        let out = maybe_apply_rtk_filter_to_staged(staged, &rtk_config);
+        assert_eq!(out.len(), 1);
+        assert_eq!(
+            out[0].staged_content.as_deref(),
+            Some("// just a comment\n// another line\n")
+        );
     }
 
     #[test]
@@ -1974,6 +2383,17 @@ code_review:
         let calls = calls.lock().unwrap();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].kind, "commit");
+    }
+
+    /// Disabled RtkConfig for tests that need the legacy "raw diff / raw
+    /// staged content" behavior. Use this when assertions depend on
+    /// byte-exact snapshots (e.g. trailing newlines, `@@` hunks).
+    fn rtk_disabled() -> RtkConfig {
+        RtkConfig {
+            enabled: false,
+            filter_level: RtkFilterLevel::None,
+            condense_diff: false,
+        }
     }
 
     fn staged_rust_repo(config: &str) -> TempDir {
