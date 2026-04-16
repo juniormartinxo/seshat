@@ -369,6 +369,15 @@ fn init_e2e_creates_seshat_and_review_prompt() {
     assert!(config.contains("no_ai_paths"));
     assert!(config.contains("prompt: .seshat/review.md"));
     assert!(config.contains("ui:"));
+    // The rtk block must be materialized so users can discover the knobs
+    // instead of relying on implicit defaults.
+    assert!(
+        config.contains("  rtk:"),
+        "init template must include rtk block, got:\n{config}"
+    );
+    assert!(config.contains("    enabled: true"));
+    assert!(config.contains("    filter_level: minimal"));
+    assert!(config.contains("    condense_diff: true"));
     assert!(project.path().join(".seshat").join("review.md").exists());
     assert!(!project.path().join("seshat-review.md").exists());
 }
