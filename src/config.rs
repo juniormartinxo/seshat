@@ -267,6 +267,71 @@ pub struct CodeReviewConfig {
     pub prompt: Option<String>,
     pub log_dir: Option<String>,
     pub extensions: Option<Vec<String>>,
+    #[serde(default)]
+    pub rtk: RtkConfig,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RtkFilterLevel {
+    #[default]
+    None,
+    Minimal,
+    Aggressive,
+}
+
+impl From<RtkFilterLevel> for crate::rtk::FilterLevel {
+    fn from(level: RtkFilterLevel) -> Self {
+        match level {
+            RtkFilterLevel::None => crate::rtk::FilterLevel::None,
+            RtkFilterLevel::Minimal => crate::rtk::FilterLevel::Minimal,
+            RtkFilterLevel::Aggressive => crate::rtk::FilterLevel::Aggressive,
+        }
+    }
+}
+
+/// Configuration for running the vendored rtk compressors over the code-review
+/// payload. Defaults to enabled with the safest filter level (minimal — keeps
+/// doc comments and signatures, strips only trivial line comments) plus diff
+/// condensation. Users who want the legacy "ship the raw diff / raw file"
+/// behavior can opt out by setting `enabled: false` in their project config.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct RtkConfig {
+    /// Master switch. When false, the whole block is ignored and review
+    /// inputs are built exactly like pre-rtk seshat.
+    #[serde(default = "rtk_enabled_default")]
+    pub enabled: bool,
+    /// Filter level applied to each staged file's snapshot before it is
+    /// handed to the provider.
+    #[serde(default = "rtk_filter_level_default")]
+    pub filter_level: RtkFilterLevel,
+    /// When true, the staged diff is piped through rtk's
+    /// `condense_unified_diff` to strip `@@` hunks and metadata lines while
+    /// keeping every `+`/`-` line.
+    #[serde(default = "rtk_condense_diff_default")]
+    pub condense_diff: bool,
+}
+
+fn rtk_enabled_default() -> bool {
+    true
+}
+
+fn rtk_filter_level_default() -> RtkFilterLevel {
+    RtkFilterLevel::Minimal
+}
+
+fn rtk_condense_diff_default() -> bool {
+    true
+}
+
+impl Default for RtkConfig {
+    fn default() -> Self {
+        Self {
+            enabled: rtk_enabled_default(),
+            filter_level: rtk_filter_level_default(),
+            condense_diff: rtk_condense_diff_default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
@@ -1235,6 +1300,39 @@ checks:
         assert_eq!(config.code_review.max_diff_size, Some(16000));
         assert_eq!(config.commit.no_ai_paths, vec!["docs/"]);
         assert!(!config.checks["lint"].blocking);
+        // rtk block defaults when absent from the YAML: enabled with minimal
+        // filter + diff condensation so seshat compresses review payloads
+        // out of the box.
+        assert!(config.code_review.rtk.enabled);
+        assert_eq!(config.code_review.rtk.filter_level, RtkFilterLevel::Minimal);
+        assert!(config.code_review.rtk.condense_diff);
+    }
+
+    #[test]
+    fn project_config_loads_rtk_block_under_code_review() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = project_config_path(dir.path());
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+        fs::write(
+            config_path,
+            r#"
+project_type: rust
+code_review:
+  enabled: true
+  rtk:
+    enabled: true
+    filter_level: aggressive
+    condense_diff: true
+"#,
+        )
+        .unwrap();
+        let config = ProjectConfig::load(dir.path());
+        assert!(config.code_review.rtk.enabled);
+        assert_eq!(
+            config.code_review.rtk.filter_level,
+            RtkFilterLevel::Aggressive
+        );
+        assert!(config.code_review.rtk.condense_diff);
     }
 
     #[test]
