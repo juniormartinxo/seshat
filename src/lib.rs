@@ -8,6 +8,7 @@ pub mod json_output;
 pub mod profiles;
 pub mod providers;
 pub mod review;
+pub mod rtk;
 pub mod tooling;
 pub mod ui;
 pub mod utils;
