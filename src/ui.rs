@@ -461,6 +461,12 @@ fn use_rich() -> bool {
         || (std::io::IsTerminal::is_terminal(&io::stdout()) && no_color_env().is_none())
 }
 
+/// Versão pública usada por outros módulos (ex: bench) que precisam decidir
+/// se aplicam cores ANSI com a mesma heurística do resto da UI.
+pub fn use_rich_external() -> bool {
+    use_rich()
+}
+
 fn force_color_env() -> bool {
     ["FORCE_COLOR", "CLICOLOR_FORCE", "SESHAT_FORCE_COLOR"]
         .iter()
