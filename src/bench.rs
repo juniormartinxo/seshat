@@ -194,6 +194,10 @@ pub struct AgentBenchReport {
 pub struct AgentBenchSummary {
     pub fixture: String,
     pub agent: String,
+    /// Modelo efetivamente usado pelo agente (após resolver overrides + defaults).
+    /// `None` quando o agente não usa modelo nomeado.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub total: usize,
     pub success: usize,
     pub conventional_valid: usize,
@@ -206,6 +210,10 @@ pub struct AgentBenchSummary {
 #[derive(Debug, Serialize)]
 pub struct AgentBenchOverallSummary {
     pub agent: String,
+    /// Modelo efetivamente usado pelo agente. `None` quando o agente não usa
+    /// modelo nomeado, ou quando há divergência entre fixtures (raro).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub total: usize,
     pub success: usize,
     pub conventional_valid: usize,
@@ -220,6 +228,9 @@ pub struct AgentBenchOverallSummary {
 pub struct AgentBenchSample {
     pub fixture: String,
     pub agent: String,
+    /// Modelo efetivo usado nesta amostra.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
     pub iteration: usize,
     pub duration_ms: f64,
     pub success: bool,
@@ -578,10 +589,11 @@ fn print_summaries_table(report: &AgentBenchReport, s: &BenchStrings) {
         let success = format_ratio(summary.success, summary.total);
         let cc = format_ratio(summary.conventional_valid, summary.total);
         let range = format!("{:.0} · {:.0}", summary.min_ms, summary.max_ms);
+        let agent_disp = agent_with_model(&summary.agent, summary.model.as_deref());
         let row = format!(
             "  {fixture:<fw$}  {agent:<aw$}  {success:>13}  {cc:>13}  {avg:>10.1}  {p95:>10.1}  {range:<19}  {chip}",
             fixture = fixture_label(&summary.fixture, s.language),
-            agent = summary.agent,
+            agent = agent_disp,
             success = success,
             cc = cc,
             avg = summary.avg_ms,
@@ -589,9 +601,20 @@ fn print_summaries_table(report: &AgentBenchReport, s: &BenchStrings) {
             range = range,
             chip = quality_chip_summary(summary, s.language),
             fw = fixture_w,
-            aw = agent_w,
+            aw = agent_w.max(agent_disp.chars().count()),
         );
         println!("{row}");
+    }
+}
+
+fn agent_with_model(agent: &str, model: Option<&str>) -> String {
+    match model.filter(|m| !m.trim().is_empty()) {
+        Some(m) => {
+            // mantém compacto: agente:modelo (último componente do path).
+            let short = m.rsplit('/').next().unwrap_or(m);
+            format!("{agent} · {short}")
+        }
+        None => agent.to_string(),
     }
 }
 
@@ -633,15 +656,16 @@ fn print_overall_table(report: &AgentBenchReport, s: &BenchStrings) {
             1 => warn(format!("  {rank:>2}", rank = rank_marker(i))),
             _ => muted(format!("  {rank:>2}", rank = rank_marker(i))),
         };
+        let agent_disp = agent_with_model(&summary.agent, summary.model.as_deref());
         let body = format!(
             "  {agent:<aw$}  {success:>13}  {cc:>13}  {avg:>10.1}  {wins:>8}  {chip}",
-            agent = summary.agent,
+            agent = agent_disp,
             success = success,
             cc = cc,
             avg = summary.avg_ms,
             wins = format!("{} fix.", summary.fixtures_won),
             chip = quality_chip_overall(summary, s.language),
-            aw = agent_w,
+            aw = agent_w.max(agent_disp.chars().count()),
         );
         println!("{prefix}{body}");
         let _ = rank;
@@ -1246,6 +1270,13 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             } else {
                 0.0
             };
+            let model_line = match &s.model {
+                Some(m) => format!(
+                    "<div class=\"text-xs opacity-80 font-mono mb-2 break-all\">{}</div>",
+                    html_escape(m)
+                ),
+                None => String::new(),
+            };
             let _ = writeln!(
                 h,
                 "<div class=\"podium-card {medal} text-white rounded-2xl p-6\">\
@@ -1254,6 +1285,7 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
                  <span class=\"text-xs font-semibold opacity-80\">{wins} {wlbl}</span>\
                  </div>\
                  <div class=\"text-2xl font-bold mb-1\">{agent}</div>\
+                 {model_line}\
                  <div class=\"text-sm opacity-90 mb-4\">{cc_pct:.0}% CC · {avg:.0}ms {avglbl}</div>\
                  <div class=\"flex gap-2 text-xs\">\
                  <span class=\"px-2 py-0.5 bg-white/20 rounded\">{succ}/{tot} {sucl}</span>\
@@ -1394,11 +1426,22 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             2 => "🥉",
             _ => "",
         };
+        let agent_cell = format!(
+            "<div class=\"font-semibold text-base\">{}</div>{}",
+            html_escape(&s.agent),
+            match &s.model {
+                Some(m) => format!(
+                    "<div class=\"text-mono text-xs text-gray-500 dark:text-gray-400 mt-0.5\">{}</div>",
+                    html_escape(m)
+                ),
+                None => String::new(),
+            }
+        );
         let _ = writeln!(
             h,
             "<tr class=\"{row_cls}\">\
              <td class=\"text-center font-bold text-lg\">{rank}<span class=\"text-xs ml-1 text-gray-400\">{nrank}</span></td>\
-             <td class=\"font-semibold text-base\">{agent}</td>\
+             <td>{agent_cell}</td>\
              <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{succ}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {sb}\" style=\"width:{sp:.0}%\"></div></div></div></td>\
              <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{cc}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {cb}\" style=\"width:{cp:.0}%\"></div></div></div></td>\
              <td class=\"text-right text-mono font-semibold\">{avg:.0}</td>\
@@ -1409,7 +1452,6 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
              </tr>",
             rank = rank_label,
             nrank = i + 1,
-            agent = html_escape(&s.agent),
             succ = s.success,
             tot = s.total,
             sb = succ_bar,
@@ -1463,11 +1505,22 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
         let (badge_cls, badge_lbl) = result_badge(s.success, s.conventional_valid, s.total, is_pt);
         let succ_pct = pct(s.success, s.total);
         let cc_pct_local = pct(s.conventional_valid, s.total);
+        let agent_cell = format!(
+            "<div class=\"font-semibold\">{}</div>{}",
+            html_escape(&s.agent),
+            match &s.model {
+                Some(m) => format!(
+                    "<div class=\"text-mono text-xs text-gray-500 dark:text-gray-400 mt-0.5\">{}</div>",
+                    html_escape(m)
+                ),
+                None => String::new(),
+            }
+        );
         let _ = writeln!(
             h,
             "<tr>\
              <td class=\"font-medium\">{fix}</td>\
-             <td class=\"text-mono text-sm\">{agent}</td>\
+             <td>{agent_cell}</td>\
              <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{succ}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {sb}\" style=\"width:{sp:.0}%\"></div></div></div></td>\
              <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{cc}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {cb}\" style=\"width:{cp:.0}%\"></div></div></div></td>\
              <td class=\"text-right text-mono font-semibold\">{avg:.0}</td>\
@@ -1476,7 +1529,6 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
              <td><span class=\"badge {badge_cls}\">{badge_lbl}</span></td>\
              </tr>",
             fix = html_escape(&fixture_label(&s.fixture, language)),
-            agent = html_escape(&s.agent),
             succ = s.success,
             tot = s.total,
             sb = bar_class(succ_pct),
@@ -1592,6 +1644,13 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
                         .find(|s| s.iteration == it && &s.agent == agent);
                     let (border_color, _bg) = CHART_PALETTE[a_idx % CHART_PALETTE.len()];
                     if let Some(sample) = sample {
+                        let model_tag = match &sample.model {
+                            Some(m) if !m.trim().is_empty() => format!(
+                                " <span class=\"text-mono text-xs text-gray-500 dark:text-gray-400 ml-1\">· {}</span>",
+                                html_escape(m)
+                            ),
+                            _ => String::new(),
+                        };
                         if sample.success {
                             let msg = sample.message.as_deref().unwrap_or("(empty)");
                             let cc_chip = if sample.conventional_valid {
@@ -1606,13 +1665,14 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
                                  <span class=\"agent-pill\">{agent}</span>\
                                  <button class=\"copy-btn\" data-copy=\"{escm}\" type=\"button\">copy</button>\
                                  <div class=\"text-gray-900 dark:text-gray-100 mb-1.5 break-words\">{msg}</div>\
-                                 <div class=\"text-xs text-gray-500 dark:text-gray-400 flex items-center\">\
-                                 <span class=\"text-mono\">{dur:.0}ms</span>{cc_chip}\
+                                 <div class=\"text-xs text-gray-500 dark:text-gray-400 flex items-center flex-wrap\">\
+                                 <span class=\"text-mono\">{dur:.0}ms</span>{model_tag}{cc_chip}\
                                  </div></div>",
                                 agent = html_escape(agent),
                                 escm = html_escape(msg),
                                 msg = html_escape(msg),
                                 dur = sample.duration_ms,
+                                model_tag = model_tag,
                                 cc_chip = cc_chip,
                             );
                         } else {
@@ -1624,11 +1684,13 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
                                  style=\"--c:#ef4444\">\
                                  <span class=\"agent-pill\" style=\"background:#ef4444\">{agent}</span>\
                                  <div class=\"text-red-700 dark:text-red-300 break-words\">{err}</div>\
-                                 <div class=\"text-xs text-red-500/80 dark:text-red-400/70 mt-1\">{lbl}</div>\
-                                 </div>",
+                                 <div class=\"text-xs text-red-500/80 dark:text-red-400/70 mt-1 flex items-center flex-wrap\">\
+                                 <span>{lbl}</span>{model_tag}\
+                                 </div></div>",
                                 agent = html_escape(agent),
                                 err = html_escape(&truncated),
                                 lbl = if is_pt { "(falha)" } else { "(failed)" },
+                                model_tag = model_tag,
                             );
                         }
                     }
@@ -1728,6 +1790,20 @@ fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLan
         .collect();
     let _ = writeln!(h, "const F=[{}];", labels.join(","));
 
+    // resolve "agent · model" pra legenda quando houver modelo no overall
+    let agent_label = |agent: &str| -> String {
+        let model = report
+            .overall
+            .iter()
+            .find(|s| s.agent == agent)
+            .and_then(|s| s.model.clone())
+            .filter(|m| !m.trim().is_empty());
+        match model {
+            Some(m) => format!("{agent} · {m}"),
+            None => agent.to_string(),
+        }
+    };
+
     // helper para construir datasets
     let build_ds = |h: &mut String, name: &str, project: &dyn Fn(&AgentBenchSummary) -> f64| {
         let _ = writeln!(h, "const {name}=[");
@@ -1745,7 +1821,7 @@ fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLan
                         .unwrap_or_else(|| "0".to_string())
                 })
                 .collect();
-            let safe = agent.replace('\'', "\\'");
+            let safe = agent_label(agent).replace('\'', "\\'");
             let joined = vals.join(",");
             let _ = writeln!(
                 h,
@@ -1941,6 +2017,7 @@ fn run_sample(
 
     let fixture_name = fixture.as_str().to_string();
     let agent_name = agent.to_string();
+    let model_used = agent_config.ai_model.clone();
     match result {
         Ok(message) => {
             let message = normalize_commit_subject_case(Some(&message));
@@ -1948,6 +2025,7 @@ fn run_sample(
             Ok(AgentBenchSample {
                 fixture: fixture_name,
                 agent: agent_name,
+                model: model_used,
                 iteration,
                 duration_ms,
                 success: true,
@@ -1960,6 +2038,7 @@ fn run_sample(
         Err(error) => Ok(AgentBenchSample {
             fixture: fixture_name,
             agent: agent_name,
+            model: model_used,
             iteration,
             duration_ms,
             success: false,
@@ -2051,9 +2130,16 @@ fn summarize(samples: &[AgentBenchSample]) -> Vec<AgentBenchSummary> {
                 .iter()
                 .filter(|sample| sample.conventional_valid)
                 .count();
+            // Modelo do summary = primeiro modelo não-vazio do grupo (todas as
+            // amostras de um (fixture, agent) usam o mesmo modelo).
+            let model = group
+                .iter()
+                .find_map(|sample| sample.model.clone())
+                .filter(|m| !m.trim().is_empty());
             AgentBenchSummary {
                 fixture,
                 agent,
+                model,
                 total,
                 success,
                 conventional_valid,
@@ -2100,8 +2186,16 @@ fn summarize_overall(
                 .iter()
                 .filter(|(_, winner)| winner == &agent)
                 .count();
+            // Modelo: usa o do primeiro sample. Se houver divergência entre
+            // fixtures (improvável), pega ainda assim o primeiro — comparação
+            // baseada em modelo único é o que faz sentido.
+            let model = group
+                .iter()
+                .find_map(|sample| sample.model.clone())
+                .filter(|m| !m.trim().is_empty());
             AgentBenchOverallSummary {
                 agent,
+                model,
                 total,
                 success,
                 conventional_valid,
@@ -2254,6 +2348,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "rust".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 10.0,
                 success: true,
@@ -2265,6 +2360,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "rust".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 iteration: 2,
                 duration_ms: 20.0,
                 success: true,
@@ -2289,6 +2385,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "rust".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 20.0,
                 success: true,
@@ -2300,6 +2397,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "python".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 30.0,
                 success: true,
@@ -2311,6 +2409,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "rust".to_string(),
                 agent: "claude".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 10.0,
                 success: true,
@@ -2322,6 +2421,7 @@ mod tests {
             AgentBenchSample {
                 fixture: "python".to_string(),
                 agent: "claude".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 10.0,
                 success: true,
@@ -2370,6 +2470,7 @@ mod tests {
             summaries: vec![AgentBenchSummary {
                 fixture: "rust".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 total: 2,
                 success: 2,
                 conventional_valid: 1,
@@ -2380,6 +2481,7 @@ mod tests {
             }],
             overall: vec![AgentBenchOverallSummary {
                 agent: "codex".to_string(),
+                model: None,
                 total: 2,
                 success: 2,
                 conventional_valid: 1,
@@ -2393,6 +2495,7 @@ mod tests {
                 AgentBenchSample {
                     fixture: "rust".to_string(),
                     agent: "codex".to_string(),
+                    model: None,
                     iteration: 1,
                     duration_ms: 100.0,
                     success: true,
@@ -2404,6 +2507,7 @@ mod tests {
                 AgentBenchSample {
                     fixture: "rust".to_string(),
                     agent: "codex".to_string(),
+                    model: None,
                     iteration: 2,
                     duration_ms: 200.0,
                     success: true,
@@ -2459,6 +2563,7 @@ mod tests {
             summaries: vec![AgentBenchSummary {
                 fixture: "python".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 total: 1,
                 success: 1,
                 conventional_valid: 1,
@@ -2469,6 +2574,7 @@ mod tests {
             }],
             overall: vec![AgentBenchOverallSummary {
                 agent: "codex".to_string(),
+                model: None,
                 total: 1,
                 success: 1,
                 conventional_valid: 1,
@@ -2481,6 +2587,7 @@ mod tests {
             samples: vec![AgentBenchSample {
                 fixture: "python".to_string(),
                 agent: "codex".to_string(),
+                model: None,
                 iteration: 1,
                 duration_ms: 50.0,
                 success: true,
