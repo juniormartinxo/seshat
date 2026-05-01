@@ -38,6 +38,7 @@ fn main() {
             AgentBenchSample { fixture: "typescript".into(), agent: "ollama".into(), iteration: 1, duration_ms: 1290.0, success: true, conventional_valid: true, message: Some("test(utils): adicionar testes para upper".into()), error: None, diff: "".into() },
         ],
         show_samples: 2,
+        override_notes: Vec::new(),
     };
     print_report(&report, ReportLanguage::Portuguese);
 }
