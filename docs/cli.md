@@ -52,6 +52,10 @@ O flow usa locks por arquivo para evitar colisao entre agentes. Se um arquivo es
 
 - `lint` pode auto-corrigir e re-stagear o arquivo do item atual
 - `test` e `typecheck` usam apenas os arquivos relevantes para aquele item
+- quando um check nao encontra arquivo relevante para o item atual, o resultado aparece como `[skipped] <tool> (<tipo>) - Nenhum arquivo relevante para <tipo>`
+- em Rust, `test` roda apenas integration tests em `tests/*.rs`; para um unico teste novo staged, o runner chama `cargo test --test=<arquivo> <nome_do_teste>`
+- em Python, `pytest` recebe o arquivo de teste relevante; para um unico teste novo staged, o runner passa o nodeid (`tests/test_app.py::test_nome` ou `tests/test_app.py::Classe::test_nome`)
+- em TypeScript, `jest`/`vitest` recebem o arquivo de teste relevante; para um unico `test(...)` ou `it(...)` novo staged, o runner passa tambem `-t <nome_do_teste>`
 
 ## `seshat init`
 
