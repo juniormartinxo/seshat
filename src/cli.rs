@@ -990,7 +990,9 @@ fn run_flow(args: FlowArgs) -> Result<()> {
     let mut success = 0;
     let mut failed = 0;
     let mut skipped = 0;
+    let mut progress = ui::flow_progress(files.len());
     for file in files {
+        progress.start_file(&file);
         let result = service.process_file(
             &file,
             ProcessFileOptions {
@@ -1004,15 +1006,16 @@ fn run_flow(args: FlowArgs) -> Result<()> {
         );
         if result.skipped {
             skipped += 1;
-            ui::warning(format!("Pulando: {}", result.message));
+            progress.file_skip(format!("Pulando: {}", result.message));
         } else if result.success {
             success += 1;
-            ui::success(format!("Sucesso: {}", result.message));
+            progress.file_ok(format!("Sucesso: {}", result.message));
         } else {
             failed += 1;
-            ui::error(format!("Falha: {}", result.message));
+            progress.file_fail(format!("Falha: {}", result.message));
         }
     }
+    progress.finish(format!("ok={success} fail={failed} skip={skipped}"));
     println!("Resultado\n  Sucesso: {success}\n  Falhas: {failed}\n  Pulados: {skipped}");
     if failed > 0 {
         Err(anyhow!("Flow finalizado com falhas"))
