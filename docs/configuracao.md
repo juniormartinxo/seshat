@@ -337,10 +337,18 @@ Detalhes atuais do Rust:
 - `lint` tem auto-fix embutido por default; use `checks.lint.auto_fix: false` para desligar
 - `typecheck` em `flow` e `commit --check typecheck` e escopado ao pacote Cargo afetado
 - `test` so roda para integration tests em `tests/*.rs`, e apenas para os alvos staged
+- se o diff staged adicionar exatamente uma funcao de teste em um unico integration test, o runner chama `cargo test --test=<arquivo> <nome_do_teste>`
 
 ### Python e TypeScript
 
 Os comandos default sao detectados pelo runner, mas podem ser sobrescritos em `checks.*` ou `commands.*`.
+
+Detalhes atuais de Python e TypeScript:
+
+- `pytest` recebe arquivos de teste relevantes quando o check e escopado por arquivo
+- se um unico `def test_*` novo estiver staged, `pytest` recebe o nodeid especifico do teste
+- `jest` e `vitest` recebem arquivos `.test.*` e `.spec.*` relevantes
+- se um unico `test(...)` ou `it(...)` novo estiver staged, `jest`/`vitest` recebem `arquivo -t <nome_do_teste>`
 
 ## Arquivos legados
 
