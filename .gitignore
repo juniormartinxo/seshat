@@ -53,6 +53,12 @@ __pycache__/
 dist/
 unsloth_compiled_cache/
 
+# Website build artifacts
+site/node_modules/
+site/.next/
+site/out/
+site/.vercel/
+
 # Fine-tuning outputs (modelos, checkpoints, GGUFs)
 scripts/training/out/
 *.gguf
