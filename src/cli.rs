@@ -183,8 +183,20 @@ struct BenchAgentsArgs {
         help = "Imprime as N primeiras mensagens geradas por fixture (lado a lado por agente) para comparação qualitativa."
     )]
     show_samples: usize,
-    #[arg(long, num_args = 0..=1, default_missing_value = "seshat-bench-report.html")]
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = "seshat-bench-report.html",
+        help = "Grava relatório HTML estilizado no path informado (default: seshat-bench-report.html)."
+    )]
     report: Option<String>,
+    #[arg(
+        long = "json",
+        num_args = 0..=1,
+        default_missing_value = "seshat-bench-report.json",
+        help = "Grava relatório JSON estruturado no path informado (default: seshat-bench-report.json). Inclui schema_version, generated_at, seshat_version e todos os samples — pronto pra consumo de site/app externo."
+    )]
+    json: Option<String>,
     // === Overrides por agente (úteis quando você roda fora do wrapper que ===
     // === injeta CLAUDE_CONFIG_DIR / CODEX_HOME, ex: cloak/clkec/clkex). ===
     #[arg(
@@ -540,6 +552,7 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
         ReportLanguage::English
     };
     let report_path = args.report;
+    let json_path = args.json;
 
     // Resolve overrides: profile do Cloak primeiro (se setado), depois flags
     // explícitas têm prioridade sobre o que o profile injetou.
@@ -615,6 +628,11 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
         let html = bench::generate_html_report(&report, language);
         fs::write(&path, html)?;
         eprintln!("HTML report: {path}");
+    }
+    if let Some(path) = json_path {
+        let json = serde_json::to_string_pretty(&report)?;
+        fs::write(&path, json)?;
+        eprintln!("JSON report: {path}");
     }
     Ok(())
 }
