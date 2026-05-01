@@ -2,7 +2,7 @@
 
 🦀 Seshat agora é Rust. Foi atualizado em `10/04/2026`, mas você ainda pode usar a versao Python na branch `main-py`.
 
-📦 A versao Python permanece em repo separado como referencia historica e para comparacao de comportamento, conforme `docs/cutover-decision.md`.
+📦 A versao Python permanece em repo separado como referencia historica e para comparacao de comportamento, conforme `site/docs/cutover-decision.md`.
 
 O binario final se chama `seshat` e oferece os comandos:
 
@@ -356,7 +356,7 @@ Eventos emitidos:
 - `cancelled`
 - `error`
 
-Schema detalhado: `docs/json-contract.md`.
+Schema detalhado: `site/docs/json-contract.md`.
 
 ## 🔄 Migracao Python -> Rust
 
@@ -380,20 +380,18 @@ Diferencas conhecidas:
 
 ## 📚 Documentacao
 
-- Configuracao detalhada: `docs/configuracao.md`
-- CLI e comportamento real: `docs/cli.md`
-- Exemplos de `.seshat/config.yaml`: `docs/seshat-examples.md`
-- Arquitetura do tooling: `docs/tooling-architecture.md`
-- Customizacao da UI: `docs/ui-customization.md`
-- Plano macro: `docs/refactor-plan.md`
-- Backlog: `docs/refactor-tasks/`
-- Matriz de paridade: `docs/parity-matrix.md`
-- Contrato de UI: `docs/ui-contract.md`
-- Contrato JSONL: `docs/json-contract.md`
-- Checklist de release: `docs/release-checklist.md`
-- Decisao de separacao Python x Rust: `docs/cutover-decision.md`
+- Configuracao detalhada: `site/docs/configuracao.md`
+- CLI e comportamento real: `site/docs/cli.md`
+- Exemplos de `.seshat/config.yaml`: `site/docs/seshat-examples.md`
+- Arquitetura do tooling: `site/docs/tooling-architecture.md`
+- Customizacao da UI: `site/docs/ui-customization.md`
+- Matriz de paridade: `site/docs/parity-matrix.md`
+- Contrato de UI: `site/docs/ui-contract.md`
+- Contrato JSONL: `site/docs/json-contract.md`
+- Checklist de release: `site/docs/release-checklist.md`
+- Decisao de separacao Python x Rust: `site/docs/cutover-decision.md`
 - Pipeline de fine-tuning (dataset + treino): `scripts/dataset/README.md`, `scripts/training/README.md`
-- Modelo `seshat-commit` no Ollama: `docs/seshat-commit.md` (pagina publica: https://ollama.com/juniormartinxo/seshat-commit)
+- Modelo `seshat-commit` no Ollama: `site/docs/seshat-commit.md` (pagina publica: https://ollama.com/juniormartinxo/seshat-commit)
 
 ## 🧠 Modelo local seshat-commit
 
