@@ -8,10 +8,14 @@ use tempfile::TempDir;
 
 fn seshat() -> AssertCommand {
     let mut command = AssertCommand::cargo_bin("seshat").expect("seshat binary");
+    // Limpa toda env documentada que afeta resolução de provider/profile/credencial,
+    // para que envs vazadas do shell do dev (Cloak, CLAUDE_CONFIG_DIR, etc.) não
+    // sequestrem o teste e façam o seshat invocar o Codex/Claude reais.
     for key in [
         "API_KEY",
         "AI_PROVIDER",
         "AI_MODEL",
+        "AI_TIMEOUT",
         "JUDGE_API_KEY",
         "JUDGE_PROVIDER",
         "JUDGE_MODEL",
@@ -19,9 +23,27 @@ fn seshat() -> AssertCommand {
         "WARN_DIFF_SIZE",
         "COMMIT_LANGUAGE",
         "DEFAULT_DATE",
+        "CODE_REVIEW_TIMEOUT",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_API_KEY",
         "GEMINI_API_KEY",
         "ZAI_API_KEY",
         "ZHIPU_API_KEY",
+        "OLLAMA_BASE_URL",
+        "SESHAT_PROFILE",
+        "CODEX_BIN",
+        "CODEX_MODEL",
+        "CODEX_PROFILE",
+        "CODEX_TIMEOUT",
+        "CODEX_API_KEY",
+        "CODEX_HOME",
+        "CLAUDE_BIN",
+        "CLAUDE_MODEL",
+        "CLAUDE_AGENT",
+        "CLAUDE_SETTINGS",
+        "CLAUDE_TIMEOUT",
+        "CLAUDE_CONFIG_DIR",
     ] {
         command.env_remove(key);
     }
