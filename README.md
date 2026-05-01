@@ -348,6 +348,20 @@ Diferencas conhecidas:
 - Contrato JSONL: `docs/json-contract.md`
 - Checklist de release: `docs/release-checklist.md`
 - Decisao de separacao Python x Rust: `docs/cutover-decision.md`
+- Pipeline de fine-tuning (dataset + treino): `scripts/dataset/README.md`, `scripts/training/README.md`
+- Modelo `seshat-commit` no Ollama: https://ollama.com/juniormartinxo/seshat-commit (ver `scripts/training/OLLAMA_README.md`)
+
+## 🧠 Modelo local seshat-commit
+
+Modelo LoRA fine-tuned a partir do Qwen 2.5 Coder 7B para gerar mensagens de commit em PT-BR no padrão Conventional Commits, treinado com 4869 commits do autor. Pronto pra usar via Ollama:
+
+```bash
+ollama pull juniormartinxo/seshat-commit
+seshat config --provider ollama --model juniormartinxo/seshat-commit
+seshat commit --yes
+```
+
+Pipeline reprodutível em `scripts/dataset/` (extração) e `scripts/training/` (treino + export GGUF). Detalhes em https://ollama.com/juniormartinxo/seshat-commit ou `scripts/training/OLLAMA_README.md`.
 
 ## Validacao
 
