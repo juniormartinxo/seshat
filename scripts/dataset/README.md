@@ -122,15 +122,26 @@ python3 normalize.py --in raw.jsonl --out-dir ./out
 
 Saída em `./out/`:
 
-- `train.jsonl` (~95%) e `eval.jsonl` (~5%)
+- `train.jsonl` (~95%) e `eval.jsonl` (~5%) — usados no SFT
+- `rejected.jsonl` — commits low-quality preservados para uso futuro em **DPO** (Direct Preference Optimization), com `_meta.rejected_reason` indicando por que foi descartado. Default: ligado. Desligar com `--no-save-rejected`. Para incluir também os non-CC: `--save-non-cc-rejected` (volume alto).
 - formato chat: `{"messages":[{role:"system",...},{role:"user",...},{role:"assistant",...}]}`
 
 Filtros e transformações aplicados:
 
-- mantém só mensagens em Conventional Commits
+- mantém só mensagens em Conventional Commits (regex `feat|fix|chore|docs|...`)
+- **descarta low-quality**: subject genérico (`update`, `fix`, `tweak`...), placeholders (`<TODO>`, `???`, `XXX`, `FIXME`), escopo vazio (`feat(): ...`), subject só com URL/PR (`fix: #42`), só com nome de arquivo (`chore: src/main.rs`), all-caps (`FIX BUG`), descrição < 8 chars
 - dedup por subject normalizado e hash do diff
 - cap por type (`--cap-per-type`, default 800) — evita `chore` ou `feat` dominar
 - split estratificado, embaralhado, seed fixa
+
+O resumo final lista quantos foram cortados por cada motivo (`generic_subject`, `placeholder_or_todo`, `url_or_pr_only`, `filename_only`, `empty_scope`, `all_caps`, `subject_too_short`, `empty_subject`).
+
+Filtros adicionais já aplicados na **extração** (`extract_commits.sh`):
+
+- prefixos `Revert*`, `Reapply*`, `fixup!*`, `squash!*`, `amend!*`, `WIP*`, `Bump *`, `chore(deps)*`
+- subject contendo `[skip ci]`, `[ci skip]`, `[no ci]`
+- autor bot (`dependabot`, `renovate`, `github-actions`, `*-bot@*`, `*[bot]*`)
+- diff puramente whitespace (rebalanceamento, EOL, indent — detectado via `git show -w`)
 
 ## 3. Volume esperado
 
