@@ -176,6 +176,14 @@ impl AgentOverrides {
 
 #[derive(Debug, Serialize)]
 pub struct AgentBenchReport {
+    /// Versão do schema JSON exportado. Aumenta quando há breaking change.
+    /// Consumidores externos podem checar `>= 1` para compatibilidade.
+    pub schema_version: u32,
+    /// Timestamp ISO 8601 com timezone local (ex: `2026-05-01T18:53:42-03:00`).
+    /// Útil para sites/apps que mostram histórico de runs.
+    pub generated_at: String,
+    /// Versão do seshat que gerou o relatório.
+    pub seshat_version: String,
     pub iterations: usize,
     pub agents: Vec<String>,
     pub agent_selection: AgentSelection,
@@ -189,6 +197,10 @@ pub struct AgentBenchReport {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub override_notes: Vec<String>,
 }
+
+/// Versão atual do schema do JSON exportado por `bench agents`. Aumentar
+/// quando algum campo público mudar de tipo ou for removido.
+pub const BENCH_REPORT_SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Serialize)]
 pub struct AgentBenchSummary {
@@ -287,6 +299,9 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
     let override_notes = describe_overrides(&options.overrides);
 
     Ok(AgentBenchReport {
+        schema_version: BENCH_REPORT_SCHEMA_VERSION,
+        generated_at: chrono::Local::now().to_rfc3339(),
+        seshat_version: crate::VERSION.to_string(),
         iterations: options.iterations,
         agents,
         agent_selection,
@@ -2519,6 +2534,9 @@ mod tests {
             ],
             show_samples: 0,
             override_notes: Vec::new(),
+            schema_version: BENCH_REPORT_SCHEMA_VERSION,
+            generated_at: "2026-05-01T00:00:00-03:00".to_string(),
+            seshat_version: "test".to_string(),
         };
 
         let html = generate_html_report(&report, ReportLanguage::English);
@@ -2598,6 +2616,9 @@ mod tests {
             }],
             show_samples: 0,
             override_notes: Vec::new(),
+            schema_version: BENCH_REPORT_SCHEMA_VERSION,
+            generated_at: "2026-05-01T00:00:00-03:00".to_string(),
+            seshat_version: "test".to_string(),
         };
 
         let html = generate_html_report(&report, ReportLanguage::Portuguese);
