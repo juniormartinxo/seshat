@@ -393,7 +393,7 @@ Diferencas conhecidas:
 - Checklist de release: `docs/release-checklist.md`
 - Decisao de separacao Python x Rust: `docs/cutover-decision.md`
 - Pipeline de fine-tuning (dataset + treino): `scripts/dataset/README.md`, `scripts/training/README.md`
-- Modelo `seshat-commit` no Ollama: https://ollama.com/juniormartinxo/seshat-commit (ver `scripts/training/OLLAMA_README.md`)
+- Modelo `seshat-commit` no Ollama: `docs/seshat-commit.md` (pagina publica: https://ollama.com/juniormartinxo/seshat-commit)
 
 ## 🧠 Modelo local seshat-commit
 
