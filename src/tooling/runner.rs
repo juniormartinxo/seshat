@@ -353,9 +353,11 @@ pub(super) fn tool_from_default(
 pub(super) fn apply_overrides(tool: &mut ToolCommand, project_config: &ProjectConfig) {
     if let Some(check) = project_config.checks.get(&tool.check_type) {
         tool.blocking = check.blocking;
+        let auto_fix_overridden = check.auto_fix.is_some();
         if let Some(auto_fix) = check.auto_fix {
             tool.auto_fix = auto_fix;
         }
+        let command_overridden = check.command.is_some();
         if let Some(command) = &check.command {
             tool.command = command.to_args();
         }
@@ -365,8 +367,18 @@ pub(super) fn apply_overrides(tool: &mut ToolCommand, project_config: &ProjectCo
         if let Some(pass_files) = check.pass_files {
             tool.pass_files = pass_files;
         }
+        let fix_command_overridden = check.fix_command.is_some();
         if let Some(command) = &check.fix_command {
             tool.fix_command = Some(command.to_args());
+        }
+        // Quando o usuário sobrescreve `command:` sem fornecer `fix_command:` nem
+        // `auto_fix:`, o `fix_command` herdado da tool default (p.ex. `rustfmt`)
+        // não tem mais relação com o `command:` configurado — o run_checks com
+        // auto_fix=true rodaria só o fix_command e ignoraria o command do
+        // usuário. Desligamos auto_fix para garantir que o command: configurado
+        // seja efetivamente executado.
+        if command_overridden && !fix_command_overridden && !auto_fix_overridden {
+            tool.auto_fix = false;
         }
     }
 
@@ -380,6 +392,7 @@ pub(super) fn apply_overrides(tool: &mut ToolCommand, project_config: &ProjectCo
 }
 
 fn apply_command_config(tool: &mut ToolCommand, config: &CommandConfig) {
+    let command_overridden = config.command.is_some();
     if let Some(command) = &config.command {
         tool.command = command.to_args();
     }
@@ -389,11 +402,16 @@ fn apply_command_config(tool: &mut ToolCommand, config: &CommandConfig) {
     if let Some(pass_files) = config.pass_files {
         tool.pass_files = pass_files;
     }
+    let fix_command_overridden = config.fix_command.is_some();
     if let Some(command) = &config.fix_command {
         tool.fix_command = Some(command.to_args());
     }
+    let auto_fix_overridden = config.auto_fix.is_some();
     if let Some(auto_fix) = config.auto_fix {
         tool.auto_fix = auto_fix;
+    }
+    if command_overridden && !fix_command_overridden && !auto_fix_overridden {
+        tool.auto_fix = false;
     }
 }
 
