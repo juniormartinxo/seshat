@@ -7,6 +7,9 @@ fn main() {
     let om = Some("seshat-commit".to_string());
 
     let report = AgentBenchReport {
+        schema_version: BENCH_REPORT_SCHEMA_VERSION,
+        generated_at: "2026-05-01T18:00:00-03:00".to_string(),
+        seshat_version: env!("CARGO_PKG_VERSION").to_string(),
         iterations: 3,
         agents: vec!["codex".into(), "claude".into(), "ollama".into()],
         agent_selection: AgentSelection::Explicit,
