@@ -92,6 +92,7 @@ Observacao:
 
 - no Rust atual, `typecheck` usa o pacote Cargo afetado pelo arquivo
 - `test` so dispara para arquivos em `tests/*.rs`
+- com um unico teste novo staged, o comando fica focado no teste criado, por exemplo `cargo test --test=e2e_cli created_e2e_test`
 
 ## Python
 
@@ -128,6 +129,8 @@ code_review:
   extensions: [".py", ".pyi"]
 ```
 
+Com o default `pytest`, se o item atual for `tests/test_app.py` e o diff staged tiver apenas `def test_created():`, o Seshat roda `pytest tests/test_app.py::test_created`.
+
 ## TypeScript
 
 ```yaml
@@ -162,6 +165,8 @@ code_review:
   blocking: true
   extensions: [".ts", ".tsx", ".js", ".jsx"]
 ```
+
+Com `jest` ou `vitest`, se o item atual for `src/app.test.ts` e o diff staged tiver apenas `test("created behavior", ...)`, o Seshat passa `src/app.test.ts -t "created behavior"` para o comando de teste.
 
 ## Somente commits automaticos para docs/config
 
