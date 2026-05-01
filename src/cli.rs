@@ -1,4 +1,6 @@
-use crate::bench::{self, AgentBenchFormat, AgentBenchOptions, AgentFixture, ReportLanguage};
+use crate::bench::{
+    self, AgentBenchFormat, AgentBenchOptions, AgentFixture, AgentOverrides, ReportLanguage,
+};
 use crate::config::{
     has_project_config, load_config, load_config_for_path, mask_api_key,
     migrate_legacy_project_layout, project_config_dir, project_config_path,
@@ -183,6 +185,48 @@ struct BenchAgentsArgs {
     show_samples: usize,
     #[arg(long, num_args = 0..=1, default_missing_value = "seshat-bench-report.html")]
     report: Option<String>,
+    // === Overrides por agente (úteis quando você roda fora do wrapper que ===
+    // === injeta CLAUDE_CONFIG_DIR / CODEX_HOME, ex: cloak/clkec/clkex). ===
+    #[arg(
+        long = "codex-bin",
+        help = "Caminho do binário do Codex CLI (sobrescreve CODEX_BIN)."
+    )]
+    codex_bin: Option<PathBuf>,
+    #[arg(
+        long = "codex-home",
+        help = "Diretório CODEX_HOME para o profile do Codex."
+    )]
+    codex_home: Option<PathBuf>,
+    #[arg(
+        long = "codex-model",
+        help = "Modelo passado especificamente ao Codex (em vez do global --model)."
+    )]
+    codex_model: Option<String>,
+    #[arg(
+        long = "claude-bin",
+        help = "Caminho do binário do Claude CLI (sobrescreve CLAUDE_BIN)."
+    )]
+    claude_bin: Option<PathBuf>,
+    #[arg(
+        long = "claude-config-dir",
+        help = "Diretório CLAUDE_CONFIG_DIR para o profile do Claude."
+    )]
+    claude_config_dir: Option<PathBuf>,
+    #[arg(
+        long = "claude-model",
+        help = "Modelo passado especificamente ao Claude (em vez do global --model)."
+    )]
+    claude_model: Option<String>,
+    #[arg(
+        long = "ollama-model",
+        help = "Modelo Ollama (em vez do global --model)."
+    )]
+    ollama_model: Option<String>,
+    #[arg(
+        long = "profile",
+        help = "Profile do Cloak. Resolve CLAUDE_CONFIG_DIR e CODEX_HOME automaticamente."
+    )]
+    profile: Option<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -496,6 +540,59 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
         ReportLanguage::English
     };
     let report_path = args.report;
+
+    // Resolve overrides: profile do Cloak primeiro (se setado), depois flags
+    // explícitas têm prioridade sobre o que o profile injetou.
+    let mut overrides = AgentOverrides::default();
+    if let Some(profile_name) = &args.profile {
+        let cwd = std::env::current_dir()?;
+        let discovery = discover_cloak_profiles().ok().flatten();
+        let resolved = resolve_profile_precedence(
+            &cwd,
+            Some(profile_name.as_str()),
+            None,
+            None,
+            None,
+            discovery.as_ref(),
+        );
+        if let Some(profile) = resolved {
+            // ResolvedProfile só carrega name+source — busca o installed_profile
+            // do Cloak pra extrair codex_home/claude_config_dir.
+            if let Some(installed) = discovery
+                .as_ref()
+                .and_then(|d| d.installed_profile(&profile.name))
+            {
+                if let Some(home) = installed.cli_homes.codex_home.clone() {
+                    overrides.codex_home = Some(home);
+                }
+                if let Some(dir) = installed.cli_homes.claude_config_dir.clone() {
+                    overrides.claude_config_dir = Some(dir);
+                }
+            }
+        }
+    }
+    if let Some(v) = args.codex_bin {
+        overrides.codex_bin = Some(v);
+    }
+    if let Some(v) = args.codex_home {
+        overrides.codex_home = Some(v);
+    }
+    if let Some(v) = args.codex_model {
+        overrides.codex_model = Some(v);
+    }
+    if let Some(v) = args.claude_bin {
+        overrides.claude_bin = Some(v);
+    }
+    if let Some(v) = args.claude_config_dir {
+        overrides.claude_config_dir = Some(v);
+    }
+    if let Some(v) = args.claude_model {
+        overrides.claude_model = Some(v);
+    }
+    if let Some(v) = args.ollama_model {
+        overrides.ollama_model = Some(v);
+    }
+
     let options = AgentBenchOptions {
         agents: args.agents,
         fixtures: args.fixtures.into_iter().map(Into::into).collect(),
@@ -505,6 +602,7 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
         language,
         keep_temp: args.keep_temp,
         show_samples: args.show_samples,
+        overrides,
     };
     let format = options.format;
     let language = options.language;
