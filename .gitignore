@@ -58,6 +58,7 @@ site/node_modules/
 site/.next/
 site/out/
 site/.vercel/
+site/tsconfig.tsbuildinfo
 
 # Fine-tuning outputs (modelos, checkpoints, GGUFs)
 scripts/training/out/
