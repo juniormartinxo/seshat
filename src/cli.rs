@@ -175,6 +175,12 @@ struct BenchAgentsArgs {
     pt_br: bool,
     #[arg(long = "keep-temp")]
     keep_temp: bool,
+    #[arg(
+        long = "show-samples",
+        default_value_t = 0,
+        help = "Imprime as N primeiras mensagens geradas por fixture (lado a lado por agente) para comparação qualitativa."
+    )]
+    show_samples: usize,
     #[arg(long, num_args = 0..=1, default_missing_value = "seshat-bench-report.html")]
     report: Option<String>,
 }
@@ -498,6 +504,7 @@ fn run_bench_agents(args: BenchAgentsArgs) -> Result<()> {
         format,
         language,
         keep_temp: args.keep_temp,
+        show_samples: args.show_samples,
     };
     let format = options.format;
     let language = options.language;
