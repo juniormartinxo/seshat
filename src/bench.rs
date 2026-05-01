@@ -120,6 +120,7 @@ pub struct AgentBenchOptions {
     pub format: AgentBenchFormat,
     pub language: ReportLanguage,
     pub keep_temp: bool,
+    pub show_samples: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -132,6 +133,7 @@ pub struct AgentBenchReport {
     pub summaries: Vec<AgentBenchSummary>,
     pub overall: Vec<AgentBenchOverallSummary>,
     pub samples: Vec<AgentBenchSample>,
+    pub show_samples: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -170,6 +172,9 @@ pub struct AgentBenchSample {
     pub conventional_valid: bool,
     pub message: Option<String>,
     pub error: Option<String>,
+    /// Diff que o agente recebeu para gerar a mensagem. Mesmo dentro de uma
+    /// fixture entre agentes — usado pra render comparativo de --show-samples.
+    pub diff: String,
 }
 
 pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
@@ -226,191 +231,530 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
         summaries,
         overall,
         samples,
+        show_samples: options.show_samples,
     })
 }
 
 pub fn print_report(report: &AgentBenchReport, language: ReportLanguage) {
-    match language {
-        ReportLanguage::Portuguese => print_report_pt_br(report),
-        ReportLanguage::English => print_report_en(report),
+    let strings = BenchStrings::for_language(language);
+    print_report_styled(report, &strings);
+}
+
+const REPORT_WIDTH: usize = 96;
+
+/// Strings localizadas usadas pelo renderizador unificado. Mantém a separação
+/// PT-BR / EN sem duplicar a lógica de layout.
+struct BenchStrings {
+    language: ReportLanguage,
+    title: &'static str,
+    agents_label: &'static str,
+    fixtures_label: &'static str,
+    iterations_label: &'static str,
+    auto_detected: &'static str,
+    only_one_agent: &'static str,
+    by_fixture: &'static str,
+    overall_ranking: &'static str,
+    samples_section: &'static str,
+    diff_label: &'static str,
+    iteration_label: &'static str,
+    fixture_col: &'static str,
+    agent_col: &'static str,
+    success_col: &'static str,
+    cc_col: &'static str,
+    avg_col: &'static str,
+    p95_col: &'static str,
+    range_col: &'static str,
+    rank_col: &'static str,
+    wins_col: &'static str,
+    legend_ms: &'static str,
+    legend_quality: &'static str,
+    legend_cc: &'static str,
+    error_label: &'static str,
+    sample_no_msg: &'static str,
+    samples_footer_prefix: &'static str,
+    samples_footer_suffix: &'static str,
+    temp_kept: &'static str,
+    fixtures_total: &'static str,
+}
+
+impl BenchStrings {
+    fn for_language(language: ReportLanguage) -> Self {
+        match language {
+            ReportLanguage::Portuguese => BenchStrings {
+                language,
+                title: "SESHAT  ·  BENCHMARK DE AGENTES",
+                agents_label: "Agentes",
+                fixtures_label: "Fixtures",
+                iterations_label: "Iterações por fixture",
+                auto_detected: "agentes detectados automaticamente",
+                only_one_agent:
+                    "Apenas um agente disponível. Use --agents codex,claude,ollama para comparar.",
+                by_fixture: "POR FIXTURE",
+                overall_ranking: "RANKING GERAL",
+                samples_section: "AMOSTRAS GERADAS",
+                diff_label: "Diff (preview)",
+                iteration_label: "Iteração",
+                fixture_col: "Fixture",
+                agent_col: "Agente",
+                success_col: "Sucesso",
+                cc_col: "Conv. válido",
+                avg_col: "Média ms",
+                p95_col: "P95 ms",
+                range_col: "min · max",
+                rank_col: "#",
+                wins_col: "Vitórias",
+                legend_ms: "Latências em ms (setup do repo Git fora da medição).",
+                legend_quality:
+                    "Qualidade considera Sucesso e Conv. válido; latência decide empate.",
+                legend_cc: "CC válido = mensagem aceita pelo padrão Conventional Commits.",
+                error_label: "(erro)",
+                sample_no_msg: "(sem resposta)",
+                samples_footer_prefix: "Mostrando até",
+                samples_footer_suffix: "iteração(ões) por fixture (--show-samples).",
+                temp_kept: "Repositórios temporários preservados em",
+                fixtures_total: "fixtures",
+            },
+            ReportLanguage::English => BenchStrings {
+                language,
+                title: "SESHAT  ·  AGENT BENCHMARK",
+                agents_label: "Agents",
+                fixtures_label: "Fixtures",
+                iterations_label: "Iterations per fixture",
+                auto_detected: "agents auto-detected",
+                only_one_agent:
+                    "Only one agent detected. Use --agents codex,claude,ollama to compare.",
+                by_fixture: "BY FIXTURE",
+                overall_ranking: "OVERALL RANKING",
+                samples_section: "GENERATED SAMPLES",
+                diff_label: "Diff (preview)",
+                iteration_label: "Iteration",
+                fixture_col: "Fixture",
+                agent_col: "Agent",
+                success_col: "Success",
+                cc_col: "Conv. valid",
+                avg_col: "Avg ms",
+                p95_col: "P95 ms",
+                range_col: "min · max",
+                rank_col: "#",
+                wins_col: "Wins",
+                legend_ms: "Latency in ms (Git fixture setup excluded).",
+                legend_quality: "Quality uses Success and Conv. valid; latency breaks ties.",
+                legend_cc: "CC valid = message accepted by Conventional Commits regex.",
+                error_label: "(error)",
+                sample_no_msg: "(no response)",
+                samples_footer_prefix: "Showing up to",
+                samples_footer_suffix: "iteration(s) per fixture (--show-samples).",
+                temp_kept: "Temporary repositories kept at",
+                fixtures_total: "fixtures",
+            },
+        }
     }
 }
 
-fn print_report_pt_br(report: &AgentBenchReport) {
-    println!("Benchmark de Agentes");
-    println!("====================\n");
-    println!("Agentes: {}", report.agents.join(", "));
-    print_agent_selection_note_pt_br(report);
-    println!("Fixtures: {}", report.fixtures.join(", "));
-    println!("Iteracoes por fixture: {}\n", report.iterations);
-    println!("Por fixture");
-    println!("-----------");
-    print_table_header_pt_br();
-    for summary in &report.summaries {
-        println!(
-            "{:<12} {:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1}  {}",
-            fixture_label(&summary.fixture, ReportLanguage::Portuguese),
-            summary.agent,
-            format!("{}/{}", summary.success, summary.total),
-            format!("{}/{}", summary.conventional_valid, summary.total),
-            summary.avg_ms,
-            summary.p95_ms,
-            summary.min_ms,
-            summary.max_ms,
-            result_label_pt_br(summary),
-        );
+fn print_report_styled(report: &AgentBenchReport, s: &BenchStrings) {
+    println!();
+    print_title_banner(s.title);
+
+    println!();
+    println!(
+        "  {} {}",
+        muted("▸"),
+        info(format!(
+            "{}: {}",
+            s.agents_label,
+            report.agents.join(separator())
+        ))
+    );
+    if report.agent_selection == AgentSelection::AutoDetected {
+        println!("    {}", muted(format!("({})", s.auto_detected)));
+        if report.agents.len() == 1 {
+            println!("    {}", warning(s.only_one_agent));
+        }
     }
-    print_overall_pt_br(report);
-    println!("\nTodas as duracoes estao em milissegundos (ms).");
-    println!("O tempo mede a geracao da mensagem pelo agente; setup da fixture Git fica fora da medicao.");
-    println!("Quanto menor Media/P95 ms, mais rapido; Sucesso e Conv. valido medem qualidade.");
+    println!(
+        "  {} {}",
+        muted("▸"),
+        info(format!(
+            "{}: {}",
+            s.fixtures_label,
+            report
+                .fixtures
+                .iter()
+                .map(|f| fixture_label(f, s.language))
+                .collect::<Vec<_>>()
+                .join(separator())
+        ))
+    );
+    println!(
+        "  {} {}",
+        muted("▸"),
+        info(format!(
+            "{}: {} ({} {})",
+            s.iterations_label,
+            report.iterations,
+            report.fixtures.len(),
+            s.fixtures_total,
+        ))
+    );
+
+    println!();
+    print_section_header(s.by_fixture);
+    print_summaries_table(report, s);
+
+    println!();
+    print_section_header(s.overall_ranking);
+    print_overall_table(report, s);
+
+    print_samples_styled(report, s);
+
+    println!();
+    println!("  {}", muted(s.legend_ms));
+    println!("  {}", muted(s.legend_quality));
+    println!("  {}", muted(s.legend_cc));
     if let Some(path) = &report.temp_root {
         println!(
-            "Repositorios temporarios preservados em: {}",
-            path.display()
+            "  {} {}",
+            muted(s.temp_kept),
+            info(path.display().to_string())
         );
     }
+    println!();
 }
 
-fn print_report_en(report: &AgentBenchReport) {
-    println!("Agent Benchmark");
-    println!("===============\n");
-    println!("Agents: {}", report.agents.join(", "));
-    print_agent_selection_note_en(report);
-    println!("Fixtures: {}", report.fixtures.join(", "));
-    println!("Iterations per fixture: {}\n", report.iterations);
-    println!("By fixture");
-    println!("----------");
-    print_table_header_en();
+fn print_title_banner(title: &str) {
+    let inner = REPORT_WIDTH - 2;
+    let pad = inner.saturating_sub(title.chars().count());
+    let left = pad / 2;
+    let right = pad - left;
+    let line = format!("┃{}{}{}┃", " ".repeat(left), title, " ".repeat(right),);
+    println!("{}", accent(format!("┏{}┓", "━".repeat(inner))));
+    println!("{}", accent_bold(line));
+    println!("{}", accent(format!("┗{}┛", "━".repeat(inner))));
+}
+
+fn print_section_header(label: &str) {
+    let prefix = "━━━━ ";
+    let suffix_len =
+        REPORT_WIDTH.saturating_sub(prefix.chars().count() + label.chars().count() + 1);
+    let line = format!("{prefix}{label} {}", "━".repeat(suffix_len));
+    println!("{}", accent_bold(line));
+}
+
+fn print_summaries_table(report: &AgentBenchReport, s: &BenchStrings) {
+    // Larguras
+    let agent_w = report
+        .agents
+        .iter()
+        .map(|a| a.chars().count())
+        .max()
+        .unwrap_or(6)
+        .max(s.agent_col.chars().count());
+    let fixture_w = report
+        .fixtures
+        .iter()
+        .map(|f| fixture_label(f, s.language).chars().count())
+        .max()
+        .unwrap_or(8)
+        .max(s.fixture_col.chars().count());
+
+    let header = format!(
+        "  {:<fw$}  {:<aw$}  {:>13}  {:>13}  {:>10}  {:>10}  {:<19}  Resultado",
+        s.fixture_col,
+        s.agent_col,
+        s.success_col,
+        s.cc_col,
+        s.avg_col,
+        s.p95_col,
+        s.range_col,
+        fw = fixture_w,
+        aw = agent_w,
+    );
+    println!("{}", muted(&header));
+    println!(
+        "{}",
+        muted(format!(
+            "  {0:─<fw$}  {0:─<aw$}  {0:─<13}  {0:─<13}  {0:─<10}  {0:─<10}  {0:─<19}  {0:─<14}",
+            "",
+            fw = fixture_w,
+            aw = agent_w,
+        ))
+    );
+
     for summary in &report.summaries {
-        println!(
-            "{:<12} {:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1}  {}",
-            fixture_label(&summary.fixture, ReportLanguage::English),
-            summary.agent,
-            format!("{}/{}", summary.success, summary.total),
-            format!("{}/{}", summary.conventional_valid, summary.total),
-            summary.avg_ms,
-            summary.p95_ms,
-            summary.min_ms,
-            summary.max_ms,
-            result_label_en(summary),
+        let success = format_ratio(summary.success, summary.total);
+        let cc = format_ratio(summary.conventional_valid, summary.total);
+        let range = format!("{:.0} · {:.0}", summary.min_ms, summary.max_ms);
+        let row = format!(
+            "  {fixture:<fw$}  {agent:<aw$}  {success:>13}  {cc:>13}  {avg:>10.1}  {p95:>10.1}  {range:<19}  {chip}",
+            fixture = fixture_label(&summary.fixture, s.language),
+            agent = summary.agent,
+            success = success,
+            cc = cc,
+            avg = summary.avg_ms,
+            p95 = summary.p95_ms,
+            range = range,
+            chip = quality_chip_summary(summary, s.language),
+            fw = fixture_w,
+            aw = agent_w,
         );
-    }
-    print_overall_en(report);
-    println!("\nAll durations are milliseconds (ms).");
-    println!("Timing measures agent message generation; Git fixture setup is excluded.");
-    println!("Lower Avg/P95 ms is faster; Success and Conv. valid measure quality.");
-    if let Some(path) = &report.temp_root {
-        println!("Temporary repositories kept at: {}", path.display());
+        println!("{row}");
     }
 }
 
-fn print_agent_selection_note_pt_br(report: &AgentBenchReport) {
-    if report.agent_selection != AgentSelection::AutoDetected {
+fn print_overall_table(report: &AgentBenchReport, s: &BenchStrings) {
+    let agent_w = report
+        .agents
+        .iter()
+        .map(|a| a.chars().count())
+        .max()
+        .unwrap_or(6)
+        .max(s.agent_col.chars().count());
+
+    let header = format!(
+        "  {:>2}  {:<aw$}  {:>13}  {:>13}  {:>10}  {:>8}  Resultado",
+        s.rank_col,
+        s.agent_col,
+        s.success_col,
+        s.cc_col,
+        s.avg_col,
+        s.wins_col,
+        aw = agent_w,
+    );
+    println!("{}", muted(&header));
+    println!(
+        "{}",
+        muted(format!(
+            "  {0:─<2}  {0:─<aw$}  {0:─<13}  {0:─<13}  {0:─<10}  {0:─<8}  {0:─<14}",
+            "",
+            aw = agent_w,
+        ))
+    );
+
+    for (i, summary) in report.overall.iter().enumerate() {
+        let rank = format!("{}", i + 1);
+        let success = format_ratio(summary.success, summary.total);
+        let cc = format_ratio(summary.conventional_valid, summary.total);
+        let prefix = match i {
+            0 => ok(format!("  {rank:>2}", rank = rank_marker(i))),
+            1 => warn(format!("  {rank:>2}", rank = rank_marker(i))),
+            _ => muted(format!("  {rank:>2}", rank = rank_marker(i))),
+        };
+        let body = format!(
+            "  {agent:<aw$}  {success:>13}  {cc:>13}  {avg:>10.1}  {wins:>8}  {chip}",
+            agent = summary.agent,
+            success = success,
+            cc = cc,
+            avg = summary.avg_ms,
+            wins = format!("{} fix.", summary.fixtures_won),
+            chip = quality_chip_overall(summary, s.language),
+            aw = agent_w,
+        );
+        println!("{prefix}{body}");
+        let _ = rank;
+    }
+}
+
+fn print_samples_styled(report: &AgentBenchReport, s: &BenchStrings) {
+    if report.show_samples == 0 || report.samples.is_empty() {
         return;
     }
-    println!("Selecao de agentes: detectada automaticamente");
-    if report.agents.len() == 1 {
+    let n = report.show_samples.min(report.iterations);
+    println!();
+    print_section_header(s.samples_section);
+
+    let agent_w = report
+        .agents
+        .iter()
+        .map(|a| a.chars().count())
+        .max()
+        .unwrap_or(8)
+        .max(8);
+
+    for fixture in &report.fixtures {
+        let fixture_disp = fixture_label(fixture, s.language);
+        println!();
         println!(
-            "Apenas um agente disponivel foi detectado. Use --agents codex,claude para comparar mais provedores."
+            "  {} {}",
+            accent_bold("◆"),
+            accent_bold(fixture_disp.to_string()),
         );
+
+        if let Some(sample) = report.samples.iter().find(|s| &s.fixture == fixture) {
+            let preview = truncate_for_display(&sample.diff, 520);
+            println!("    {}", muted(format!("{}:", s.diff_label)));
+            for line in preview.lines() {
+                println!("    {}", muted(format!("│ {}", line)));
+            }
+        }
+
+        for iteration in 1..=n {
+            println!();
+            println!(
+                "    {} {}",
+                muted("▸"),
+                info(format!("{} {}/{}", s.iteration_label, iteration, n)),
+            );
+            for agent in &report.agents {
+                let sample = report.samples.iter().find(|x| {
+                    &x.fixture == fixture && &x.agent == agent && x.iteration == iteration
+                });
+                match sample {
+                    Some(sample) if sample.success => {
+                        let msg = sample
+                            .message
+                            .as_deref()
+                            .filter(|m| !m.trim().is_empty())
+                            .unwrap_or(s.sample_no_msg);
+                        let cc_mark = if sample.conventional_valid {
+                            ok("✓")
+                        } else {
+                            fail("✗")
+                        };
+                        let timing = muted(format!("{:>5}ms", sample.duration_ms as u64));
+                        println!(
+                            "        {cc_mark}  {agent:<aw$}  {timing}   {msg}",
+                            agent = sample.agent,
+                            aw = agent_w,
+                        );
+                    }
+                    Some(sample) => {
+                        let err = sample.error.as_deref().unwrap_or(s.error_label);
+                        let agent_label = sample.agent.clone();
+                        println!(
+                            "        {mark}  {agent:<aw$}  {timing}   {err}",
+                            mark = fail("✗"),
+                            agent = agent_label,
+                            timing = muted(format!("{:>5}ms", sample.duration_ms as u64)),
+                            err = fail(format!("{} {}", s.error_label, err)),
+                            aw = agent_w,
+                        );
+                    }
+                    None => continue,
+                }
+            }
+        }
+    }
+
+    println!();
+    println!(
+        "    {}",
+        muted(format!(
+            "{} {} {}",
+            s.samples_footer_prefix, n, s.samples_footer_suffix
+        ))
+    );
+}
+
+fn rank_marker(index: usize) -> String {
+    match index {
+        0 => "1".to_string(),
+        1 => "2".to_string(),
+        _ => format!("{}", index + 1),
     }
 }
 
-fn print_agent_selection_note_en(report: &AgentBenchReport) {
-    if report.agent_selection != AgentSelection::AutoDetected {
-        return;
-    }
-    println!("Agent selection: auto-detected");
-    if report.agents.len() == 1 {
-        println!(
-            "Only one available agent was detected. Use --agents codex,claude to compare more providers."
-        );
-    }
+fn separator() -> &'static str {
+    "  ·  "
 }
 
-fn print_overall_pt_br(report: &AgentBenchReport) {
-    println!("\nRanking geral");
-    println!("-------------");
-    print_overall_header_pt_br();
-    for summary in &report.overall {
-        println!(
-            "{:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1} {:>8}  {}",
-            summary.agent,
-            format!("{}/{}", summary.success, summary.total),
-            format!("{}/{}", summary.conventional_valid, summary.total),
-            summary.avg_ms,
-            summary.p95_ms,
-            summary.min_ms,
-            summary.max_ms,
-            summary.fixtures_won,
-            overall_result_label_pt_br(summary),
-        );
+fn format_ratio(num: usize, total: usize) -> String {
+    if total == 0 {
+        return "—".to_string();
     }
+    let pct = (num as f64 / total as f64) * 100.0;
+    format!("{}/{}  {:>3.0}%", num, total, pct)
 }
 
-fn print_overall_en(report: &AgentBenchReport) {
-    println!("\nOverall ranking");
-    println!("---------------");
-    print_overall_header_en();
-    for summary in &report.overall {
-        println!(
-            "{:<12} {:>8} {:>12} {:>10.1} {:>10.1} {:>10.1} {:>10.1} {:>8}  {}",
-            summary.agent,
-            format!("{}/{}", summary.success, summary.total),
-            format!("{}/{}", summary.conventional_valid, summary.total),
-            summary.avg_ms,
-            summary.p95_ms,
-            summary.min_ms,
-            summary.max_ms,
-            summary.fixtures_won,
-            overall_result_label_en(summary),
-        );
+fn quality_chip_summary(summary: &AgentBenchSummary, language: ReportLanguage) -> String {
+    let label = match language {
+        ReportLanguage::Portuguese => result_label_pt_br(summary),
+        ReportLanguage::English => result_label_en(summary),
+    };
+    chip_for_label(label)
+}
+
+fn quality_chip_overall(summary: &AgentBenchOverallSummary, language: ReportLanguage) -> String {
+    let label = match language {
+        ReportLanguage::Portuguese => overall_result_label_pt_br(summary),
+        ReportLanguage::English => overall_result_label_en(summary),
+    };
+    chip_for_label(label)
+}
+
+fn chip_for_label(label: &str) -> String {
+    let lower = label.to_lowercase();
+    if lower == "ok" {
+        ok(format!("★★★ {label}"))
+    } else if lower.contains("conv") || lower.contains("invalid") {
+        warn(format!(" ★★ {label}"))
+    } else if lower.contains("falha") || lower.contains("fail") {
+        fail(format!("  ─ {label}"))
+    } else {
+        muted(format!("    {label}"))
     }
 }
 
-fn print_table_header_pt_br() {
-    println!(
-        "{:<12} {:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10}  Resultado",
-        "Fixture", "Agente", "Sucesso", "Conv. valido", "Media ms", "P95 ms", "Min ms", "Max ms",
-    );
-    println!(
-        "{:<12} {:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10}  ---------",
-        "-------", "------", "-------", "------------", "--------", "------", "------", "------",
-    );
+// Cor wrappers que respeitam use_rich() / NO_COLOR
+fn ansi_enabled() -> bool {
+    crate::ui::use_rich_external()
 }
 
-fn print_table_header_en() {
-    println!(
-        "{:<12} {:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10}  Result",
-        "Fixture", "Agent", "Success", "Conv. valid", "Avg ms", "P95 ms", "Min ms", "Max ms",
-    );
-    println!(
-        "{:<12} {:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10}  ------",
-        "-------", "-----", "-------", "-----------", "------", "------", "------", "------",
-    );
+fn paint(text: impl Into<String>, code: &str) -> String {
+    let text = text.into();
+    if ansi_enabled() {
+        format!("\x1b[{code}m{text}\x1b[0m")
+    } else {
+        text
+    }
 }
 
-fn print_overall_header_pt_br() {
-    println!(
-        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  Resultado",
-        "Agente", "Sucesso", "Conv. valido", "Media ms", "P95 ms", "Min ms", "Max ms", "Vitorias",
-    );
-    println!(
-        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  ---------",
-        "------", "-------", "------------", "--------", "------", "------", "------", "--------",
-    );
+fn ok(text: impl Into<String>) -> String {
+    paint(text, "32")
 }
 
-fn print_overall_header_en() {
-    println!(
-        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  Result",
-        "Agent", "Success", "Conv. valid", "Avg ms", "P95 ms", "Min ms", "Max ms", "Wins",
-    );
-    println!(
-        "{:<12} {:>8} {:>12} {:>10} {:>10} {:>10} {:>10} {:>8}  ------",
-        "-----", "-------", "-----------", "------", "------", "------", "------", "----",
-    );
+fn fail(text: impl Into<String>) -> String {
+    paint(text, "31")
+}
+
+fn warn(text: impl Into<String>) -> String {
+    paint(text, "33")
+}
+
+fn warning(text: impl Into<String>) -> String {
+    paint(text, "33")
+}
+
+fn muted(text: impl Into<String>) -> String {
+    paint(text, "90")
+}
+
+fn info(text: impl Into<String>) -> String {
+    paint(text, "36")
+}
+
+fn accent(text: impl Into<String>) -> String {
+    paint(text, "36")
+}
+
+fn accent_bold(text: impl Into<String>) -> String {
+    paint(text, "1;36")
+}
+
+/// Trunca um texto preservando linhas inteiras, limitando o tamanho total.
+fn truncate_for_display(text: &str, max_chars: usize) -> String {
+    if text.len() <= max_chars {
+        return text.trim_end().to_string();
+    }
+    let mut out = String::with_capacity(max_chars + 16);
+    for line in text.lines() {
+        if out.len() + line.len() + 1 > max_chars {
+            break;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out.push_str("[…]");
+    out
 }
 
 fn result_label_pt_br(summary: &AgentBenchSummary) -> &'static str {
@@ -1197,6 +1541,7 @@ fn run_sample(
                 conventional_valid,
                 message: Some(message),
                 error: None,
+                diff: diff.clone(),
             })
         }
         Err(error) => Ok(AgentBenchSample {
@@ -1208,6 +1553,7 @@ fn run_sample(
             conventional_valid: false,
             message: None,
             error: Some(error.to_string()),
+            diff: diff.clone(),
         }),
     }
 }
@@ -1501,6 +1847,7 @@ mod tests {
                 conventional_valid: true,
                 message: Some("feat: add thing".to_string()),
                 error: None,
+                diff: String::new(),
             },
             AgentBenchSample {
                 fixture: "rust".to_string(),
@@ -1511,6 +1858,7 @@ mod tests {
                 conventional_valid: false,
                 message: Some("invalid".to_string()),
                 error: None,
+                diff: String::new(),
             },
         ];
 
@@ -1534,6 +1882,7 @@ mod tests {
                 conventional_valid: true,
                 message: Some("feat: add rust".to_string()),
                 error: None,
+                diff: String::new(),
             },
             AgentBenchSample {
                 fixture: "python".to_string(),
@@ -1544,6 +1893,7 @@ mod tests {
                 conventional_valid: true,
                 message: Some("feat: add python".to_string()),
                 error: None,
+                diff: String::new(),
             },
             AgentBenchSample {
                 fixture: "rust".to_string(),
@@ -1554,6 +1904,7 @@ mod tests {
                 conventional_valid: false,
                 message: Some("add rust".to_string()),
                 error: None,
+                diff: String::new(),
             },
             AgentBenchSample {
                 fixture: "python".to_string(),
@@ -1564,6 +1915,7 @@ mod tests {
                 conventional_valid: false,
                 message: Some("add python".to_string()),
                 error: None,
+                diff: String::new(),
             },
         ];
         let summaries = summarize(&samples);
@@ -1634,6 +1986,7 @@ mod tests {
                     conventional_valid: true,
                     message: Some("feat: add calculator".to_string()),
                     error: None,
+                    diff: String::new(),
                 },
                 AgentBenchSample {
                     fixture: "rust".to_string(),
@@ -1644,8 +1997,10 @@ mod tests {
                     conventional_valid: false,
                     message: Some("invalid message".to_string()),
                     error: None,
+                    diff: String::new(),
                 },
             ],
+            show_samples: 0,
         };
 
         let html = generate_html_report(&report, ReportLanguage::English);
@@ -1718,7 +2073,9 @@ mod tests {
                 conventional_valid: true,
                 message: Some("feat: add calc".to_string()),
                 error: None,
+                diff: String::new(),
             }],
+            show_samples: 0,
         };
 
         let html = generate_html_report(&report, ReportLanguage::Portuguese);
