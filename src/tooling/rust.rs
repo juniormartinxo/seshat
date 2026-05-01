@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Debug, Clone)]
 pub(super) struct RustStrategy {
@@ -45,23 +46,20 @@ impl LanguageStrategy for RustStrategy {
         custom_extensions: Option<&[String]>,
     ) -> Vec<String> {
         if check_type == "test" {
-            return files
+            let test_targets = files
                 .iter()
-                .filter_map(|file| {
-                    let path = Path::new(file);
-                    let is_integration_test = path.extension().and_then(|ext| ext.to_str())
-                        == Some("rs")
-                        && path
-                            .components()
-                            .any(|component| component.as_os_str() == "tests");
-                    if !is_integration_test {
-                        return None;
-                    }
-                    path.file_stem()
-                        .and_then(|stem| stem.to_str())
-                        .map(|stem| format!("--test={stem}"))
-                })
-                .collect();
+                .filter_map(|file| rust_integration_test_target(file).map(|target| (file, target)))
+                .collect::<Vec<_>>();
+
+            if test_targets.len() == 1 {
+                let (file, target) = &test_targets[0];
+                let test_names = staged_rust_test_names(&self.root, file);
+                if test_names.len() == 1 {
+                    return vec![target.clone(), test_names[0].clone()];
+                }
+            }
+
+            return test_targets.into_iter().map(|(_, target)| target).collect();
         }
 
         let filtered: Vec<String> = files
@@ -154,6 +152,101 @@ fn cargo_package_args(root: &Path, files: &[String]) -> Vec<String> {
         .into_iter()
         .flat_map(|package| ["-p".to_string(), package])
         .collect()
+}
+
+fn rust_integration_test_target(file: &str) -> Option<String> {
+    let path = Path::new(file);
+    let is_integration_test = path.extension().and_then(|ext| ext.to_str()) == Some("rs")
+        && path
+            .components()
+            .any(|component| component.as_os_str() == "tests");
+    if !is_integration_test {
+        return None;
+    }
+    path.file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(|stem| format!("--test={stem}"))
+}
+
+fn staged_rust_test_names(root: &Path, file: &str) -> Vec<String> {
+    let pathspec = git_pathspec(root, file);
+    let output = Command::new("git")
+        .args(["diff", "--cached", "--unified=0", "--"])
+        .arg(pathspec)
+        .current_dir(root)
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    added_rust_test_names(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn git_pathspec(root: &Path, file: &str) -> String {
+    let path = Path::new(file);
+    if path.is_absolute() {
+        return path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+    }
+    file.to_string()
+}
+
+fn added_rust_test_names(diff: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut has_test_attr = false;
+    for line in diff.lines() {
+        if !line.starts_with('+') || line.starts_with("+++") {
+            continue;
+        }
+        let added = line.trim_start_matches('+').trim();
+        if is_rust_test_attribute(added) {
+            has_test_attr = true;
+            continue;
+        }
+        if has_test_attr {
+            if let Some(name) = rust_fn_name(added) {
+                names.push(name);
+                has_test_attr = false;
+            }
+        }
+    }
+    names
+}
+
+fn is_rust_test_attribute(line: &str) -> bool {
+    let Some(body) = line
+        .strip_prefix("#[")
+        .and_then(|line| line.strip_suffix(']'))
+    else {
+        return false;
+    };
+    let macro_path = body.split_once('(').map_or(body, |(path, _)| path).trim();
+    macro_path == "test" || macro_path.ends_with("::test") || macro_path == "rstest"
+}
+
+fn rust_fn_name(line: &str) -> Option<String> {
+    let mut tokens = line.split_whitespace();
+    while let Some(token) = tokens.next() {
+        if token != "fn" {
+            continue;
+        }
+        let name = tokens
+            .next()?
+            .split(['(', '<'])
+            .next()
+            .unwrap_or_default()
+            .trim();
+        if !name.is_empty() {
+            return Some(name.to_string());
+        }
+    }
+    None
 }
 
 fn rustfmt_tool(path: &Path, project_config: &ProjectConfig) -> ToolCommand {
