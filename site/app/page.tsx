@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BarChart3,
   Bot,
   BookOpen,
   Cpu,
@@ -78,6 +79,7 @@ export default function Home() {
         <nav>
           <a href="#install">Instalar</a>
           <a href="#model">Modelo</a>
+          <Link href="/bench">Bench</Link>
           <Link href="/docs">Docs</Link>
           <a href="https://github.com/juniormartinxo/seshat" target="_blank" rel="noreferrer">
             GitHub
@@ -232,6 +234,10 @@ test created_e2e_test ... ok
           <Link href="/docs">
             Docs
             <BookOpen size={16} aria-hidden="true" />
+          </Link>
+          <Link href="/bench">
+            Bench
+            <BarChart3 size={16} aria-hidden="true" />
           </Link>
           <a href="#top">
             Topo
