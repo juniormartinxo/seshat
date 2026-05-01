@@ -121,6 +121,57 @@ pub struct AgentBenchOptions {
     pub language: ReportLanguage,
     pub keep_temp: bool,
     pub show_samples: usize,
+    /// Overrides explícitos por agente (path do CLI, path do home/config dir,
+    /// modelo). Têm prioridade sobre o profile do Cloak e sobre `model`.
+    pub overrides: AgentOverrides,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct AgentOverrides {
+    pub codex_bin: Option<PathBuf>,
+    pub codex_home: Option<PathBuf>,
+    pub codex_model: Option<String>,
+    pub claude_bin: Option<PathBuf>,
+    pub claude_config_dir: Option<PathBuf>,
+    pub claude_model: Option<String>,
+    pub ollama_model: Option<String>,
+}
+
+impl AgentOverrides {
+    /// Retorna o env apropriado pra um agente (`codex`, `claude`, ou outro).
+    /// Não emite nada quando os overrides são `None`.
+    fn env_for_agent(&self, agent: &str) -> Vec<(String, String)> {
+        let mut env = Vec::new();
+        match agent {
+            "codex" => {
+                if let Some(p) = &self.codex_home {
+                    env.push(("CODEX_HOME".to_string(), p.display().to_string()));
+                }
+                if let Some(p) = &self.codex_bin {
+                    env.push(("CODEX_BIN".to_string(), p.display().to_string()));
+                }
+            }
+            "claude" | "claude-cli" => {
+                if let Some(p) = &self.claude_config_dir {
+                    env.push(("CLAUDE_CONFIG_DIR".to_string(), p.display().to_string()));
+                }
+                if let Some(p) = &self.claude_bin {
+                    env.push(("CLAUDE_BIN".to_string(), p.display().to_string()));
+                }
+            }
+            _ => {}
+        }
+        env
+    }
+
+    fn model_for_agent(&self, agent: &str) -> Option<String> {
+        match agent {
+            "codex" => self.codex_model.clone(),
+            "claude" | "claude-cli" => self.claude_model.clone(),
+            "ollama" => self.ollama_model.clone(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -134,6 +185,9 @@ pub struct AgentBenchReport {
     pub overall: Vec<AgentBenchOverallSummary>,
     pub samples: Vec<AgentBenchSample>,
     pub show_samples: usize,
+    /// Resumo dos overrides aplicados (informativo para o relatório).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub override_notes: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -205,6 +259,7 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
                     *fixture,
                     iteration,
                     options.model.as_deref(),
+                    &options.overrides,
                 )?);
             }
         }
@@ -217,6 +272,8 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
     } else {
         None
     };
+
+    let override_notes = describe_overrides(&options.overrides);
 
     Ok(AgentBenchReport {
         iterations: options.iterations,
@@ -232,7 +289,44 @@ pub fn run_agents(options: AgentBenchOptions) -> Result<AgentBenchReport> {
         overall,
         samples,
         show_samples: options.show_samples,
+        override_notes,
     })
+}
+
+fn describe_overrides(overrides: &AgentOverrides) -> Vec<String> {
+    let mut notes = Vec::new();
+    let mut codex_parts: Vec<String> = Vec::new();
+    if let Some(v) = &overrides.codex_bin {
+        codex_parts.push(format!("bin={}", v.display()));
+    }
+    if let Some(v) = &overrides.codex_home {
+        codex_parts.push(format!("home={}", v.display()));
+    }
+    if let Some(v) = &overrides.codex_model {
+        codex_parts.push(format!("model={v}"));
+    }
+    if !codex_parts.is_empty() {
+        notes.push(format!("codex: {}", codex_parts.join(", ")));
+    }
+
+    let mut claude_parts: Vec<String> = Vec::new();
+    if let Some(v) = &overrides.claude_bin {
+        claude_parts.push(format!("bin={}", v.display()));
+    }
+    if let Some(v) = &overrides.claude_config_dir {
+        claude_parts.push(format!("config_dir={}", v.display()));
+    }
+    if let Some(v) = &overrides.claude_model {
+        claude_parts.push(format!("model={v}"));
+    }
+    if !claude_parts.is_empty() {
+        notes.push(format!("claude: {}", claude_parts.join(", ")));
+    }
+
+    if let Some(v) = &overrides.ollama_model {
+        notes.push(format!("ollama: model={v}"));
+    }
+    notes
 }
 
 pub fn print_report(report: &AgentBenchReport, language: ReportLanguage) {
@@ -1492,6 +1586,7 @@ fn run_sample(
     fixture: AgentFixture,
     iteration: usize,
     explicit_model: Option<&str>,
+    overrides: &AgentOverrides,
 ) -> Result<AgentBenchSample> {
     let repo_path = root.join(format!(
         "{}-{}-{iteration}",
@@ -1514,9 +1609,16 @@ fn run_sample(
     )?;
     let mut agent_config = base_config.clone();
     agent_config.ai_provider = Some(agent.to_string());
-    agent_config.ai_model = model_for_agent(agent, explicit_model, base_config);
+    // Precedência de modelo: override por-agente > --model global > default da tabela.
+    agent_config.ai_model = overrides
+        .model_for_agent(agent)
+        .or_else(|| model_for_agent(agent, explicit_model, base_config));
 
-    let env_guard = EnvGuard::apply(agent_config.as_env());
+    // Aplica env do agent_config + overrides de path específicos do agente.
+    // Os overrides vêm depois pra ter prioridade sobre o que o config define.
+    let mut env = agent_config.as_env();
+    env.extend(overrides.env_for_agent(agent));
+    let env_guard = EnvGuard::apply(env);
     let current_dir_guard = CurrentDirGuard::change_to(&repo_path)?;
     let start = Instant::now();
     let result = get_provider(agent).and_then(|provider| {
@@ -2001,6 +2103,7 @@ mod tests {
                 },
             ],
             show_samples: 0,
+            override_notes: Vec::new(),
         };
 
         let html = generate_html_report(&report, ReportLanguage::English);
@@ -2076,6 +2179,7 @@ mod tests {
                 diff: String::new(),
             }],
             show_samples: 0,
+            override_notes: Vec::new(),
         };
 
         let html = generate_html_report(&report, ReportLanguage::Portuguese);
