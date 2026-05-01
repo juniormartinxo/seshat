@@ -6,10 +6,19 @@ use crate::config::ProjectConfig;
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
-#[derive(Debug, Clone, Copy)]
-pub(super) struct TypeScriptStrategy;
+#[derive(Debug, Clone)]
+pub(super) struct TypeScriptStrategy {
+    root: PathBuf,
+}
+
+impl TypeScriptStrategy {
+    pub(super) fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+}
 
 impl LanguageStrategy for TypeScriptStrategy {
     fn name(&self) -> &'static str {
@@ -72,9 +81,38 @@ impl LanguageStrategy for TypeScriptStrategy {
             ),
             (
                 "vitest",
-                ToolCommand::new("vitest", &["npx", "vitest", "run"], "test"),
+                ToolCommand::new("vitest", &["npx", "vitest", "run"], "test").with_files(),
             ),
         ])
+    }
+
+    fn filter_files_for_check(
+        &self,
+        files: &[String],
+        check_type: &str,
+        custom_extensions: Option<&[String]>,
+    ) -> Vec<String> {
+        let filtered = super::runner::base_filter(
+            files,
+            check_type,
+            custom_extensions,
+            self.lint_extensions(),
+            self.typecheck_extensions(),
+            self.test_patterns(),
+        );
+
+        if check_type == "test" && filtered.len() == 1 {
+            let test_names = staged_typescript_test_names(&self.root, &filtered[0]);
+            if test_names.len() == 1 {
+                return vec![
+                    git_pathspec(&self.root, &filtered[0]),
+                    "-t".into(),
+                    test_names[0].clone(),
+                ];
+            }
+        }
+
+        filtered
     }
 
     fn discover_tools(&self, path: &Path, project_config: &ProjectConfig) -> ToolingConfig {
@@ -136,4 +174,95 @@ impl LanguageStrategy for TypeScriptStrategy {
 
         config
     }
+}
+
+fn staged_typescript_test_names(root: &Path, file: &str) -> Vec<String> {
+    let pathspec = git_pathspec(root, file);
+    let output = Command::new("git")
+        .args(["diff", "--cached", "--unified=0", "--"])
+        .arg(pathspec)
+        .current_dir(root)
+        .output();
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    added_typescript_test_names(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn git_pathspec(root: &Path, file: &str) -> String {
+    let path = Path::new(file);
+    if path.is_absolute() {
+        return path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string();
+    }
+    file.to_string()
+}
+
+fn added_typescript_test_names(diff: &str) -> Vec<String> {
+    diff.lines()
+        .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+        .filter_map(|line| typescript_test_name(line.trim_start_matches('+').trim()))
+        .collect()
+}
+
+fn typescript_test_name(line: &str) -> Option<String> {
+    let candidates = ["test", "it"];
+    candidates
+        .iter()
+        .find_map(|prefix| string_arg_after_test_call(line, prefix))
+}
+
+fn string_arg_after_test_call(line: &str, prefix: &str) -> Option<String> {
+    let mut rest = line.strip_prefix(prefix)?;
+    loop {
+        rest = rest.trim_start();
+        if let Some(after_dot) = rest.strip_prefix('.') {
+            let property_len = after_dot
+                .chars()
+                .take_while(|char| char.is_ascii_alphanumeric() || *char == '_')
+                .map(char::len_utf8)
+                .sum::<usize>();
+            if property_len == 0 {
+                return None;
+            }
+            rest = &after_dot[property_len..];
+            continue;
+        }
+        if let Some(after_paren) = rest.strip_prefix('(') {
+            return read_js_string(after_paren.trim_start());
+        }
+        return None;
+    }
+}
+
+fn read_js_string(input: &str) -> Option<String> {
+    let quote = input.chars().next()?;
+    if !matches!(quote, '\'' | '"' | '`') {
+        return None;
+    }
+    let mut escaped = false;
+    let mut value = String::new();
+    for char in input[quote.len_utf8()..].chars() {
+        if escaped {
+            value.push(char);
+            escaped = false;
+            continue;
+        }
+        if char == '\\' {
+            escaped = true;
+            continue;
+        }
+        if char == quote {
+            return (!value.is_empty()).then_some(value);
+        }
+        value.push(char);
+    }
+    None
 }
