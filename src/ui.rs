@@ -484,7 +484,8 @@ fn status_color(kind: &str) -> &'static str {
         "success" => "32",
         "warning" => "33",
         "error" => "31",
-        "skipped" | "step" => "90",
+        "skipped" => "2;90",
+        "step" => "90",
         _ => "36",
     }
 }
@@ -634,5 +635,11 @@ mod tests {
             "\x1b[34m4. [CODE SMELL] src/lib.rs:12\x1b[0m"
         );
         assert_eq!(colorize_code_review_line("   detalhe"), "   detalhe");
+    }
+
+    #[test]
+    fn ui_skipped_status_uses_darker_gray_than_step() {
+        assert_eq!(status_color("skipped"), "2;90");
+        assert_eq!(status_color("step"), "90");
     }
 }
