@@ -217,9 +217,9 @@ impl Default for ToolingRunner {
 
 fn detect_strategy(path: &Path, config: &ProjectConfig) -> Option<Box<dyn LanguageStrategy>> {
     let strategies: Vec<Box<dyn LanguageStrategy>> = vec![
-        Box::new(TypeScriptStrategy),
+        Box::new(TypeScriptStrategy::new(path)),
         Box::new(RustStrategy::new(path)),
-        Box::new(PythonStrategy),
+        Box::new(PythonStrategy::new(path)),
     ];
     if let Some(explicit) = config.project_type.as_deref() {
         for strategy in strategies {
@@ -498,6 +498,39 @@ fn failed_result(tool: &ToolCommand, output: impl Into<String>) -> ToolResult {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::Path;
+    use std::process::Command as ProcessCommand;
+
+    fn run_git(repo: &Path, args: &[&str]) {
+        let output = ProcessCommand::new("git")
+            .current_dir(repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed:\n{}\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_fixture(repo: &Path) {
+        run_git(repo, &["init"]);
+        let hooks_dir = repo.join(".git").join("hooks-disabled");
+        fs::create_dir_all(&hooks_dir).unwrap();
+        run_git(
+            repo,
+            &[
+                "config",
+                "core.hooksPath",
+                hooks_dir.to_str().expect("utf-8 hooks path"),
+            ],
+        );
+        run_git(repo, &["config", "user.name", "Seshat Test"]);
+        run_git(repo, &["config", "user.email", "seshat@example.test"]);
+    }
 
     #[test]
     fn detects_typescript_project() {
@@ -572,6 +605,151 @@ mod tests {
         let tool = &config.tools["test"];
 
         assert_eq!(tool.command, vec!["cargo", "test"]);
+        assert!(tool.pass_files);
+    }
+
+    #[test]
+    fn rust_test_tool_focuses_single_added_integration_test() {
+        let dir = tempfile::tempdir().unwrap();
+        init_git_fixture(dir.path());
+        fs::write(
+            dir.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join("tests")).unwrap();
+        fs::write(
+            dir.path().join("tests/e2e_cli.rs"),
+            "#[test]\nfn existing_e2e_test() {}\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "."]);
+        run_git(dir.path(), &["commit", "-m", "seed"]);
+
+        fs::write(
+            dir.path().join("tests/e2e_cli.rs"),
+            "#[test]\nfn existing_e2e_test() {}\n\n#[test]\nfn created_e2e_test() {}\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "tests/e2e_cli.rs"]);
+
+        let runner = ToolingRunner::new(dir.path());
+        let filtered =
+            runner.filter_files_for_check(&["tests/e2e_cli.rs".to_string()], "test", None);
+        let tool = &runner.discover_tools().tools["test"];
+
+        assert_eq!(filtered, vec!["--test=e2e_cli", "created_e2e_test"]);
+        assert_eq!(
+            build_command(tool, &filtered),
+            vec!["cargo", "test", "--test=e2e_cli", "created_e2e_test"]
+        );
+    }
+
+    #[test]
+    fn python_test_tool_focuses_single_added_pytest_function() {
+        let dir = tempfile::tempdir().unwrap();
+        init_git_fixture(dir.path());
+        fs::write(
+            dir.path().join("pyproject.toml"),
+            "[project]\nname = \"x\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join("tests")).unwrap();
+        fs::write(
+            dir.path().join("tests/test_app.py"),
+            "def test_existing_pytest():\n    assert True\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "."]);
+        run_git(dir.path(), &["commit", "-m", "seed"]);
+
+        fs::write(
+            dir.path().join("tests/test_app.py"),
+            "def test_existing_pytest():\n    assert True\n\n\ndef test_created_pytest():\n    assert True\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "tests/test_app.py"]);
+
+        let runner = ToolingRunner::new(dir.path());
+        let filtered =
+            runner.filter_files_for_check(&["tests/test_app.py".to_string()], "test", None);
+        let tool = crate::tooling::python::PythonStrategy::new(dir.path())
+            .default_tools()
+            .get("pytest")
+            .cloned()
+            .unwrap();
+
+        assert_eq!(filtered, vec!["tests/test_app.py::test_created_pytest"]);
+        assert_eq!(
+            build_command(&tool, &filtered),
+            vec!["pytest", "tests/test_app.py::test_created_pytest"]
+        );
+    }
+
+    #[test]
+    fn typescript_test_tool_focuses_single_added_jest_test() {
+        let dir = tempfile::tempdir().unwrap();
+        init_git_fixture(dir.path());
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"x","scripts":{"test":"jest"},"devDependencies":{"jest":"^1.0.0"}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(dir.path().join("src")).unwrap();
+        fs::write(
+            dir.path().join("src/app.test.ts"),
+            "test('existing behavior', () => {});\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "."]);
+        run_git(dir.path(), &["commit", "-m", "seed"]);
+
+        fs::write(
+            dir.path().join("src/app.test.ts"),
+            "test('existing behavior', () => {});\n\ntest('created behavior', () => {});\n",
+        )
+        .unwrap();
+        run_git(dir.path(), &["add", "src/app.test.ts"]);
+
+        let runner = ToolingRunner::new(dir.path());
+        let filtered =
+            runner.filter_files_for_check(&["src/app.test.ts".to_string()], "test", None);
+        let tool = &runner.discover_tools().tools["test"];
+
+        assert_eq!(
+            filtered,
+            vec![
+                "src/app.test.ts".to_string(),
+                "-t".to_string(),
+                "created behavior".to_string()
+            ]
+        );
+        assert_eq!(
+            build_command(tool, &filtered),
+            vec![
+                "npm",
+                "run",
+                "test",
+                "--",
+                "src/app.test.ts",
+                "-t",
+                "created behavior"
+            ]
+        );
+    }
+
+    #[test]
+    fn typescript_vitest_tool_passes_file_args_without_script() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("package.json"),
+            r#"{"name":"x","devDependencies":{"vitest":"^1.0.0"}}"#,
+        )
+        .unwrap();
+        let runner = ToolingRunner::new(dir.path());
+        let tool = &runner.discover_tools().tools["test"];
+
+        assert_eq!(tool.command, vec!["npx", "vitest", "run"]);
         assert!(tool.pass_files);
     }
 
