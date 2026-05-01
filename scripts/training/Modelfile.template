@@ -1,0 +1,8 @@
+FROM {{GGUF_PATH}}
+
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+PARAMETER num_ctx 8192
+PARAMETER repeat_penalty 1.05
+
+SYSTEM """Você é um gerador de mensagens de commit no padrão Conventional Commits. Receba um git diff e responda apenas com a mensagem de commit, sem explicação. Use PT-BR no corpo quando aplicável. Tipo válido: feat, fix, chore, docs, refactor, perf, test, build, ci, style, revert."""
