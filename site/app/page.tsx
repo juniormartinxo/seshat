@@ -12,6 +12,7 @@ import {
   Terminal,
   Workflow
 } from "lucide-react";
+import Link from "next/link";
 
 const commands = [
   { prompt: "cargo install --git https://github.com/juniormartinxo/seshat", tone: "muted" },
@@ -68,7 +69,7 @@ const steps = [
 
 export default function Home() {
   return (
-    <main>
+    <main className="marketingPage">
       <header className="topbar" aria-label="Navegacao principal">
         <a className="brand" href="#top" aria-label="Seshat">
           <Terminal size={20} aria-hidden="true" />
@@ -77,6 +78,7 @@ export default function Home() {
         <nav>
           <a href="#install">Instalar</a>
           <a href="#model">Modelo</a>
+          <Link href="/docs">Docs</Link>
           <a href="https://github.com/juniormartinxo/seshat" target="_blank" rel="noreferrer">
             GitHub
           </a>
@@ -117,6 +119,10 @@ export default function Home() {
               <Download size={18} aria-hidden="true" />
               Instalar
             </a>
+            <Link className="button secondary" href="/docs">
+              <BookOpen size={18} aria-hidden="true" />
+              Documentacao
+            </Link>
             <a
               className="button secondary"
               href="https://ollama.com/juniormartinxo/seshat-commit"
@@ -209,10 +215,10 @@ test created_e2e_test ... ok
             <Play size={18} aria-hidden="true" />
             Baixar modelo
           </a>
-          <a className="button secondary" href="https://github.com/juniormartinxo/seshat/blob/main/docs/seshat-commit.md" target="_blank" rel="noreferrer">
+          <Link className="button secondary" href="/docs/seshat-commit">
             <BookOpen size={18} aria-hidden="true" />
             Como usar
-          </a>
+          </Link>
         </div>
       </section>
 
@@ -223,6 +229,10 @@ test created_e2e_test ... ok
             <GitBranch size={18} aria-hidden="true" />
             GitHub
           </a>
+          <Link href="/docs">
+            Docs
+            <BookOpen size={16} aria-hidden="true" />
+          </Link>
           <a href="#top">
             Topo
             <ArrowRight size={16} aria-hidden="true" />
