@@ -7,6 +7,9 @@ fn main() {
     let ollama_model = Some("juniormartinxo/seshat-commit".to_string());
 
     let report = AgentBenchReport {
+        schema_version: BENCH_REPORT_SCHEMA_VERSION,
+        generated_at: "2026-05-01T18:53:42-03:00".to_string(),
+        seshat_version: env!("CARGO_PKG_VERSION").to_string(),
         iterations: 5,
         agents: vec!["codex".into(), "claude".into(), "ollama".into()],
         agent_selection: AgentSelection::Explicit,
@@ -63,17 +66,28 @@ fn main() {
     };
 
     let html = generate_html_report(&report, ReportLanguage::Portuguese);
-    let path = "/tmp/seshat-bench-demo.html";
-    std::fs::write(path, html).expect("write html");
+    let html_path = "/tmp/seshat-bench-demo.html";
+    std::fs::write(html_path, html).expect("write html");
+
+    let json = serde_json::to_string_pretty(&report).expect("serialize");
+    let json_path = "/tmp/seshat-bench-demo.json";
+    std::fs::write(json_path, &json).expect("write json");
+
     println!(
-        "Demo HTML escrito em {path} ({} KB)",
-        std::fs::metadata(path).unwrap().len() / 1024
+        "Demo HTML  escrito em {html_path} ({} KB)",
+        std::fs::metadata(html_path).unwrap().len() / 1024
+    );
+    println!(
+        "Demo JSON  escrito em {json_path} ({} KB)",
+        std::fs::metadata(json_path).unwrap().len() / 1024
     );
     println!();
-    println!("Para abrir:");
-    println!("  wslview {path}");
-    println!("  # ou:");
-    println!("  explorer.exe $(wslpath -w {path})");
+    println!("Para abrir o HTML:");
+    println!("  wslview {html_path}");
+    println!();
+    println!("Para inspecionar o JSON:");
+    println!("  jq '.schema_version, .generated_at, .seshat_version' {json_path}");
+    println!("  jq '.overall[] | {{agent, model, success, total, avg_ms}}' {json_path}");
 }
 
 fn rust_diff() -> String {
