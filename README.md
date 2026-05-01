@@ -85,6 +85,8 @@ seshat flow 3 --yes --check lint
 seshat commit --profile amjr --yes
 ```
 
+Em terminal interativo, `flow` mostra barra de progresso (com spinner por arquivo via `indicatif`); em pipes/CI/`--format json`, cai em log linear.
+
 Inspecione e importe profiles do Cloak:
 
 ```bash
@@ -260,7 +262,7 @@ Limites conhecidos:
 
 ## 📊 Benchmark de Agentes
 
-O comando `bench agents` mede agentes/providers usando fixtures Git temporarias. Ele nao altera o repo atual.
+O comando `bench agents` mede agentes/providers usando fixtures Git temporarias. Ele nao altera o repo atual. O relatorio agora sai com layout estilizado (banners, ranking ★★★, samples lado a lado).
 
 Exemplo em PT-BR:
 
@@ -278,11 +280,53 @@ Exemplo JSON:
 seshat bench agents --agents codex --fixtures rust --iterations 3 --format json
 ```
 
+Exemplo com relatorio HTML + comparacao qualitativa:
+
+```bash
+seshat bench agents \
+  --agents codex,claude,ollama \
+  --fixtures rust,python,typescript \
+  --iterations 5 \
+  --show-samples 3 \
+  --report bench.html \
+  --pt-br
+```
+
+`--show-samples N` imprime, no fim do relatorio, as N primeiras mensagens geradas por fixture lado a lado por agente — util pra avaliar qualidade subjetiva alem das metricas.
+
+### Profile do Cloak e overrides por agente
+
+Quando voce usa wrappers tipo `clkec`/`clkex` (Cloak) que injetam `CODEX_HOME`/`CLAUDE_CONFIG_DIR` no ambiente, o `bench agents` precisa replicar o profile pra cada agente. Use `--profile <nome>`:
+
+```bash
+seshat bench agents \
+  --agents codex,claude,ollama \
+  --fixtures rust,python,typescript \
+  --iterations 5 \
+  --profile amjr \
+  --ollama-model seshat-commit \
+  --pt-br
+```
+
+Quando o profile do Cloak nao bastar, os paths/modelos podem ser sobrescritos individualmente:
+
+| Flag | Efeito |
+|------|--------|
+| `--codex-bin <path>` | Caminho do binario do Codex CLI (= `CODEX_BIN`) |
+| `--codex-home <path>` | Diretorio CODEX_HOME para auth/profile do Codex |
+| `--codex-model <name>` | Modelo passado ao Codex (em vez do `--model` global) |
+| `--claude-bin <path>` | Caminho do binario do Claude CLI (= `CLAUDE_BIN`) |
+| `--claude-config-dir <path>` | Diretorio CLAUDE_CONFIG_DIR para auth/profile do Claude |
+| `--claude-model <name>` | Modelo passado ao Claude |
+| `--ollama-model <name>` | Modelo Ollama (ex: `seshat-commit`) |
+
+Precedencia: flag por-agente > `--profile` > env do shell > default.
+
 Metricas principais:
 
 - `Sucesso`: quantas execucoes retornaram mensagem.
 - `Conv. valido`: quantas mensagens passaram na validacao Conventional Commits.
-- `Media ms`, `P95 ms`, `Min ms`, `Max ms`: tempo de geracao da mensagem pelo agente.
+- `Media ms`, `P95 ms`, `min · max`: tempo de geracao da mensagem pelo agente.
 
 O setup da fixture Git fica fora da medicao. Cada iteracao usa um repo temporario novo com diff controlado.
 
@@ -353,15 +397,49 @@ Diferencas conhecidas:
 
 ## 🧠 Modelo local seshat-commit
 
-Modelo LoRA fine-tuned a partir do Qwen 2.5 Coder 7B para gerar mensagens de commit em PT-BR no padrão Conventional Commits, treinado com 4869 commits do autor. Pronto pra usar via Ollama:
+Modelo LoRA fine-tuned a partir do Qwen 2.5 Coder 7B para gerar mensagens de commit em PT-BR no padrao Conventional Commits, treinado com 4869 commits do autor. Pronto pra usar via Ollama, 100% local, sem custo de API:
 
 ```bash
 ollama pull juniormartinxo/seshat-commit
+
 seshat config --provider ollama --model juniormartinxo/seshat-commit
+git add .
 seshat commit --yes
 ```
 
-Pipeline reprodutível em `scripts/dataset/` (extração) e `scripts/training/` (treino + export GGUF). Detalhes em https://ollama.com/juniormartinxo/seshat-commit ou `scripts/training/OLLAMA_README.md`.
+Especificacoes do modelo:
+
+- Base: Qwen 2.5 Coder 7B Instruct (4-bit) + LoRA r=16
+- Tamanho final: ~4.4 GB (Q4_K_M)
+- Loss final: 0.2768
+- Idioma: PT-BR (mistura natural com termos tecnicos em EN)
+- Linguagens cobertas no dataset: Rust, TypeScript, Python, JS, Go, Shell
+
+Pipeline reprodutivel pra treinar com seus proprios commits:
+
+```bash
+cd scripts/dataset && make junior        # extrai dataset dos seus repos em ~/apps
+cd ../training && ./setup.sh             # cria venv + Unsloth + cu128 (Blackwell ok)
+source .venv/bin/activate
+python train.py --max-seq 1024 --no-eval # ~30 min em GPU 16GB
+ollama create seshat-commit -f /tmp/seshat-modelfile
+```
+
+Detalhes completos em `scripts/training/README.md` (pipeline) e `scripts/training/OLLAMA_README.md` (descricao publica do modelo). Pagina oficial: https://ollama.com/juniormartinxo/seshat-commit.
+
+Compare seu modelo local com providers comerciais:
+
+```bash
+seshat bench agents \
+  --agents codex,claude,ollama \
+  --fixtures rust,python,typescript \
+  --iterations 5 \
+  --show-samples 3 \
+  --profile amjr \
+  --ollama-model seshat-commit \
+  --report bench.html \
+  --pt-br
+```
 
 ## Validacao
 
