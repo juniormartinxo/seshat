@@ -367,6 +367,10 @@ code_review:
         .env("FAKE_CODEX_STDIN_FILE", &stdin_prefix)
         .env("FAKE_CODEX_REVIEW_RESPONSE", "OK")
         .env("FAKE_CODEX_COMMIT_RESPONSE", "feat: e2e review context")
+        // Esse e2e valida o caminho legado que inlinha o staged snapshot
+        // como source-of-truth no prompt. O default agora é o thin prompt
+        // (sem inline) — coberto por testes unit em providers.rs.
+        .env("SESHAT_CLI_INLINE_REVIEW", "true")
         .args(["commit", "--yes"])
         .assert()
         .success();
