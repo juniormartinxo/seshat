@@ -114,6 +114,7 @@ Regras especiais do Rust:
 - `lint` detecta a `edition` do `Cargo.toml`
 - `typecheck` e convertido para `-p <crate>` com base no arquivo afetado
 - `test` so roda para integration tests em `tests/*.rs`
+- se houver exatamente um integration test staged e exatamente uma funcao de teste nova no diff staged, `test` recebe tambem o nome da funcao
 - quando mais de um arquivo do mesmo crate entra no check, o pacote e deduplicado
 
 ### Python
@@ -124,6 +125,13 @@ Defaults por deteccao:
 - `mypy` para typecheck
 - `pytest` para test
 
+Regras especiais do Python:
+
+- `pytest` recebe arquivos de teste relevantes por default
+- arquivos em `tests/` ou `test/`, arquivos `test_*.py`, `*_test.py`, `tests.py` e `conftest.py` contam como testes
+- se houver exatamente um arquivo de teste staged e exatamente uma funcao `test_*` nova no diff staged, `pytest` recebe o nodeid do teste
+- metodos de classe sao convertidos para `arquivo.py::Classe::test_nome`
+
 ### TypeScript
 
 Defaults por deteccao:
@@ -131,6 +139,12 @@ Defaults por deteccao:
 - `eslint` ou `biome`
 - `tsc --noEmit`
 - `jest` ou `vitest`
+
+Regras especiais do TypeScript:
+
+- `jest` e `vitest` recebem arquivos `.test.*` e `.spec.*` por default
+- se o `package.json` tiver script `test`, o runner chama `npm run test -- <args>`
+- se houver exatamente um arquivo de teste staged e exatamente um `test(...)` ou `it(...)` novo no diff staged, o runner passa `arquivo -t nome`
 
 ## Checks por arquivo vs checks por projeto
 
@@ -142,7 +156,14 @@ O runner combina as duas abordagens:
 Exemplos no Rust:
 
 - `tests/e2e_cli.rs` -> `--test=e2e_cli`
+- `tests/e2e_cli.rs` com um unico `#[test] fn novo_teste` staged -> `--test=e2e_cli novo_teste`
 - `crates/core/src/lib.rs` -> `-p core`
+
+Exemplos em outras linguagens:
+
+- `tests/test_app.py` com um unico `def test_criado` staged -> `tests/test_app.py::test_criado`
+- `tests/test_app.py` com um unico metodo novo em `class TestApp` -> `tests/test_app.py::TestApp::test_criado`
+- `src/app.test.ts` com um unico `test("cria app", ...)` staged -> `src/app.test.ts -t "cria app"`
 
 ## Overrides
 
