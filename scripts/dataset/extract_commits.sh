@@ -201,7 +201,7 @@ for repo in "${repos[@]}"; do
     # de falha (jq inválido, redirect ENOENT, etc.) registra e continua —
     # uma amostra individual ruim não pode derrubar toda a coleta.
     mkdir -p "$OUT_DIR" 2>/dev/null
-    if ! jq -n --arg repo "$repo_name" \
+    if ! jq -cn --arg repo "$repo_name" \
               --arg sha "$sha" \
               --arg msg "$msg" \
               --arg diff "$diff" \
