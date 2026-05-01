@@ -44,3 +44,18 @@ Thumbs.db
 *.html
 temp
 scripts/**/*.jsonl
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+unsloth_compiled_cache/
+
+# Fine-tuning outputs (modelos, checkpoints, GGUFs)
+scripts/training/out/
+*.gguf
+*.safetensors
+adapter_model.bin
+scripts/training/out/
