@@ -901,32 +901,84 @@ fn fixture_label(value: &str, language: ReportLanguage) -> String {
 }
 
 const CHART_PALETTE: &[(&str, &str)] = &[
-    ("#4f46e5", "rgba(79,70,229,0.7)"),
-    ("#059669", "rgba(5,150,105,0.7)"),
-    ("#d97706", "rgba(217,119,6,0.7)"),
-    ("#dc2626", "rgba(220,38,38,0.7)"),
-    ("#7c3aed", "rgba(124,58,237,0.7)"),
-    ("#0891b2", "rgba(8,145,178,0.7)"),
-    ("#ea580c", "rgba(234,88,12,0.7)"),
-    ("#65a30d", "rgba(101,163,13,0.7)"),
+    ("#6366f1", "rgba(99,102,241,0.85)"), // indigo
+    ("#10b981", "rgba(16,185,129,0.85)"), // emerald
+    ("#f59e0b", "rgba(245,158,11,0.85)"), // amber
+    ("#ec4899", "rgba(236,72,153,0.85)"), // pink
+    ("#06b6d4", "rgba(6,182,212,0.85)"),  // cyan
+    ("#a855f7", "rgba(168,85,247,0.85)"), // violet
+    ("#ef4444", "rgba(239,68,68,0.85)"),  // red
+    ("#84cc16", "rgba(132,204,22,0.85)"), // lime
 ];
 
 const HTML_REPORT_CSS: &str = r#"
-.tab-content:not(.hidden){animation:fadeIn .2s ease-out}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+:root{--mesh-1:#6366f1;--mesh-2:#a855f7;--mesh-3:#ec4899;--mesh-4:#06b6d4}
+*{font-feature-settings:'cv11','ss03';font-variant-numeric:tabular-nums}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background-image:radial-gradient(circle at 20% 0%,rgba(99,102,241,.10),transparent 50%),radial-gradient(circle at 80% 0%,rgba(168,85,247,.08),transparent 50%)}
+.dark body{background-image:radial-gradient(circle at 20% 0%,rgba(99,102,241,.20),transparent 50%),radial-gradient(circle at 80% 0%,rgba(168,85,247,.12),transparent 50%)}
+.hero{position:relative;overflow:hidden;border-radius:1.5rem;background:linear-gradient(135deg,#312e81 0%,#581c87 50%,#9d174d 100%);box-shadow:0 25px 50px -12px rgba(99,102,241,.4),0 0 0 1px rgba(255,255,255,.05)}
+.hero::before,.hero::after{content:'';position:absolute;width:600px;height:600px;border-radius:50%;filter:blur(80px);opacity:.5;pointer-events:none;z-index:0}
+.hero::before{background:#a855f7;top:-200px;left:-150px;animation:float 12s ease-in-out infinite}
+.hero::after{background:#ec4899;bottom:-200px;right:-150px;animation:float 14s ease-in-out infinite reverse}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,-30px) scale(1.1)}66%{transform:translate(-30px,40px) scale(.95)}}
+.hero > *{position:relative;z-index:1}
+.kpi{position:relative;overflow:hidden}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--accent),transparent)}
+.kpi-i{--accent:#6366f1}.kpi-e{--accent:#10b981}.kpi-a{--accent:#f59e0b}.kpi-p{--accent:#ec4899}
+.tab-content:not(.hidden){animation:fadeIn .25s cubic-bezier(.4,0,.2,1)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.podium-card{transition:transform .25s cubic-bezier(.4,0,.2,1),box-shadow .25s}
+.podium-card:hover{transform:translateY(-4px)}
+.medal-1{background:linear-gradient(135deg,#fbbf24,#f59e0b);box-shadow:0 12px 32px -8px rgba(245,158,11,.5)}
+.medal-2{background:linear-gradient(135deg,#cbd5e1,#94a3b8);box-shadow:0 12px 32px -8px rgba(148,163,184,.4)}
+.medal-3{background:linear-gradient(135deg,#fb923c,#c2410c);box-shadow:0 12px 32px -8px rgba(194,65,12,.4)}
+.row-top{background:linear-gradient(90deg,rgba(16,185,129,.08),transparent);border-left:3px solid #10b981}
+.dark .row-top{background:linear-gradient(90deg,rgba(16,185,129,.14),transparent)}
+.row-second{border-left:3px solid #f59e0b}
+.row-third{border-left:3px solid #94a3b8}
+.bar-track{position:relative;background:rgba(99,102,241,.10);border-radius:9999px;overflow:hidden;height:6px;width:80px}
+.dark .bar-track{background:rgba(255,255,255,.08)}
+.bar-fill{height:100%;border-radius:9999px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.bar-ok{background:linear-gradient(90deg,#10b981,#059669)}
+.bar-warn{background:linear-gradient(90deg,#f59e0b,#d97706)}
+.bar-fail{background:linear-gradient(90deg,#ef4444,#dc2626)}
+.fixture-card{background:white;border-radius:1.25rem;border:1px solid #e5e7eb;overflow:hidden;transition:box-shadow .25s}
+.dark .fixture-card{background:#1e293b;border-color:#334155}
+.fixture-card:hover{box-shadow:0 12px 32px -12px rgba(99,102,241,.2)}
+.diff-block{font-family:'JetBrains Mono','SF Mono',Consolas,monospace;font-size:12px;line-height:1.6;background:#0f172a;color:#e2e8f0;border-radius:.75rem;padding:1rem;overflow-x:auto;max-height:280px;overflow-y:auto}
+.diff-block .line-add{color:#86efac}
+.diff-block .line-del{color:#fca5a5}
+.diff-block .line-hunk{color:#7dd3fc;font-weight:600}
+.diff-block .line-meta{color:#94a3b8}
+.msg-card{position:relative;border-radius:.75rem;padding:.75rem 1rem;font-family:'JetBrains Mono','SF Mono',Consolas,monospace;font-size:13px;line-height:1.5;border-left:3px solid var(--c)}
+.msg-card .agent-pill{position:absolute;top:-10px;left:.75rem;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:var(--c);color:white;padding:2px 8px;border-radius:9999px}
+.copy-btn{position:absolute;top:.5rem;right:.5rem;opacity:0;transition:opacity .2s;background:rgba(0,0,0,.06);border:none;border-radius:.375rem;padding:.25rem .5rem;font-size:11px;cursor:pointer;color:inherit}
+.dark .copy-btn{background:rgba(255,255,255,.08)}
+.msg-card:hover .copy-btn{opacity:1}
+.copy-btn.copied{background:#10b981;color:white;opacity:1}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:.5rem;vertical-align:middle}
+.tab-pill{transition:all .2s}
+.tab-pill[aria-selected="true"]{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;box-shadow:0 6px 16px -4px rgba(99,102,241,.4)}
+.tab-pill[aria-selected="false"]:hover{background:rgba(99,102,241,.08)}
+.dark .tab-pill[aria-selected="false"]:hover{background:rgba(99,102,241,.16)}
 "#;
 
 const HTML_REPORT_TW_STYLE: &str = r#"
-.badge{@apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold}
-.badge-ok{@apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300}
-.badge-warn{@apply bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300}
-.badge-fail{@apply bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300}
-.text-mono{@apply font-mono text-xs}
+.badge{@apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold}
+.badge-ok{@apply bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300}
+.badge-warn{@apply bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300}
+.badge-fail{@apply bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300}
+.text-mono{@apply font-mono text-xs tracking-tight}
 table{@apply w-full text-sm}
-th{@apply bg-gray-50 dark:bg-gray-800/50 font-semibold text-left px-4 py-3 border-b-2 border-gray-200 dark:border-gray-700 whitespace-nowrap text-gray-500 dark:text-gray-400 uppercase text-xs tracking-wider}
-td{@apply px-4 py-3 border-b border-gray-100 dark:border-gray-700/50}
+th{@apply bg-gray-50 dark:bg-gray-800/60 font-semibold text-left px-4 py-3.5 border-b-2 border-gray-200 dark:border-gray-700 whitespace-nowrap text-gray-500 dark:text-gray-400 uppercase text-xs tracking-wider sticky top-0 z-10}
+td{@apply px-4 py-3.5 border-b border-gray-100 dark:border-gray-700/40}
 tr:last-child td{@apply border-b-0}
-tbody tr:hover td{@apply bg-gray-50/50 dark:bg-gray-700/30}
+tbody tr{@apply transition-colors}
+tbody tr:hover td{@apply bg-indigo-50/40 dark:bg-indigo-900/20}
+.kpi-num{@apply text-3xl font-bold tracking-tight tabular-nums}
+.kpi-lbl{@apply text-xs uppercase tracking-wider font-semibold text-gray-500 dark:text-gray-400 mb-1}
+.kpi-sub{@apply text-xs text-gray-400 dark:text-gray-500 mt-1}
 "#;
 
 const TAB_SWITCH_JS: &str = r#"
@@ -956,9 +1008,9 @@ document.documentElement.classList.add('dark');
 "#;
 
 const THEME_TOGGLE_BTN: &str = concat!(
-    "<button id=\"theme-toggle\" class=\"absolute top-6 right-6 p-2 rounded-lg ",
-    "bg-white/15 backdrop-blur-sm hover:bg-white/25 transition-colors cursor-pointer\" ",
-    "aria-label=\"Toggle theme\">",
+    "<button id=\"theme-toggle\" class=\"absolute top-6 right-6 p-2.5 rounded-xl ",
+    "bg-white/10 backdrop-blur-md hover:bg-white/20 border border-white/10 ",
+    "transition-all cursor-pointer hover:scale-105\" aria-label=\"Toggle theme\">",
     "<svg id=\"icon-moon\" class=\"w-5 h-5\" fill=\"none\" viewBox=\"0 0 24 24\" ",
     "stroke=\"currentColor\" stroke-width=\"2\"><path stroke-linecap=\"round\" ",
     "stroke-linejoin=\"round\" d=\"M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 ",
@@ -971,6 +1023,18 @@ const THEME_TOGGLE_BTN: &str = concat!(
     "5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z\"/></svg>",
     "</button>\n",
 );
+
+const COPY_JS: &str = r#"
+document.querySelectorAll('.copy-btn').forEach(function(b){
+b.addEventListener('click',function(){
+var t=b.dataset.copy||'';
+navigator.clipboard.writeText(t).then(function(){
+var orig=b.textContent;b.textContent='copiado';b.classList.add('copied');
+setTimeout(function(){b.textContent=orig;b.classList.remove('copied')},1400);
+});
+});
+});
+"#;
 
 const THEME_TOGGLE_JS: &str = r#"
 (function(){
@@ -1022,8 +1086,11 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     });
     h.push_str(
         "</title>\n\
+                <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n\
+                <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n\
+                <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap\" rel=\"stylesheet\">\n\
                 <script src=\"https://cdn.tailwindcss.com\"></script>\n\
-                <script>tailwind.config={darkMode:'class'}</script>\n\
+                <script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>\n\
                 <script src=\"https://cdn.jsdelivr.net/npm/chart.js@4\"></script>\n\
                 <script>",
     );
@@ -1034,152 +1101,272 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     h.push_str(HTML_REPORT_TW_STYLE);
     h.push_str(
         "</style>\n</head>\n\
-                <body class=\"bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 \
+                <body class=\"bg-gray-50 dark:bg-gray-950 text-gray-800 dark:text-gray-100 \
                 min-h-screen antialiased transition-colors\">\n\
-                <div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8\">\n",
+                <div class=\"max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8\">\n",
     );
 
-    // --- header ---
-    h.push_str(
-        "<header class=\"relative overflow-hidden bg-gradient-to-br from-indigo-600 \
-                via-purple-600 to-indigo-800 text-white rounded-2xl p-8 mb-8 shadow-xl\">\n",
-    );
+    // --- HERO --- (gradient mesh + KPIs em destaque)
+    let total_runs = report.iterations * report.agents.len() * report.fixtures.len();
+    let total_success: usize = report.overall.iter().map(|s| s.success).sum();
+    let total_total: usize = report.overall.iter().map(|s| s.total).sum();
+    let total_cc: usize = report.overall.iter().map(|s| s.conventional_valid).sum();
+    let success_pct = if total_total > 0 {
+        total_success as f64 / total_total as f64 * 100.0
+    } else {
+        0.0
+    };
+    let cc_pct = if total_total > 0 {
+        total_cc as f64 / total_total as f64 * 100.0
+    } else {
+        0.0
+    };
+    let fastest = report
+        .overall
+        .iter()
+        .filter(|s| s.success > 0)
+        .min_by(|a, b| {
+            a.avg_ms
+                .partial_cmp(&b.avg_ms)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+    h.push_str("<header class=\"hero text-white p-8 md:p-12 mb-10\">\n");
     h.push_str(THEME_TOGGLE_BTN);
-    h.push_str("<h1 class=\"text-3xl font-bold tracking-tight mb-4\">");
+    h.push_str(
+        "<div class=\"flex items-center gap-3 mb-4\">\
+         <span class=\"inline-flex items-center px-3 py-1 bg-white/10 backdrop-blur-md \
+         border border-white/20 rounded-full text-xs font-semibold uppercase tracking-wider\">\
+         <span class=\"w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse\"></span>\
+         Seshat Bench</span></div>\n",
+    );
+    h.push_str(
+        "<h1 class=\"text-4xl md:text-5xl font-extrabold tracking-tight mb-3 leading-tight\">",
+    );
     h.push_str(if is_pt {
         "Benchmark de Agentes"
     } else {
         "Agent Benchmark"
     });
-    h.push_str("</h1>\n<div class=\"flex flex-wrap gap-2\">\n");
+    h.push_str("</h1>\n");
     let _ = writeln!(
         h,
-        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
-         <strong>{}:</strong> {}</span>",
-        if is_pt { "Agentes" } else { "Agents" },
-        html_escape(&report.agents.join(", "))
+        "<p class=\"text-lg text-white/80 mb-8 max-w-2xl\">{}</p>",
+        html_escape(if is_pt {
+            "Comparação de qualidade e latência entre os agentes disponíveis, executados em fixtures Git temporárias."
+        } else {
+            "Quality and latency comparison across available agents, run on temporary Git fixtures."
+        })
     );
-    if report.agent_selection == AgentSelection::AutoDetected {
+
+    // KPI cards no hero
+    h.push_str("<div class=\"grid grid-cols-2 md:grid-cols-4 gap-4\">\n");
+    let kpi_items: Vec<(&str, String, String)> = vec![
+        (
+            "kpi-i",
+            if is_pt {
+                "Execuções totais"
+            } else {
+                "Total runs"
+            }
+            .to_string(),
+            total_runs.to_string(),
+        ),
+        (
+            "kpi-e",
+            if is_pt {
+                "Sucesso global"
+            } else {
+                "Success rate"
+            }
+            .to_string(),
+            format!("{success_pct:.0}%"),
+        ),
+        (
+            "kpi-a",
+            if is_pt { "CC válido" } else { "CC valid" }.to_string(),
+            format!("{cc_pct:.0}%"),
+        ),
+        (
+            "kpi-p",
+            if is_pt { "Mais rápido" } else { "Fastest" }.to_string(),
+            fastest
+                .map(|s| format!("{:.0}ms", s.avg_ms))
+                .unwrap_or_else(|| "—".to_string()),
+        ),
+    ];
+    for (cls, lbl, val) in &kpi_items {
+        let sub = if cls == &"kpi-p" {
+            fastest.map(|s| html_escape(&s.agent)).unwrap_or_default()
+        } else if cls == &"kpi-e" {
+            format!("{total_success}/{total_total}")
+        } else if cls == &"kpi-a" {
+            format!("{total_cc}/{total_total}")
+        } else {
+            format!(
+                "{} {} · {} fixtures",
+                report.agents.len(),
+                if is_pt { "agentes" } else { "agents" },
+                report.fixtures.len(),
+            )
+        };
         let _ = writeln!(
             h,
-            "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
-             <strong>{}:</strong> {}</span>",
-            if is_pt { "Seleção" } else { "Selection" },
-            if is_pt {
-                "automática"
-            } else {
-                "auto-detected"
-            }
+            "<div class=\"kpi {cls} bg-white/10 backdrop-blur-md border border-white/15 \
+             rounded-xl p-4\">\
+             <div class=\"text-xs uppercase tracking-wider font-semibold text-white/70 mb-1\">{lbl}</div>\
+             <div class=\"text-3xl font-bold tracking-tight\">{val}</div>\
+             <div class=\"text-xs text-white/60 mt-1\">{sub}</div>\
+             </div>"
         );
     }
-    let _ = writeln!(
-        h,
-        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
-         <strong>Fixtures:</strong> {}</span>",
-        html_escape(&report.fixtures.join(", "))
-    );
-    let _ = writeln!(
-        h,
-        "<span class=\"bg-white/15 backdrop-blur-sm px-4 py-1.5 rounded-lg text-sm font-medium\">\
-         <strong>{}:</strong> {}</span>",
-        if is_pt { "Iterações" } else { "Iterations" },
-        report.iterations
-    );
     h.push_str("</div>\n</header>\n\n");
 
-    // --- charts ---
-    h.push_str(
-        "<div class=\"grid grid-cols-1 md:grid-cols-2 gap-6 mb-8\">\n\
-                <div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
-                dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow\">\n\
-                <h2 class=\"text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 \
-                uppercase tracking-wide\">",
-    );
-    h.push_str(if is_pt {
-        "Tempo Médio de Resposta (ms)"
-    } else {
-        "Average Response Time (ms)"
-    });
-    h.push_str(
-        "</h2>\n<canvas id=\"perfChart\"></canvas>\n</div>\n\
-                <div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
-                dark:border-gray-700 p-6 shadow-sm hover:shadow-md transition-shadow\">\n\
-                <h2 class=\"text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 \
-                uppercase tracking-wide\">",
-    );
-    h.push_str(if is_pt {
-        "Taxa de Sucesso (%)"
-    } else {
-        "Success Rate (%)"
-    });
-    h.push_str("</h2>\n<canvas id=\"qualityChart\"></canvas>\n</div>\n</div>\n\n");
+    // --- PODIUM (top 3) ---
+    if !report.overall.is_empty() {
+        h.push_str(
+            "<section class=\"mb-10\">\n\
+             <h2 class=\"text-xs uppercase tracking-wider font-semibold text-gray-500 \
+             dark:text-gray-400 mb-4\">",
+        );
+        h.push_str(if is_pt { "Pódio" } else { "Podium" });
+        h.push_str("</h2>\n<div class=\"grid grid-cols-1 md:grid-cols-3 gap-4\">\n");
+        let medal_classes = ["medal-1", "medal-2", "medal-3"];
+        let medal_emojis = ["1º", "2º", "3º"];
+        let medal_emojis_en = ["1st", "2nd", "3rd"];
+        for (i, s) in report.overall.iter().take(3).enumerate() {
+            let medal = medal_classes[i];
+            let pos = if is_pt {
+                medal_emojis[i]
+            } else {
+                medal_emojis_en[i]
+            };
+            let cc_pct_local = if s.total > 0 {
+                s.conventional_valid as f64 / s.total as f64 * 100.0
+            } else {
+                0.0
+            };
+            let _ = writeln!(
+                h,
+                "<div class=\"podium-card {medal} text-white rounded-2xl p-6\">\
+                 <div class=\"flex items-baseline justify-between mb-3\">\
+                 <span class=\"text-xs font-bold uppercase tracking-widest opacity-80\">{pos}</span>\
+                 <span class=\"text-xs font-semibold opacity-80\">{wins} {wlbl}</span>\
+                 </div>\
+                 <div class=\"text-2xl font-bold mb-1\">{agent}</div>\
+                 <div class=\"text-sm opacity-90 mb-4\">{cc_pct:.0}% CC · {avg:.0}ms {avglbl}</div>\
+                 <div class=\"flex gap-2 text-xs\">\
+                 <span class=\"px-2 py-0.5 bg-white/20 rounded\">{succ}/{tot} {sucl}</span>\
+                 <span class=\"px-2 py-0.5 bg-white/20 rounded\">p95 {p95:.0}ms</span>\
+                 </div>\
+                 </div>",
+                agent = html_escape(&s.agent),
+                wins = s.fixtures_won,
+                wlbl = if is_pt { "vit." } else { "wins" },
+                cc_pct = cc_pct_local,
+                avg = s.avg_ms,
+                avglbl = if is_pt { "média" } else { "avg" },
+                succ = s.success,
+                tot = s.total,
+                sucl = if is_pt { "sucesso" } else { "ok" },
+                p95 = s.p95_ms,
+            );
+        }
+        h.push_str("</div>\n</section>\n\n");
+    }
 
-    // --- tabs ---
+    // --- CHARTS ---
     h.push_str(
-        "<div class=\"bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 \
-                dark:border-gray-700 shadow-sm overflow-hidden mb-8\">\n\
-                <div class=\"border-b border-gray-200 dark:border-gray-700 bg-gray-50/80 \
-                dark:bg-gray-800/80\">\n\
-                <nav class=\"flex\" role=\"tablist\">\n",
-    );
-    h.push_str(
-        "<button role=\"tab\" aria-selected=\"true\" data-tab=\"ranking\" \
-                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-indigo-600 dark:text-indigo-400 border-indigo-600 \
-                dark:border-indigo-400\">",
+        "<section class=\"grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10\">\n\
+         <div class=\"bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 \
+         dark:border-gray-800 p-6 shadow-sm\"><h2 class=\"kpi-lbl\">",
     );
     h.push_str(if is_pt {
-        "Ranking geral"
+        "Tempo médio (ms)"
     } else {
-        "Overall ranking"
+        "Average time (ms)"
     });
-    h.push_str("</button>\n");
-    h.push_str(
-        "<button role=\"tab\" aria-selected=\"false\" data-tab=\"summary\" \
-                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-gray-500 dark:text-gray-400 border-transparent\">",
-    );
-    h.push_str(if is_pt { "Resumo" } else { "Summary" });
-    h.push_str("</button>\n");
-    h.push_str(
-        "<button role=\"tab\" aria-selected=\"false\" data-tab=\"samples\" \
-                class=\"cursor-pointer px-6 py-4 text-sm font-medium border-b-2 \
-                transition-colors text-gray-500 dark:text-gray-400 border-transparent\">",
-    );
-    h.push_str(if is_pt {
-        "Amostras Individuais"
-    } else {
-        "Individual Samples"
-    });
-    h.push_str("</button>\n</nav>\n</div>\n\n");
+    h.push_str("</h2><canvas id=\"perfChart\"></canvas></div>\n");
 
-    // --- overall ranking panel ---
+    h.push_str(
+        "<div class=\"bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 \
+         dark:border-gray-800 p-6 shadow-sm\"><h2 class=\"kpi-lbl\">",
+    );
+    h.push_str(if is_pt {
+        "Taxa de sucesso (%)"
+    } else {
+        "Success rate (%)"
+    });
+    h.push_str("</h2><canvas id=\"qualityChart\"></canvas></div>\n");
+
+    h.push_str(
+        "<div class=\"bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 \
+         dark:border-gray-800 p-6 shadow-sm\"><h2 class=\"kpi-lbl\">",
+    );
+    h.push_str(if is_pt {
+        "Conv. válido (%)"
+    } else {
+        "Conv. valid (%)"
+    });
+    h.push_str("</h2><canvas id=\"ccChart\"></canvas></div>\n</section>\n\n");
+
+    // --- TABS ---
+    h.push_str(
+        "<div class=\"bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 \
+         dark:border-gray-800 shadow-sm overflow-hidden mb-10\">\n\
+         <div class=\"border-b border-gray-200 dark:border-gray-800 px-3 pt-3\">\n\
+         <nav class=\"flex gap-1\" role=\"tablist\">\n",
+    );
+    let tabs = if is_pt {
+        [
+            ("ranking", "Ranking geral"),
+            ("summary", "Por fixture"),
+            ("samples", "Amostras"),
+        ]
+    } else {
+        [
+            ("ranking", "Overall ranking"),
+            ("summary", "By fixture"),
+            ("samples", "Samples"),
+        ]
+    };
+    for (i, (tab, label)) in tabs.iter().enumerate() {
+        let selected = if i == 0 { "true" } else { "false" };
+        let _ = writeln!(
+            h,
+            "<button role=\"tab\" aria-selected=\"{selected}\" data-tab=\"{tab}\" \
+             class=\"tab-pill cursor-pointer px-5 py-2.5 text-sm font-semibold rounded-lg \
+             text-gray-600 dark:text-gray-300\">{label}</button>"
+        );
+    }
+    h.push_str("</nav>\n</div>\n\n");
+
+    // --- overall ranking panel (com row destacada por posto + barras inline) ---
     h.push_str(
         "<div id=\"panel-ranking\" class=\"tab-content\">\n\
-                <div class=\"overflow-x-auto\">\n\
-                <table>\n<thead><tr>",
+         <div class=\"overflow-x-auto\">\n<table>\n<thead><tr>",
     );
     let overall_headers: &[&str] = if is_pt {
         &[
+            "#",
             "Agente",
             "Sucesso",
-            "Conv. Válido",
-            "Média (ms)",
-            "P95 (ms)",
-            "Min (ms)",
-            "Max (ms)",
+            "Conv. válido",
+            "Média ms",
+            "P95",
+            "Min · Max",
             "Vitórias",
             "Resultado",
         ]
     } else {
         &[
+            "#",
             "Agent",
             "Success",
-            "Conv. Valid",
-            "Avg (ms)",
-            "P95 (ms)",
-            "Min (ms)",
-            "Max (ms)",
+            "Conv. valid",
+            "Avg ms",
+            "P95",
+            "Min · Max",
             "Wins",
             "Result",
         ]
@@ -1189,44 +1376,52 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     }
     h.push_str("</tr></thead>\n<tbody>\n");
 
-    for s in &report.overall {
-        let (badge_cls, badge_lbl) = if s.success < s.total {
-            ("badge-fail", if is_pt { "falha" } else { "failed" })
-        } else if s.conventional_valid < s.total {
-            (
-                "badge-warn",
-                if is_pt {
-                    "conv. inválido"
-                } else {
-                    "invalid conv."
-                },
-            )
-        } else {
-            ("badge-ok", "ok")
+    for (i, s) in report.overall.iter().enumerate() {
+        let row_cls = match i {
+            0 => "row-top",
+            1 => "row-second",
+            2 => "row-third",
+            _ => "",
+        };
+        let (badge_cls, badge_lbl) = result_badge(s.success, s.conventional_valid, s.total, is_pt);
+        let succ_pct = pct(s.success, s.total);
+        let cc_pct_local = pct(s.conventional_valid, s.total);
+        let succ_bar = bar_class(succ_pct);
+        let cc_bar = bar_class(cc_pct_local);
+        let rank_label = match i {
+            0 => "🥇",
+            1 => "🥈",
+            2 => "🥉",
+            _ => "",
         };
         let _ = writeln!(
             h,
-            "<tr>\
-             <td>{}</td>\
-             <td class=\"text-right\">{}/{}</td>\
-             <td class=\"text-right\">{}/{}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right\">{}</td>\
+            "<tr class=\"{row_cls}\">\
+             <td class=\"text-center font-bold text-lg\">{rank}<span class=\"text-xs ml-1 text-gray-400\">{nrank}</span></td>\
+             <td class=\"font-semibold text-base\">{agent}</td>\
+             <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{succ}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {sb}\" style=\"width:{sp:.0}%\"></div></div></div></td>\
+             <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{cc}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {cb}\" style=\"width:{cp:.0}%\"></div></div></div></td>\
+             <td class=\"text-right text-mono font-semibold\">{avg:.0}</td>\
+             <td class=\"text-right text-mono text-gray-500 dark:text-gray-400\">{p95:.0}</td>\
+             <td class=\"text-right text-mono text-gray-500 dark:text-gray-400 whitespace-nowrap\">{min:.0} · {max:.0}</td>\
+             <td class=\"text-center text-mono\">{wins}</td>\
              <td><span class=\"badge {badge_cls}\">{badge_lbl}</span></td>\
              </tr>",
-            html_escape(&s.agent),
-            s.success,
-            s.total,
-            s.conventional_valid,
-            s.total,
-            s.avg_ms,
-            s.p95_ms,
-            s.min_ms,
-            s.max_ms,
-            s.fixtures_won,
+            rank = rank_label,
+            nrank = i + 1,
+            agent = html_escape(&s.agent),
+            succ = s.success,
+            tot = s.total,
+            sb = succ_bar,
+            sp = succ_pct,
+            cc = s.conventional_valid,
+            cb = cc_bar,
+            cp = cc_pct_local,
+            avg = s.avg_ms,
+            p95 = s.p95_ms,
+            min = s.min_ms,
+            max = s.max_ms,
+            wins = s.fixtures_won,
         );
     }
     h.push_str("</tbody>\n</table>\n</div>\n</div>\n\n");
@@ -1234,19 +1429,17 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     // --- summary panel ---
     h.push_str(
         "<div id=\"panel-summary\" class=\"tab-content hidden\">\n\
-                <div class=\"overflow-x-auto\">\n\
-                <table>\n<thead><tr>",
+         <div class=\"overflow-x-auto\">\n<table>\n<thead><tr>",
     );
     let summary_headers: &[&str] = if is_pt {
         &[
             "Fixture",
             "Agente",
             "Sucesso",
-            "Conv. Válido",
-            "Média (ms)",
-            "P95 (ms)",
-            "Min (ms)",
-            "Max (ms)",
+            "Conv. válido",
+            "Média ms",
+            "P95",
+            "Min · Max",
             "Resultado",
         ]
     } else {
@@ -1254,11 +1447,10 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
             "Fixture",
             "Agent",
             "Success",
-            "Conv. Valid",
-            "Avg (ms)",
-            "P95 (ms)",
-            "Min (ms)",
-            "Max (ms)",
+            "Conv. valid",
+            "Avg ms",
+            "P95",
+            "Min · Max",
             "Result",
         ]
     };
@@ -1268,125 +1460,197 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     h.push_str("</tr></thead>\n<tbody>\n");
 
     for s in &report.summaries {
-        let (badge_cls, badge_lbl) = if s.success < s.total {
-            ("badge-fail", if is_pt { "falha" } else { "failed" })
-        } else if s.conventional_valid < s.total {
-            (
-                "badge-warn",
-                if is_pt {
-                    "conv. inválido"
-                } else {
-                    "invalid conv."
-                },
-            )
-        } else {
-            ("badge-ok", "ok")
-        };
+        let (badge_cls, badge_lbl) = result_badge(s.success, s.conventional_valid, s.total, is_pt);
+        let succ_pct = pct(s.success, s.total);
+        let cc_pct_local = pct(s.conventional_valid, s.total);
         let _ = writeln!(
             h,
             "<tr>\
-             <td>{}</td><td>{}</td>\
-             <td class=\"text-right\">{}/{}</td>\
-             <td class=\"text-right\">{}/{}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
+             <td class=\"font-medium\">{fix}</td>\
+             <td class=\"text-mono text-sm\">{agent}</td>\
+             <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{succ}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {sb}\" style=\"width:{sp:.0}%\"></div></div></div></td>\
+             <td><div class=\"flex items-center gap-2\"><span class=\"text-mono whitespace-nowrap\">{cc}/{tot}</span><div class=\"bar-track\"><div class=\"bar-fill {cb}\" style=\"width:{cp:.0}%\"></div></div></div></td>\
+             <td class=\"text-right text-mono font-semibold\">{avg:.0}</td>\
+             <td class=\"text-right text-mono text-gray-500 dark:text-gray-400\">{p95:.0}</td>\
+             <td class=\"text-right text-mono text-gray-500 dark:text-gray-400 whitespace-nowrap\">{min:.0} · {max:.0}</td>\
              <td><span class=\"badge {badge_cls}\">{badge_lbl}</span></td>\
              </tr>",
-            html_escape(&fixture_label(&s.fixture, language)),
-            html_escape(&s.agent),
-            s.success,
-            s.total,
-            s.conventional_valid,
-            s.total,
-            s.avg_ms,
-            s.p95_ms,
-            s.min_ms,
-            s.max_ms,
+            fix = html_escape(&fixture_label(&s.fixture, language)),
+            agent = html_escape(&s.agent),
+            succ = s.success,
+            tot = s.total,
+            sb = bar_class(succ_pct),
+            sp = succ_pct,
+            cc = s.conventional_valid,
+            cb = bar_class(cc_pct_local),
+            cp = cc_pct_local,
+            avg = s.avg_ms,
+            p95 = s.p95_ms,
+            min = s.min_ms,
+            max = s.max_ms,
         );
     }
     h.push_str("</tbody>\n</table>\n</div>\n</div>\n\n");
 
-    // --- individual samples panel ---
-    h.push_str(
-        "<div id=\"panel-samples\" class=\"tab-content hidden\">\n\
-                <div class=\"overflow-x-auto\">\n\
-                <table>\n<thead><tr>",
-    );
-    let sample_headers: &[&str] = if is_pt {
-        &[
-            "Fixture",
-            "Agente",
-            "#",
-            "Duração (ms)",
-            "Sucesso",
-            "Conv.",
-            "Mensagem",
-        ]
-    } else {
-        &[
-            "Fixture",
-            "Agent",
-            "#",
-            "Duration (ms)",
-            "Success",
-            "Conv.",
-            "Message",
-        ]
-    };
-    for hdr in sample_headers {
-        let _ = write!(h, "<th>{hdr}</th>");
-    }
-    h.push_str("</tr></thead>\n<tbody>\n");
-
-    let ok_badge = "<span class=\"badge badge-ok\">✓</span>";
-    let fail_badge = "<span class=\"badge badge-fail\">✗</span>";
-    for sample in &report.samples {
-        let msg = sample
-            .message
-            .as_deref()
-            .or(sample.error.as_deref())
-            .unwrap_or("-");
-        let display_msg = if msg.len() > 80 {
-            let mut end = 80;
-            while !msg.is_char_boundary(end) && end > 0 {
-                end -= 1;
-            }
-            format!("{}…", &msg[..end])
-        } else {
-            msg.to_string()
-        };
-        let _ = writeln!(
-            h,
-            "<tr>\
-             <td>{}</td><td>{}</td>\
-             <td class=\"text-right\">{}</td>\
-             <td class=\"text-right text-mono\">{:.1}</td>\
-             <td>{}</td><td>{}</td>\
-             <td class=\"text-mono\">{}</td>\
-             </tr>",
-            html_escape(&fixture_label(&sample.fixture, language)),
-            html_escape(&sample.agent),
-            sample.iteration,
-            sample.duration_ms,
-            if sample.success { ok_badge } else { fail_badge },
-            if sample.conventional_valid {
-                ok_badge
-            } else {
-                fail_badge
-            },
-            html_escape(&display_msg),
+    // --- samples panel: cards por fixture com mensagens lado-a-lado + diff ---
+    h.push_str("<div id=\"panel-samples\" class=\"tab-content hidden p-6 space-y-6\">\n");
+    if report.samples.is_empty() {
+        h.push_str(
+            "<div class=\"text-center py-12 text-gray-400 dark:text-gray-500\">\
+             <div class=\"text-4xl mb-2\">·</div>\
+             <p class=\"text-sm\">",
         );
+        h.push_str(if is_pt {
+            "Nenhuma amostra individual disponível neste relatório."
+        } else {
+            "No individual samples in this report."
+        });
+        h.push_str("</p></div>\n");
+    } else {
+        // Agrupa por fixture
+        for fixture in &report.fixtures {
+            let fix_label = fixture_label(fixture, language);
+            // pega o diff do primeiro sample da fixture
+            let first_sample = report.samples.iter().find(|s| &s.fixture == fixture);
+            h.push_str(
+                "<div class=\"fixture-card p-6\">\n\
+                 <div class=\"flex items-center justify-between mb-4\">\n\
+                 <h3 class=\"text-lg font-bold flex items-center gap-2\">\
+                 <span class=\"w-2 h-2 rounded-full bg-indigo-500\"></span>",
+            );
+            let _ = write!(h, "{}", html_escape(&fix_label));
+            h.push_str("</h3>\n");
+            // contadores
+            let fix_samples: Vec<_> = report
+                .samples
+                .iter()
+                .filter(|s| &s.fixture == fixture)
+                .collect();
+            let n_iter = fix_samples.iter().map(|s| s.iteration).max().unwrap_or(0);
+            let _ = writeln!(
+                h,
+                "<span class=\"text-xs text-gray-500 dark:text-gray-400\">{} {} · {} {}</span>",
+                report.agents.len(),
+                if is_pt { "agentes" } else { "agents" },
+                n_iter,
+                if is_pt { "iterações" } else { "iterations" },
+            );
+            h.push_str("</div>\n");
+
+            // diff
+            if let Some(s) = first_sample {
+                if !s.diff.is_empty() {
+                    h.push_str("<details class=\"mb-4\" open>\n");
+                    h.push_str(
+                        "<summary class=\"cursor-pointer text-xs font-semibold uppercase \
+                         tracking-wider text-gray-500 dark:text-gray-400 mb-2 select-none\">",
+                    );
+                    h.push_str("Diff");
+                    h.push_str("</summary>\n<pre class=\"diff-block\">");
+                    for line in s.diff.lines().take(40) {
+                        let cls = if line.starts_with("+++") || line.starts_with("---") {
+                            "line-meta"
+                        } else if line.starts_with('+') {
+                            "line-add"
+                        } else if line.starts_with('-') {
+                            "line-del"
+                        } else if line.starts_with("@@") {
+                            "line-hunk"
+                        } else if line.starts_with("diff ")
+                            || line.starts_with("index ")
+                            || line.starts_with("new file")
+                            || line.starts_with("deleted")
+                        {
+                            "line-meta"
+                        } else {
+                            ""
+                        };
+                        let _ = writeln!(h, "<span class=\"{cls}\">{}</span>", html_escape(line));
+                    }
+                    if s.diff.lines().count() > 40 {
+                        h.push_str("<span class=\"line-meta\">…</span>\n");
+                    }
+                    h.push_str("</pre>\n</details>\n");
+                }
+            }
+
+            // mensagens por iteração x agente em grid
+            for it in 1..=n_iter {
+                let _ = writeln!(
+                    h,
+                    "<div class=\"mb-4\"><div class=\"text-xs uppercase tracking-wider \
+                     font-semibold text-gray-500 dark:text-gray-400 mb-2\">{} {}</div>",
+                    if is_pt { "Iteração" } else { "Iteration" },
+                    it
+                );
+                h.push_str(
+                    "<div class=\"grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3\">\n",
+                );
+                for (a_idx, agent) in report.agents.iter().enumerate() {
+                    let sample = fix_samples
+                        .iter()
+                        .find(|s| s.iteration == it && &s.agent == agent);
+                    let (border_color, _bg) = CHART_PALETTE[a_idx % CHART_PALETTE.len()];
+                    if let Some(sample) = sample {
+                        if sample.success {
+                            let msg = sample.message.as_deref().unwrap_or("(empty)");
+                            let cc_chip = if sample.conventional_valid {
+                                "<span class=\"badge badge-ok ml-2\">CC</span>"
+                            } else {
+                                "<span class=\"badge badge-warn ml-2\">!CC</span>"
+                            };
+                            let _ = writeln!(
+                                h,
+                                "<div class=\"msg-card bg-gray-50 dark:bg-gray-800/60\" \
+                                 style=\"--c:{border_color}\">\
+                                 <span class=\"agent-pill\">{agent}</span>\
+                                 <button class=\"copy-btn\" data-copy=\"{escm}\" type=\"button\">copy</button>\
+                                 <div class=\"text-gray-900 dark:text-gray-100 mb-1.5 break-words\">{msg}</div>\
+                                 <div class=\"text-xs text-gray-500 dark:text-gray-400 flex items-center\">\
+                                 <span class=\"text-mono\">{dur:.0}ms</span>{cc_chip}\
+                                 </div></div>",
+                                agent = html_escape(agent),
+                                escm = html_escape(msg),
+                                msg = html_escape(msg),
+                                dur = sample.duration_ms,
+                                cc_chip = cc_chip,
+                            );
+                        } else {
+                            let err = sample.error.as_deref().unwrap_or("error");
+                            let truncated = truncate_msg(err, 200);
+                            let _ = writeln!(
+                                h,
+                                "<div class=\"msg-card bg-red-50 dark:bg-red-950/40\" \
+                                 style=\"--c:#ef4444\">\
+                                 <span class=\"agent-pill\" style=\"background:#ef4444\">{agent}</span>\
+                                 <div class=\"text-red-700 dark:text-red-300 break-words\">{err}</div>\
+                                 <div class=\"text-xs text-red-500/80 dark:text-red-400/70 mt-1\">{lbl}</div>\
+                                 </div>",
+                                agent = html_escape(agent),
+                                err = html_escape(&truncated),
+                                lbl = if is_pt { "(falha)" } else { "(failed)" },
+                            );
+                        }
+                    }
+                }
+                h.push_str("</div></div>\n");
+            }
+            h.push_str("</div>\n");
+        }
     }
-    h.push_str("</tbody>\n</table>\n</div>\n</div>\n</div>\n\n");
+    h.push_str("</div>\n</div>\n\n");
 
     // --- footer ---
     let ts = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
     let _ = writeln!(
         h,
-        "<footer class=\"text-center text-gray-400 dark:text-gray-500 py-8 text-sm\">\
-         {ts} &mdash; Seshat v{}</footer>",
+        "<footer class=\"text-center text-gray-400 dark:text-gray-600 py-10 text-xs\">\
+         <div class=\"flex items-center justify-center gap-3\">\
+         <span class=\"w-1.5 h-1.5 rounded-full bg-indigo-400\"></span>\
+         <span>Seshat v{}</span>\
+         <span class=\"text-gray-300 dark:text-gray-700\">·</span>\
+         <span class=\"text-mono\">{ts}</span>\
+         </div></footer>",
         crate::VERSION,
     );
     h.push_str("</div>\n\n");
@@ -1394,11 +1658,63 @@ pub fn generate_html_report(report: &AgentBenchReport, language: ReportLanguage)
     // --- scripts ---
     h.push_str("<script>\n");
     h.push_str(TAB_SWITCH_JS);
+    h.push_str(COPY_JS);
     write_chart_js(&mut h, report, language);
     h.push_str(THEME_TOGGLE_JS);
     h.push_str("</script>\n</body>\n</html>");
 
     h
+}
+
+fn pct(num: usize, total: usize) -> f64 {
+    if total == 0 {
+        0.0
+    } else {
+        num as f64 / total as f64 * 100.0
+    }
+}
+
+fn bar_class(pct: f64) -> &'static str {
+    if pct >= 90.0 {
+        "bar-ok"
+    } else if pct >= 60.0 {
+        "bar-warn"
+    } else {
+        "bar-fail"
+    }
+}
+
+fn result_badge(
+    success: usize,
+    cc: usize,
+    total: usize,
+    is_pt: bool,
+) -> (&'static str, &'static str) {
+    if success < total {
+        ("badge-fail", if is_pt { "falha" } else { "failed" })
+    } else if cc < total {
+        (
+            "badge-warn",
+            if is_pt {
+                "conv. inválido"
+            } else {
+                "invalid conv."
+            },
+        )
+    } else {
+        ("badge-ok", "ok")
+    }
+}
+
+fn truncate_msg(msg: &str, max: usize) -> String {
+    if msg.len() <= max {
+        return msg.to_string();
+    }
+    let mut end = max;
+    while !msg.is_char_boundary(end) && end > 0 {
+        end -= 1;
+    }
+    format!("{}…", &msg[..end])
 }
 
 fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLanguage) {
@@ -1412,86 +1728,81 @@ fn write_chart_js(h: &mut String, report: &AgentBenchReport, language: ReportLan
         .collect();
     let _ = writeln!(h, "const F=[{}];", labels.join(","));
 
-    // perf datasets (avg_ms)
-    h.push_str("const P=[\n");
-    for (i, agent) in report.agents.iter().enumerate() {
-        let (border, bg) = CHART_PALETTE[i % CHART_PALETTE.len()];
-        let vals: Vec<String> = report
-            .fixtures
-            .iter()
-            .map(|fix| {
-                report
-                    .summaries
-                    .iter()
-                    .find(|s| s.fixture == *fix && s.agent == *agent)
-                    .map(|s| format!("{:.1}", s.avg_ms))
-                    .unwrap_or_else(|| "0".to_string())
-            })
-            .collect();
-        let safe = agent.replace('\'', "\\'");
-        let joined = vals.join(",");
-        let _ = writeln!(
-            h,
-            "{{label:'{safe}',data:[{joined}],backgroundColor:'{bg}',borderColor:'{border}',borderWidth:1}},",
-        );
-    }
-    h.push_str("];\n");
+    // helper para construir datasets
+    let build_ds = |h: &mut String, name: &str, project: &dyn Fn(&AgentBenchSummary) -> f64| {
+        let _ = writeln!(h, "const {name}=[");
+        for (i, agent) in report.agents.iter().enumerate() {
+            let (border, bg) = CHART_PALETTE[i % CHART_PALETTE.len()];
+            let vals: Vec<String> = report
+                .fixtures
+                .iter()
+                .map(|fix| {
+                    report
+                        .summaries
+                        .iter()
+                        .find(|s| s.fixture == *fix && s.agent == *agent)
+                        .map(|s| format!("{:.1}", project(s)))
+                        .unwrap_or_else(|| "0".to_string())
+                })
+                .collect();
+            let safe = agent.replace('\'', "\\'");
+            let joined = vals.join(",");
+            let _ = writeln!(
+                h,
+                "{{label:'{safe}',data:[{joined}],backgroundColor:'{bg}',borderColor:'{border}',\
+                 borderWidth:0,borderRadius:6,borderSkipped:false}},",
+            );
+        }
+        h.push_str("];\n");
+    };
 
-    // quality datasets (success %)
-    h.push_str("const Q=[\n");
-    for (i, agent) in report.agents.iter().enumerate() {
-        let (border, bg) = CHART_PALETTE[i % CHART_PALETTE.len()];
-        let vals: Vec<String> = report
-            .fixtures
-            .iter()
-            .map(|fix| {
-                report
-                    .summaries
-                    .iter()
-                    .find(|s| s.fixture == *fix && s.agent == *agent)
-                    .map(|s| {
-                        if s.total == 0 {
-                            "0".to_string()
-                        } else {
-                            format!("{:.1}", s.success as f64 / s.total as f64 * 100.0)
-                        }
-                    })
-                    .unwrap_or_else(|| "0".to_string())
-            })
-            .collect();
-        let safe = agent.replace('\'', "\\'");
-        let joined = vals.join(",");
-        let _ = writeln!(
-            h,
-            "{{label:'{safe}',data:[{joined}],backgroundColor:'{bg}',borderColor:'{border}',borderWidth:1}},",
-        );
-    }
-    h.push_str("];\n");
+    build_ds(h, "P", &|s| s.avg_ms);
+    build_ds(h, "Q", &|s| {
+        if s.total == 0 {
+            0.0
+        } else {
+            s.success as f64 / s.total as f64 * 100.0
+        }
+    });
+    build_ds(h, "C", &|s| {
+        if s.total == 0 {
+            0.0
+        } else {
+            s.conventional_valid as f64 / s.total as f64 * 100.0
+        }
+    });
 
     h.push_str(concat!(
-        "var isDk=document.documentElement.classList.contains('dark');",
-        "var gC=isDk?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';",
-        "var tC=isDk?'#9ca3af':'#6b7280';\n",
-        "function mkOpts(t,mx){return {responsive:true,",
-        "plugins:{legend:{position:'bottom',labels:{color:tC}}},",
-        "scales:{y:{beginAtZero:true,max:mx,title:{display:true,text:t,color:tC},",
-        "ticks:{color:tC},grid:{color:gC}},",
-        "x:{ticks:{color:tC},grid:{color:gC}}}};}\n",
+        "function gridColor(){return document.documentElement.classList.contains('dark')",
+        "?'rgba(255,255,255,0.06)':'rgba(15,23,42,0.06)'}",
+        "function textColor(){return document.documentElement.classList.contains('dark')",
+        "?'#94a3b8':'#64748b'}",
+        "Chart.defaults.font.family=\"'Inter',sans-serif\";",
+        "Chart.defaults.font.size=12;",
+        "function mkOpts(t,mx){var tC=textColor(),gC=gridColor();return {responsive:true,",
+        "maintainAspectRatio:true,",
+        "plugins:{legend:{position:'bottom',labels:{color:tC,usePointStyle:true,",
+        "pointStyle:'circle',padding:14,boxWidth:8,boxHeight:8,font:{size:11,weight:'500'}}},",
+        "tooltip:{backgroundColor:'rgba(15,23,42,0.95)',titleColor:'#fff',",
+        "bodyColor:'#e2e8f0',borderColor:'rgba(99,102,241,0.5)',borderWidth:1,",
+        "padding:12,cornerRadius:8,displayColors:true,boxWidth:8,boxHeight:8,boxPadding:4}},",
+        "scales:{y:{beginAtZero:true,max:mx,title:{display:true,text:t,color:tC,",
+        "font:{size:11,weight:'600'}},ticks:{color:tC,font:{size:11}},",
+        "grid:{color:gC,drawBorder:false}},",
+        "x:{ticks:{color:tC,font:{size:11,weight:'600'}},grid:{display:false}}}};}\n",
         "var c1=new Chart(document.getElementById('perfChart'),",
         "{type:'bar',data:{labels:F,datasets:P},options:mkOpts('ms',undefined)});\n",
         "var c2=new Chart(document.getElementById('qualityChart'),",
         "{type:'bar',data:{labels:F,datasets:Q},options:mkOpts('%',100)});\n",
-        "window.updateChartsTheme=function(){",
-        "var d=document.documentElement.classList.contains('dark');",
-        "var gc=d?'rgba(255,255,255,0.08)':'rgba(0,0,0,0.06)';",
-        "var tc=d?'#9ca3af':'#6b7280';",
-        "[c1,c2].forEach(function(c){",
+        "var c3=new Chart(document.getElementById('ccChart'),",
+        "{type:'bar',data:{labels:F,datasets:C},options:mkOpts('%',100)});\n",
+        "window.updateChartsTheme=function(){var tc=textColor(),gc=gridColor();",
+        "[c1,c2,c3].forEach(function(c){",
         "c.options.plugins.legend.labels.color=tc;",
         "c.options.scales.y.title.color=tc;c.options.scales.y.ticks.color=tc;",
         "c.options.scales.y.grid.color=gc;",
-        "c.options.scales.x.ticks.color=tc;c.options.scales.x.grid.color=gc;",
-        "c.update();});",
-        "};\n",
+        "c.options.scales.x.ticks.color=tc;",
+        "c.update();});};\n",
     ));
 }
 
@@ -2186,12 +2497,12 @@ mod tests {
 
         assert!(html.contains("lang=\"pt-BR\""));
         assert!(html.contains("Benchmark de Agentes"));
-        assert!(html.contains("Agentes"));
-        assert!(html.contains("Iterações"));
-        assert!(html.contains("automática"));
+        assert!(html.contains("agentes"));
+        assert!(html.contains("Pódio"));
         assert!(html.contains("Ranking geral"));
-        assert!(html.contains("Resumo"));
-        assert!(html.contains("Amostras Individuais"));
+        assert!(html.contains("Por fixture"));
+        assert!(html.contains("Amostras"));
+        assert!(html.contains("Tempo médio"));
     }
 
     #[test]
