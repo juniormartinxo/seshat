@@ -26,7 +26,7 @@ from collections import defaultdict
 from pathlib import Path
 
 CC_RE = re.compile(
-    r"^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\([^)]+\))?(!)?:\s+.+",
+    r"^(feat|fix|chore|docs|refactor|perf|test|build|ci|style|revert)(\([^)]+\))?(!)?:\s+(.+)",
     re.IGNORECASE,
 )
 
@@ -36,6 +36,42 @@ SYSTEM_PROMPT = (
     "Use PT-BR no corpo quando aplicável. Tipo válido: feat, fix, chore, docs, "
     "refactor, perf, test, build, ci, style, revert."
 )
+
+# Subjects pós-prefixo que sinalizam preguiça (descrição vazia/genérica).
+# Ensinariam o modelo a sempre gerar `chore: update` independente do diff.
+GENERIC_SUBJECTS = {
+    "update", "updates", "updated",
+    "fix", "fixes", "fixed",
+    "wip", "tmp", "temp",
+    "tweak", "tweaks", "more tweaks",
+    "misc", "miscellaneous",
+    "changes", "change",
+    "more changes", "more updates", "more fixes", "more stuff",
+    "cleanup", "code cleanup", "cleaning up",
+    "commit", "commits",
+    "improvements", "improvement",
+    "minor", "minor changes", "minor fixes", "minor update", "minor updates",
+    "small", "small fix", "small fixes", "small changes", "small update",
+    "various", "various fixes", "various changes",
+    "patch", "patches",
+    "stuff", "things",
+    "lint", "format", "formatting", "style",
+    "refactor", "refactoring",
+    "test", "tests",
+    "init", "initial commit", "first commit",
+    "todo", "tbd",
+    "...", ".", "-",
+}
+
+PLACEHOLDER_RE = re.compile(r"<[^>]*>|\b(TODO|FIXME|XXX|TBD)\b|\?{2,}", re.IGNORECASE)
+EMPTY_SCOPE_RE = re.compile(r"^\w+\(\s*\)\s*[!:]")
+URL_OR_PR_ONLY_RE = re.compile(
+    r"^(https?://\S+\s*$|#\d+\s*$|PR\s*#?\d+\s*$|Issue\s*#?\d+\s*$)",
+    re.IGNORECASE,
+)
+ONLY_FILENAME_RE = re.compile(r"^[\w./\\-]+\.[a-z0-9]+\s*$", re.IGNORECASE)
+TRAILING_DOT_RE = re.compile(r"^.+\.$")  # subject terminando em ponto: estilo inconsistente
+ALL_CAPS_RE = re.compile(r"^[^a-z]*[A-Z]{4,}[^a-z]*$")  # WIP COMMIT, FIX, etc.
 
 
 def subject(msg: str) -> str:
@@ -49,15 +85,63 @@ def normalize_subject(s: str) -> str:
     return s
 
 
+def cc_match(msg: str):
+    return CC_RE.match(subject(msg))
+
+
 def cc_type(msg: str) -> str | None:
-    m = CC_RE.match(subject(msg))
-    if not m:
-        return None
-    return m.group(1).lower()
+    m = cc_match(msg)
+    return m.group(1).lower() if m else None
+
+
+def cc_description(msg: str) -> str:
+    """Parte depois de `tipo(scope)?: `. Vazia se não for CC."""
+    m = cc_match(msg)
+    return m.group(4).strip() if m else ""
 
 
 def diff_hash(diff: str) -> str:
     return hashlib.sha1(diff.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def low_quality_reason(msg: str) -> str | None:
+    """Retorna razão de baixa qualidade ou None se a mensagem for boa."""
+    s = subject(msg)
+    if not s:
+        return "empty_subject"
+
+    # CC malformado (ex: `feat(): foo`) — escopo vazio com parênteses.
+    if EMPTY_SCOPE_RE.match(s):
+        return "empty_scope"
+
+    desc = cc_description(msg)
+    if not desc:
+        return None  # não é CC; o filtro de CC trata.
+
+    desc_norm = desc.rstrip(" .").lower().strip()
+
+    # Ordem importa: filtros mais específicos antes do "subject_too_short" para
+    # que o motivo reportado seja informativo (ex: 'fix: fix' deve reportar
+    # 'generic_subject', não 'subject_too_short').
+    if desc_norm in GENERIC_SUBJECTS:
+        return "generic_subject"
+
+    if PLACEHOLDER_RE.search(s):
+        return "placeholder_or_todo"
+
+    if URL_OR_PR_ONLY_RE.match(desc):
+        return "url_or_pr_only"
+
+    if ONLY_FILENAME_RE.match(desc):
+        return "filename_only"
+
+    if ALL_CAPS_RE.match(desc):
+        return "all_caps"
+
+    if len(desc_norm) < 8:
+        return "subject_too_short"
+
+    return None
 
 
 def main() -> int:
@@ -72,6 +156,12 @@ def main() -> int:
                     help="Emails (vírgula). Esses autores ficam isentos do cap-per-type e podem ser sobre-amostrados via --prefer-weight.")
     ap.add_argument("--prefer-weight", type=int, default=3,
                     help="Quantas vezes cada amostra de prefer-authors aparece no train (default 3). 1 = sem oversample.")
+    ap.add_argument("--save-rejected", action="store_true", default=True,
+                    help="Salva commits low-quality em rejected.jsonl para uso futuro em DPO. (default: ligado)")
+    ap.add_argument("--no-save-rejected", action="store_false", dest="save_rejected",
+                    help="Desliga a gravação de rejected.jsonl.")
+    ap.add_argument("--save-non-cc-rejected", action="store_true",
+                    help="Inclui também commits não-CC em rejected.jsonl (volume alto). Default: só low-quality.")
     args = ap.parse_args()
 
     random.seed(args.seed)
@@ -85,8 +175,37 @@ def main() -> int:
     seen_diff: set[str] = set()
     bucket_other: dict[str, list[dict]] = defaultdict(list)
     bucket_pref: dict[str, list[dict]] = defaultdict(list)
+    rejected_samples: list[dict] = []
+    seen_rej_diff: set[str] = set()  # dedup do rejected (mesmo diff só conta 1x)
 
-    total = kept = drop_cc = drop_dup = 0
+    def maybe_collect_rejected(row: dict, msg: str, diff: str, reason: str) -> None:
+        """Salva uma amostra ruim em formato pronto pra DPO. Mantém o mesmo
+        shape do train (system/user/assistant) com o motivo no _meta — assim
+        depois você pode emparelhar com um `chosen` gerado pelo modelo SFT."""
+        if not args.save_rejected:
+            return
+        dh = diff_hash(diff)
+        if dh in seen_rej_diff:
+            return
+        seen_rej_diff.add(dh)
+        rejected_samples.append({
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Diff:\n{diff}"},
+                {"role": "assistant", "content": msg.strip()},
+            ],
+            "_meta": {
+                "rejected_reason": reason,
+                "type": cc_type(msg),
+                "repo": row.get("repo"),
+                "sha": row.get("sha"),
+                "lang": row.get("lang"),
+                "author_email": (row.get("author_email") or "").lower(),
+            },
+        })
+
+    total = kept = drop_cc = drop_dup = drop_lq = 0
+    drop_lq_by_reason: dict[str, int] = defaultdict(int)
     with open(args.inp, "r", encoding="utf-8") as f:
         for line in f:
             total += 1
@@ -100,6 +219,15 @@ def main() -> int:
             t = cc_type(msg)
             if not t:
                 drop_cc += 1
+                if args.save_non_cc_rejected:
+                    maybe_collect_rejected(row, msg, diff, "non_cc")
+                continue
+
+            reason = low_quality_reason(msg)
+            if reason:
+                drop_lq += 1
+                drop_lq_by_reason[reason] += 1
+                maybe_collect_rejected(row, msg, diff, reason)
                 continue
 
             ns = normalize_subject(subject(msg))
@@ -164,6 +292,9 @@ def main() -> int:
 
     write(out / "train.jsonl", train_set)
     write(out / "eval.jsonl", eval_set)
+    if args.save_rejected and rejected_samples:
+        random.shuffle(rejected_samples)
+        write(out / "rejected.jsonl", rejected_samples)
 
     # distribuição por type considerando o train final (com boost)
     dist: dict[str, int] = defaultdict(int)
@@ -176,6 +307,10 @@ def main() -> int:
     print(f"Total lidos:     {total}")
     print(f"Mantidos:        {kept}")
     print(f"Descartados CC:  {drop_cc}")
+    print(f"Descartados LQ:  {drop_lq}  (low-quality)")
+    if drop_lq_by_reason:
+        for reason, n in sorted(drop_lq_by_reason.items(), key=lambda kv: -kv[1]):
+            print(f"  - {reason:<20} {n}")
     print(f"Descartados dup: {drop_dup}")
     print(f"Outros (cap):    {len(capped_other)}  (cap={args.cap_per_type})")
     print(f"Preferidos:      {len(all_pref)}  (sem cap)")
@@ -184,6 +319,12 @@ def main() -> int:
         print(f"Prefer weight:   x{prefer_weight}  (+{boost_extra} duplicatas no train)")
     print(f"Train: {len(train_set)}   Eval: {len(eval_set)}")
     print(f"  preferidos no train: {pref_in_train}   preferidos no eval: {pref_in_eval}")
+    if args.save_rejected:
+        rej_path = out / "rejected.jsonl"
+        if rejected_samples:
+            print(f"Rejected: {len(rejected_samples)}  -> {rej_path}")
+        else:
+            print("Rejected: 0  (nenhum low-quality coletado)")
     print("Distribuição por type (train final):")
     for t, n in sorted(dist.items(), key=lambda kv: -kv[1]):
         print(f"  {t:<10} {n}")
