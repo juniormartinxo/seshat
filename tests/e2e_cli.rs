@@ -1858,9 +1858,9 @@ fn bench_agents_pt_br_report_runs_fake_codex() {
         ])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Benchmark de Agentes"))
-        .stdout(predicate::str::contains("Conv. valido"))
-        .stdout(predicate::str::contains("Ranking geral"))
+        .stdout(predicate::str::contains("BENCHMARK DE AGENTES"))
+        .stdout(predicate::str::contains("Conv. válido"))
+        .stdout(predicate::str::contains("RANKING GERAL"))
         .stdout(predicate::str::contains("Python"))
         .stdout(predicate::str::contains("codex"))
         .stdout(predicate::str::contains("ok"));
