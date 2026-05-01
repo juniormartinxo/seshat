@@ -484,7 +484,7 @@ fn status_color(kind: &str) -> &'static str {
         "success" => "32",
         "warning" => "33",
         "error" => "31",
-        "skipped" => "38;2;108;108;108",
+        "skipped" => "38;2;58;58;58",
         "step" => "90",
         _ => "36",
     }
@@ -639,7 +639,7 @@ mod tests {
 
     #[test]
     fn ui_skipped_status_uses_darker_gray_than_step() {
-        assert_eq!(status_color("skipped"), "38;2;108;108;108");
+        assert_eq!(status_color("skipped"), "38;2;58;58;58");
         assert_eq!(status_color("step"), "90");
     }
 }
