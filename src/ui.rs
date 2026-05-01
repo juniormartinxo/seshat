@@ -1,7 +1,9 @@
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use serde_yaml::Value as YamlValue;
 use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::sync::{Mutex, OnceLock};
+use std::time::Duration;
 
 #[derive(Debug, Clone, Default)]
 struct UiConfig {
@@ -178,6 +180,10 @@ pub fn progress(total: usize) -> Progress {
     }
 }
 
+pub fn flow_progress(total: usize) -> FlowProgress {
+    FlowProgress::new(total)
+}
+
 pub fn confirm(prompt: &str, default: bool) -> anyhow::Result<bool> {
     if !is_interactive() {
         return Ok(default);
@@ -267,6 +273,100 @@ impl Progress {
                 &format!("[{}/{}] {}", self.current, self.total, message.as_ref()),
                 "36",
             ));
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FlowProgress {
+    bars: Option<FlowBars>,
+    total: usize,
+    current: usize,
+}
+
+#[derive(Debug)]
+struct FlowBars {
+    multi: MultiProgress,
+    bar: ProgressBar,
+    spinner: ProgressBar,
+}
+
+impl FlowProgress {
+    fn new(total: usize) -> Self {
+        let bars = if use_rich() && !json_mode_enabled() && total > 0 {
+            let multi = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(15));
+            let bar_style = ProgressStyle::with_template(
+                "[{pos}/{len}] {bar:30.cyan/blue} {percent:>3}% {msg}",
+            )
+            .unwrap_or_else(|_| ProgressStyle::default_bar())
+            .progress_chars("=> ");
+            let bar = multi.add(ProgressBar::new(total as u64));
+            bar.set_style(bar_style);
+            bar.set_message("aguardando...");
+
+            let spinner_style = ProgressStyle::with_template("  {spinner:.green} {msg}")
+                .unwrap_or_else(|_| ProgressStyle::default_spinner());
+            let spinner = multi.add(ProgressBar::new_spinner());
+            spinner.set_style(spinner_style);
+            spinner.enable_steady_tick(Duration::from_millis(80));
+
+            Some(FlowBars {
+                multi,
+                bar,
+                spinner,
+            })
+        } else {
+            None
+        };
+        Self {
+            bars,
+            total,
+            current: 0,
+        }
+    }
+
+    pub fn start_file(&self, file: &str) {
+        if let Some(b) = &self.bars {
+            b.bar.set_message(file.to_string());
+            b.spinner.set_message(format!("Processando {file}"));
+        }
+    }
+
+    pub fn file_ok(&mut self, message: impl AsRef<str>) {
+        self.advance("success", message.as_ref());
+    }
+
+    pub fn file_skip(&mut self, message: impl AsRef<str>) {
+        self.advance("warning", message.as_ref());
+    }
+
+    pub fn file_fail(&mut self, message: impl AsRef<str>) {
+        self.advance("error", message.as_ref());
+    }
+
+    fn advance(&mut self, kind: &str, message: &str) {
+        self.current = self.current.saturating_add(1).min(self.total);
+        let icon = icon(kind);
+        let line = if use_rich() {
+            color(&format!("{icon} {message}"), status_color(kind))
+        } else {
+            format!("{icon} {message}")
+        };
+        match &self.bars {
+            Some(b) => {
+                let _ = b.multi.println(line);
+                b.bar.inc(1);
+            }
+            None => {
+                stdout_line(line);
+            }
+        }
+    }
+
+    pub fn finish(self, summary: impl AsRef<str>) {
+        if let Some(b) = self.bars {
+            b.spinner.finish_and_clear();
+            b.bar.finish_with_message(summary.as_ref().to_string());
         }
     }
 }
