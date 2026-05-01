@@ -4,17 +4,19 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "lucide-react": "latest",
     "next": "latest",
+    "nextra": "^4.6.1",
     "react": "latest",
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@types/mdx": "^2.0.13",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
