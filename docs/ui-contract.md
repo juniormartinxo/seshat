@@ -49,6 +49,21 @@ Suporte atual:
 | `render_tool_output` | texto da ferramenta intacto | prefixo visual por status |
 | `display_code_review` | texto de review intacto | painel ASCII colorido |
 
+## Status de ferramentas
+
+`render_tool_output` usa status textuais no prefixo:
+
+- `success`: verde
+- `warning`: amarelo
+- `error`: vermelho
+- `skipped`: cinza escuro RGB `108,108,108` (`\x1b[38;2;108;108;108m`)
+
+O status `skipped` e usado quando o runner nao encontra arquivos relevantes para o check atual, por exemplo:
+
+```text
+[skipped] cargo-test (test) - Nenhum arquivo relevante para test
+```
+
 ## Garantias
 
 - Saida non-TTY nao usa ANSI sem configuracao explicita.
