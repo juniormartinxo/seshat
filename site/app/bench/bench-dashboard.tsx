@@ -319,33 +319,30 @@ export function BenchDashboard() {
 						</div>
 						<div className="grid grid-cols-4 gap-3.5">
 							<article
-								className={`${accentCardClass} p-[18px]`}
+								className={`${accentCardClass} flex min-h-full items-center justify-center p-[18px] text-center`}
 							>
-                <div className="flex flex-col align-middle items-center gap-2 min-h-full">
-                  <span>
-                <Trophy className="text-(--cyan)" aria-hidden="true" size={22} />
-                </span>
-                <div className="flex flex-col align-middle items-center">
-                  <span className="text-mono text-xs text-(--muted)">Melhor geral</span>
-                  <strong className="wrap-break-words text-[2.2rem] font-black text-(--text)">
-                    {winner?.agent ?? "-"}
-                  </strong>
-                  <p className="leading-normal text-(--muted)">
-                    {winner?.model ?? "modelo nao informado"}
-                  </p>
-                </div>
-                </div>
+								<div className="flex flex-col items-center justify-center gap-2">
+									<Trophy className="text-(--cyan)" aria-hidden="true" size={22} />
+									<div className="flex flex-col items-center">
+										<span className="text-mono text-xs text-(--muted)">Melhor geral</span>
+										<strong className="wrap-break-word text-[2.2rem] font-black text-(--text)">
+											{winner?.agent ?? "-"}
+										</strong>
+										<p className="leading-normal text-(--muted)">
+											{winner?.model ?? "modelo nao informado"}
+										</p>
+									</div>
+								</div>
 							</article>
 							{report.overall.map((summary, index) => {
 								const width = bestAvgMs ? Math.max(6, (summary.avg_ms / bestAvgMs) * 100) : 0;
-
 								return (
 									<article
 										className="rounded-sm border border-(--line) bg-[linear-gradient(180deg,color-mix(in_srgb,var(--cyan)_7%,transparent),transparent),var(--bench-panel)] p-[18px]"
 										key={`${summary.agent}-${summary.model ?? "default"}`}
 									>
 										<div className="flex items-center gap-3.5">
-												<span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--cyan)_16%,transparent)] font-black text-(--cyan)">
+											<span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--cyan)_16%,transparent)] font-black text-(--cyan)">
 												#{index + 1}
 											</span>
 											<div className="min-w-0">
@@ -362,7 +359,7 @@ export function BenchDashboard() {
 											aria-label={`Media ${formatDuration(summary.avg_ms)}`}
 										>
 											<span
-													className="block h-full rounded-full bg-[linear-gradient(90deg,var(--cyan),var(--amber),var(--green))]"
+												className="block h-full rounded-full bg-[linear-gradient(90deg,var(--cyan),var(--amber),var(--green))]"
 												style={{ width: `${width}%` }}
 											/>
 										</div>
@@ -422,7 +419,7 @@ export function BenchDashboard() {
 								{fixtureTabs.map((fixture) => (
 									<button
 										aria-selected={fixture === activeFixture}
-											className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
+										className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
 										key={fixture}
 										onClick={() => setSelectedFixture(fixture)}
 										role="tab"
@@ -448,7 +445,7 @@ export function BenchDashboard() {
 											"Wins"
 										].map((heading) => (
 											<th
-													className="border-b border-(--line) p-3 text-left align-top text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-(--muted)"
+												className="border-b border-(--line) p-3 text-left align-top text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-(--muted)"
 												key={heading}
 											>
 												{heading}
@@ -461,7 +458,7 @@ export function BenchDashboard() {
 										const winSource = fixtureWins.get(fixtureKey(summary));
 										return (
 											<tr
-													className="odd:bg-[var(--bench-row-alt)] hover:bg-[color-mix(in_srgb,var(--cyan)_8%,transparent)]"
+												className="odd:bg-(--bench-row-alt) hover:bg-[color-mix(in_srgb,var(--cyan)_8%,transparent)]"
 												key={`${summary.fixture ?? "geral"}-${summary.agent}-${summary.model ?? "default"}-${summary.avg_ms}`}
 											>
 												<td className="border-b border-(--line) p-3 align-top text-(--article-text)">
@@ -504,7 +501,7 @@ export function BenchDashboard() {
 									Execuções individuais
 								</h2>
 							</div>
-								<span className="whitespace-nowrap text-(--muted)">
+							<span className="whitespace-nowrap text-(--muted)">
 								{visibleSamples.length} de {filteredSamples.length}
 							</span>
 						</div>
@@ -516,7 +513,7 @@ export function BenchDashboard() {
 							{sampleAgents.map((agent) => (
 								<button
 									aria-selected={agent === selectedSampleAgent}
-										className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
+									className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
 									key={agent}
 									onClick={() => setSelectedSampleAgent(agent)}
 									role="tab"
@@ -529,7 +526,7 @@ export function BenchDashboard() {
 						<div className="grid grid-cols-2 gap-3.5 max-[900px]:grid-cols-1">
 							{visibleSamples.map((sample) => (
 								<article
-										className="grid gap-3.5 rounded-sm border border-(--line) bg-[linear-gradient(180deg,color-mix(in_srgb,var(--cyan)_6%,transparent),transparent),var(--bench-panel)] p-[18px]"
+									className="grid gap-3.5 rounded-sm border border-(--line) bg-[linear-gradient(180deg,color-mix(in_srgb,var(--cyan)_6%,transparent),transparent),var(--bench-panel)] p-[18px]"
 									key={`${sample.fixture}-${sample.agent}-${sample.iteration}-${sample.duration_ms}`}
 								>
 									<header className="flex items-start justify-between gap-4">
@@ -538,10 +535,10 @@ export function BenchDashboard() {
 												{sample.fixture}
 											</strong>
 											<div className="flex flex-row align-middle items-end gap-2">
-													<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
+												<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
 													{sample.agent}
 												</span>
-													<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
+												<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
 													{sample.model ? ` / ${sample.model}` : ""}
 												</span>
 											</div>
@@ -556,7 +553,7 @@ export function BenchDashboard() {
 											<XCircle className="shrink-0 text-(--red)" aria-hidden="true" size={20} />
 										)}
 									</header>
-										<code className="block rounded-sm border border-(--line) bg-[var(--bench-code-bg)] px-3.5 py-3 font-mono text-xs italic leading-[1.58] text-[var(--amber)]">
+									<code className="block rounded-sm border border-(--line) bg-[var(--bench-code-bg)] px-3.5 py-3 font-mono text-xs italic leading-[1.58] text-[var(--amber)]">
 										{sample.message ?? sample.error ?? "sem mensagem"}
 									</code>
 									<dl className="grid grid-cols-3 gap-3 max-[540px]:grid-cols-1">
