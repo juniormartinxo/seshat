@@ -14,6 +14,7 @@ import {
   Workflow
 } from "lucide-react";
 import Link from "next/link";
+import { ThemeToggle } from "./theme-toggle";
 
 const commands = [
   { prompt: "cargo install --git https://github.com/juniormartinxo/seshat", tone: "muted" },
@@ -84,6 +85,7 @@ export default function Home() {
           <a href="https://github.com/juniormartinxo/seshat" target="_blank" rel="noreferrer">
             GitHub
           </a>
+          <ThemeToggle />
         </nav>
       </header>
 
