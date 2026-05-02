@@ -46,6 +46,13 @@ type BenchReport = {
 };
 
 const benchJsonPath = "/data/bench.json";
+const dashboardWidthClass = "mx-auto w-[calc(100%_-_48px)] max-w-[1180px] max-[540px]:w-[calc(100%_-_32px)]";
+const accentCardClass =
+  "bench-accent-fx relative overflow-hidden rounded-sm border border-white/[0.095] bg-[#0d1316]/80 shadow-[0_22px_72px_rgba(0,0,0,0.22),inset_0_1px_0_rgba(242,245,239,0.05)]";
+const panelClass = `${accentCardClass} mt-5 p-[clamp(20px,3vw,28px)] backdrop-blur-lg max-[540px]:p-4`;
+
+const kickerClass = "text-[0.78rem] font-extrabold uppercase tracking-[0.12em] text-[#67e480]";
+const valueClass = "mt-2 block wrap-break-words text-[1.08rem] font-extrabold text-[#f2f5ef]";
 
 function isBenchReport(value: unknown): value is BenchReport {
   if (!value || typeof value !== "object") {
@@ -115,6 +122,7 @@ function fixtureKey(summary: AgentSummary) {
 export function BenchDashboard() {
   const [report, setReport] = useState<BenchReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFixture, setSelectedFixture] = useState("");
   const [selectedSampleAgent, setSelectedSampleAgent] = useState("");
 
   const loadReport = async () => {
@@ -176,6 +184,43 @@ export function BenchDashboard() {
     return [...orderedAgents, ...extraAgents];
   }, [report]);
 
+  const fixtureSummaries = useMemo(() => {
+    if (!report) {
+      return [];
+    }
+
+    return report.summaries.length ? report.summaries : report.overall;
+  }, [report]);
+
+  const fixtureTabs = useMemo(() => {
+    if (!report?.summaries.length) {
+      return [];
+    }
+
+    const summarizedFixtures = new Set(
+      report.summaries
+        .map((summary) => summary.fixture)
+        .filter((fixture): fixture is string => Boolean(fixture))
+    );
+    const orderedFixtures = report.fixtures.filter((fixture) => summarizedFixtures.has(fixture));
+    const extraFixtures = [...summarizedFixtures].filter((fixture) => !orderedFixtures.includes(fixture));
+
+    return [...orderedFixtures, ...extraFixtures];
+  }, [report]);
+
+  useEffect(() => {
+    if (!fixtureTabs.length) {
+      if (selectedFixture) {
+        setSelectedFixture("");
+      }
+      return;
+    }
+
+    if (!fixtureTabs.includes(selectedFixture)) {
+      setSelectedFixture(fixtureTabs[0]);
+    }
+  }, [fixtureTabs, selectedFixture]);
+
   useEffect(() => {
     if (!sampleAgents.length) {
       if (selectedSampleAgent) {
@@ -199,103 +244,137 @@ export function BenchDashboard() {
       : report.samples;
   }, [report, selectedSampleAgent]);
 
+  const activeFixture = selectedFixture || fixtureTabs[0] || "";
+  const filteredFixtureSummaries = useMemo(() => {
+    if (!activeFixture || !report?.summaries.length) {
+      return fixtureSummaries;
+    }
+
+    return fixtureSummaries.filter((summary) => summary.fixture === activeFixture);
+  }, [activeFixture, fixtureSummaries, report?.summaries.length]);
+
   const visibleSamples = useMemo(() => filteredSamples.slice(0, 12), [filteredSamples]);
   const winner = report?.overall[0];
 
   return (
-    <section className="benchDashboard">
+    <section className={`${dashboardWidthClass} relative z-[1] pb-[92px]`}>
       {!report ? (
-        <div className="benchEmpty">
-          <h2>Gere o JSON de bench.</h2>
-          <p>
+        <div className={`${accentCardClass} mt-5 p-[clamp(24px,5vw,42px)]`}>
+          <h2 className="m-0 text-[1.65rem] font-black">Gere o JSON de bench.</h2>
+          <p className="mt-3 max-w-[680px] leading-[1.65] text-[#a7b0aa]">
             A pagina espera o arquivo em <code>site/public/data/bench.json</code>.
           </p>
-          {error ? <p className="benchError">Detalhe: {error}</p> : null}
+          {error ? <p className="mt-1.5 text-[0.92rem] text-[#ffaaa6]">Detalhe: {error}</p> : null}
         </div>
       ) : (
         <>
-          <div className="benchMeta">
-            <article>
-              <span>Gerado em</span>
-              <strong>{report.generated_at ? formatDate(report.generated_at) : "nao informado"}</strong>
+          <div className="mt-5 grid grid-cols-3 gap-3.5 max-[900px]:grid-cols-1">
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Gerado em</span>
+              <strong className={valueClass}>
+                {report.generated_at ? formatDate(report.generated_at) : "nao informado"}
+              </strong>
             </article>
-            <article>
-              <span>Versao</span>
-              <strong>{report.seshat_version ? `seshat ${report.seshat_version}` : "nao informado"}</strong>
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Versao</span>
+              <strong className={valueClass}>
+                {report.seshat_version ? `seshat ${report.seshat_version}` : "nao informado"}
+              </strong>
             </article>
-            <article>
-              <span>Iteracoes</span>
-              <strong>{report.iterations}</strong>
-            </article>
-          </div>
-
-          <div className="benchSummaryGrid">
-            <article className="benchWinner">
-              <Trophy aria-hidden="true" size={22} />
-              <span>Melhor geral</span>
-              <strong>{winner?.agent ?? "-"}</strong>
-              <p>{winner?.model ?? "modelo nao informado"}</p>
-            </article>
-            <article>
-              <span>Agentes</span>
-              <strong>{report.agents.length}</strong>
-              <p>{report.agents.join(", ")}</p>
-            </article>
-            <article>
-              <span>Fixtures</span>
-              <strong>{report.fixtures.length}</strong>
-              <p>{report.fixtures.join(", ")}</p>
-            </article>
-            <article>
-              <span>Amostras</span>
-              <strong>{report.samples.length}</strong>
-              <p>show_samples: {report.show_samples}</p>
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Iteracoes</span>
+              <strong className={valueClass}>{report.iterations}</strong>
             </article>
           </div>
 
-          <div className="benchPanel">
-            <div className="benchPanelHeader">
+          <div className="mt-3.5 grid grid-cols-[1.2fr_repeat(3,minmax(0,1fr))] gap-3.5 max-[900px]:grid-cols-1">
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Agentes</span>
+              <strong className={valueClass}>{report.agents.length}</strong>
+              <p className="mt-2.5 leading-normal text-[#a7b0aa]">{report.agents.join(", ")}</p>
+            </article>
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Fixtures</span>
+              <strong className={valueClass}>{report.fixtures.length}</strong>
+              <p className="mt-2.5 leading-normal text-[#a7b0aa]">{report.fixtures.join(", ")}</p>
+            </article>
+            <article className={`${accentCardClass} p-[18px]`}>
+              <span className="text-mono text-xs">Amostras</span>
+              <strong className={valueClass}>{report.samples.length}</strong>
+              <p className="mt-2.5 leading-normal text-[#a7b0aa]">show_samples: {report.show_samples}</p>
+            </article>
+          </div>
+
+          <div className={panelClass}>
+            <div className="mb-[18px] flex items-end justify-between gap-6 max-[900px]:flex-col max-[900px]:items-start">
               <div>
-                <p className="sectionKicker">Ranking</p>
-                <h2>Desempenho geral por agente.</h2>
+                <p className={kickerClass}>Ranking</p>
+                <h2 className="mt-2 text-[clamp(1.7rem,3.4vw,2.7rem)] font-black leading-none">
+                  Desempenho geral por agente.
+                </h2>
               </div>
             </div>
-            <div className="benchRanking">
+            <div className="grid grid-cols-3 gap-3.5 max-[900px]:grid-cols-1">
+            <article
+              className={`${accentCardClass} border-[#8bc6bd]/35 bg-[linear-gradient(135deg,rgba(139,198,189,0.18),rgba(255,180,84,0.06)),rgba(13,25,22,0.86)] p-[18px]`}
+            >
+              <Trophy className="text-[#8bc6bd]" aria-hidden="true" size={22} />
+              <span className="text-mono text-xs">Melhor geral</span>
+              <strong className="mt-2 block wrap-break-words text-[2.2rem] font-black text-[#f2f5ef]">
+                {winner?.agent ?? "-"}
+              </strong>
+              <p className="mt-2.5 leading-normal text-[#a7b0aa]">{winner?.model ?? "modelo nao informado"}</p>
+            </article>
               {report.overall.map((summary, index) => {
                 const width = bestAvgMs ? Math.max(6, (summary.avg_ms / bestAvgMs) * 100) : 0;
 
                 return (
-                  <article className="benchRankCard" key={`${summary.agent}-${summary.model ?? "default"}`}>
-                    <div className="benchRankHead">
-                      <span>#{index + 1}</span>
-                      <div>
-                        <strong>{summary.agent}</strong>
-                        <p>{summary.model ?? "modelo nao informado"}</p>
+                  <article
+                    className="rounded-sm border border-white/10 bg-[linear-gradient(180deg,rgba(139,198,189,0.056),rgba(139,198,189,0)),rgba(8,13,15,0.74)] p-[18px]"
+                    key={`${summary.agent}-${summary.model ?? "default"}`}
+                  >
+                    <div className="flex items-center gap-3.5">
+                      <span className="inline-flex size-[34px] items-center justify-center rounded-full bg-[#8bc6bd]/15 font-black text-[#8bc6bd]">
+                        #{index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <strong className="block text-[1.15rem] text-[#f2f5ef]">{summary.agent}</strong>
+                        <p className="mt-1 text-[0.9rem] text-[#a7b0aa]">{summary.model ?? "modelo nao informado"}</p>
                       </div>
                     </div>
-                    <div className="benchBar" aria-label={`Media ${formatDuration(summary.avg_ms)}`}>
-                      <span style={{ width: `${width}%` }} />
+                    <div
+                      className="my-[18px] h-2.5 overflow-hidden rounded-full bg-white/10"
+                      aria-label={`Media ${formatDuration(summary.avg_ms)}`}
+                    >
+                      <span
+                        className="block h-full rounded-full bg-[linear-gradient(90deg,#8bc6bd,#ffb454,#51d7ff)]"
+                        style={{ width: `${width}%` }}
+                      />
                     </div>
-                    <dl>
+                    <dl className="grid grid-cols-2 gap-3 max-[540px]:grid-cols-1">
                       <div>
-                        <dt>Sucesso</dt>
-                        <dd>{summary.success}/{summary.total} ({successRate(summary)}%)</dd>
+                        <dt className="text-mono text-xs">Sucesso</dt>
+                        <dd className="mt-1 font-extrabold text-[#f2f5ef]">
+                          {summary.success}/{summary.total} ({successRate(summary)}%)
+                        </dd>
                       </div>
                       <div>
-                        <dt>CC valido</dt>
-                        <dd>{summary.conventional_valid}/{summary.total} ({validRate(summary)}%)</dd>
+                        <dt className="text-mono text-xs">CC valido</dt>
+                        <dd className="mt-1 font-extrabold text-[#f2f5ef]">
+                          {summary.conventional_valid}/{summary.total} ({validRate(summary)}%)
+                        </dd>
                       </div>
                       <div>
-                        <dt>Media</dt>
-                        <dd>{formatDuration(summary.avg_ms)}</dd>
+                        <dt className="text-mono text-xs">Media</dt>
+                        <dd className="mt-1 font-extrabold text-[#f2f5ef]">{formatDuration(summary.avg_ms)}</dd>
                       </div>
                       <div>
-                        <dt>P95</dt>
-                        <dd>{formatDuration(summary.p95_ms)}</dd>
+                        <dt className="text-mono text-xs">P95</dt>
+                        <dd className="mt-1 font-extrabold text-[#f2f5ef]">{formatDuration(summary.p95_ms)}</dd>
                       </div>
                       <div>
-                        <dt>Fixtures vencidas</dt>
-                        <dd>{summary.fixtures_won ?? 0}</dd>
+                        <dt className="text-mono text-xs">Fixtures vencidas</dt>
+                        <dd className="mt-1 font-extrabold text-[#f2f5ef]">{summary.fixtures_won ?? 0}</dd>
                       </div>
                     </dl>
                   </article>
@@ -304,42 +383,75 @@ export function BenchDashboard() {
             </div>
           </div>
 
-          <div className="benchPanel">
-            <div className="benchPanelHeader">
+          <div className={panelClass}>
+            <div className="mb-[18px] flex items-end justify-between gap-6 max-[900px]:flex-col max-[900px]:items-start">
               <div>
-                <p className="sectionKicker">Fixtures</p>
-                <h2>Resumo por fixture e agente.</h2>
+                <p className={kickerClass}>Fixtures</p>
+                <h2 className="mt-2 text-[clamp(1.7rem,3.4vw,2.7rem)] font-black leading-none">
+                  Resumo por fixture e agente.
+                </h2>
               </div>
             </div>
-            <div className="benchTableWrap">
-              <table className="benchTable">
+            {fixtureTabs.length ? (
+              <div
+                className="mb-[18px] flex flex-wrap gap-2 border-b border-white/10 pb-3.5"
+                role="tablist"
+                aria-label="Fixtures por linguagem"
+              >
+                {fixtureTabs.map((fixture) => (
+                  <button
+                    aria-selected={fixture === activeFixture}
+                    className="min-h-9 cursor-pointer rounded-sm border border-white/15 bg-white/[0.045] px-3.5 text-[0.9rem] font-extrabold text-[#a7b0aa] aria-selected:border-[#8bc6bd]/40 aria-selected:bg-[linear-gradient(90deg,rgba(139,198,189,0.22),rgba(255,180,84,0.1))] aria-selected:text-[#f2f5ef]"
+                    key={fixture}
+                    onClick={() => setSelectedFixture(fixture)}
+                    role="tab"
+                    type="button"
+                  >
+                    {fixture}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse">
                 <thead>
                   <tr>
-                    <th>Fixture</th>
-                    <th>Agente</th>
-                    <th>Modelo</th>
-                    <th>Sucesso</th>
-                    <th>CC valido</th>
-                    <th>Media</th>
-                    <th>P95</th>
-                    <th>Wins</th>
+                    {["Fixture", "Agente", "Modelo", "Sucesso", "CC valido", "Media", "P95", "Wins"].map((heading) => (
+                      <th
+                        className="border-b border-white/10 p-3 text-left align-top text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-[#a7b0aa]"
+                        key={heading}
+                      >
+                        {heading}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {(report.summaries.length ? report.summaries : report.overall).map((summary) => {
+                  {filteredFixtureSummaries.map((summary) => {
                     const winSource = fixtureWins.get(fixtureKey(summary));
                     return (
                       <tr
+                        className="odd:bg-white/[0.025] hover:bg-[#51d7ff]/5"
                         key={`${summary.fixture ?? "geral"}-${summary.agent}-${summary.model ?? "default"}-${summary.avg_ms}`}
                       >
-                        <td>{summary.fixture ?? "geral"}</td>
-                        <td>{summary.agent}</td>
-                        <td>{summary.model ?? "-"}</td>
-                        <td>{summary.success}/{summary.total}</td>
-                        <td>{summary.conventional_valid}/{summary.total}</td>
-                        <td>{formatDuration(summary.avg_ms)}</td>
-                        <td>{formatDuration(summary.p95_ms)}</td>
-                        <td>{winSource?.fixtures_won ?? summary.fixtures_won ?? 0}</td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">{summary.fixture ?? "geral"}</td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">{summary.agent}</td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">{summary.model ?? "-"}</td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">
+                          {summary.success}/{summary.total}
+                        </td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">
+                          {summary.conventional_valid}/{summary.total}
+                        </td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">
+                          {formatDuration(summary.avg_ms)}
+                        </td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">
+                          {formatDuration(summary.p95_ms)}
+                        </td>
+                        <td className="border-b border-white/10 p-3 align-top text-[#d8dfda]">
+                          {winSource?.fixtures_won ?? summary.fixtures_won ?? 0}
+                        </td>
                       </tr>
                     );
                   })}
@@ -348,18 +460,27 @@ export function BenchDashboard() {
             </div>
           </div>
 
-          <div className="benchPanel">
-            <div className="benchPanelHeader">
+          <div className={panelClass}>
+            <div className="mb-[18px] flex items-end justify-between gap-6 max-[900px]:flex-col max-[900px]:items-start">
               <div>
-                <p className="sectionKicker">Samples</p>
-                <h2>Execuções individuais</h2>
+                <p className={kickerClass}>Samples</p>
+                <h2 className="mt-2 text-[clamp(1.7rem,3.4vw,2.7rem)] font-black leading-none">
+                  Execuções individuais
+                </h2>
               </div>
-              <span>{visibleSamples.length} de {filteredSamples.length}</span>
+              <span className="whitespace-nowrap text-[#a7b0aa]">
+                {visibleSamples.length} de {filteredSamples.length}
+              </span>
             </div>
-            <div className="benchTabs" role="tablist" aria-label="Samples por agente">
+            <div
+              className="mb-[18px] flex flex-wrap gap-2 border-b border-white/10 pb-3.5"
+              role="tablist"
+              aria-label="Samples por agente"
+            >
               {sampleAgents.map((agent) => (
                 <button
                   aria-selected={agent === selectedSampleAgent}
+                  className="min-h-9 cursor-pointer rounded-sm border border-white/15 bg-white/[0.045] px-3.5 text-[0.9rem] font-extrabold text-[#a7b0aa] aria-selected:border-[#8bc6bd]/40 aria-selected:bg-[linear-gradient(90deg,rgba(139,198,189,0.22),rgba(255,180,84,0.1))] aria-selected:text-[#f2f5ef]"
                   key={agent}
                   onClick={() => setSelectedSampleAgent(agent)}
                   role="tab"
@@ -369,43 +490,49 @@ export function BenchDashboard() {
                 </button>
               ))}
             </div>
-            <div className="benchSamples">
+            <div className="grid grid-cols-2 gap-3.5 max-[900px]:grid-cols-1">
               {visibleSamples.map((sample) => (
                 <article
-                  className="benchSample"
+                  className="grid gap-3.5 rounded-sm border border-white/10 bg-[linear-gradient(180deg,rgba(139,198,189,0.048),rgba(139,198,189,0)),rgba(8,13,15,0.74)] p-[18px]"
                   key={`${sample.fixture}-${sample.agent}-${sample.iteration}-${sample.duration_ms}`}
                 >
-                  <header>
-                    <div>
-                      <strong>{sample.fixture}</strong>
-                      <span>
+                  <header className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <strong className="block text-[1.18rem] text-[#f2f5ef]">{sample.fixture}</strong>
+                      <div className="flex flex-row align-middle items-end gap-2">
+                      <span className="text-xs rounded-sm bg-gray-950 px-2 py-0.5 font-mono">
                         {sample.agent}
+                        </span>
+                        <span className="text-xs rounded-sm bg-gray-950 px-2 py-0.5 font-mono ">
                         {sample.model ? ` / ${sample.model}` : ""}
                       </span>
+                      </div>
                     </div>
                     {sample.success ? (
-                      <CheckCircle2 className="sampleOk" aria-hidden="true" size={20} />
+                      <CheckCircle2 className="shrink-0 text-[#67e480]" aria-hidden="true" size={20} />
                     ) : (
-                      <XCircle className="sampleFail" aria-hidden="true" size={20} />
+                      <XCircle className="shrink-0 text-[#ff6b6b]" aria-hidden="true" size={20} />
                     )}
                   </header>
-                  <code className="text-xs font-mono italic">{sample.message ?? sample.error ?? "sem mensagem"}</code>
-                  <div className="flex justify-between">
-                    <div className="font-mono text-md">
-                      <span className="text-xs">Iteracao</span>
-                      <dd>{sample.iteration}</dd>
+                  <code className="block rounded-sm border border-white/10 bg-[#030709]/40 px-3.5 py-3 font-mono text-xs italic leading-[1.58] text-amber-200">
+                    {sample.message ?? sample.error ?? "sem mensagem"}
+                  </code>
+                  <dl className="grid grid-cols-3 gap-3 max-[540px]:grid-cols-1">
+                    <div>
+                      <dt className="text-mono text-xs">Iteracao</dt>
+                      <dd className="mt-1 font-extrabold text-[#f2f5ef]">{sample.iteration}</dd>
                     </div>
-                    <span className="border-r border-e-green-950"></span>
-                    <div className="font-mono text-center">
-                      <span className="text-xs">Duracao</span>
-                      <dd>{formatDuration(sample.duration_ms)}</dd>
+                    <div>
+                      <dt className="text-mono text-xs">Duracao</dt>
+                      <dd className="mt-1 font-extrabold text-[#f2f5ef]">{formatDuration(sample.duration_ms)}</dd>
                     </div>
-                    <span className="border-r border-e-green-950"></span>
-                    <div className="font-mono text-right">
-                      <span className="text-xs">CC valido</span>
-                      <dd>{sample.conventional_valid ? "sim" : "nao"}</dd>
+                    <div>
+                      <dt className="text-mono text-xs">CC valido</dt>
+                      <dd className="mt-1 font-extrabold text-[#f2f5ef]">
+                        {sample.conventional_valid ? "sim" : "nao"}
+                      </dd>
                     </div>
-                  </div>
+                  </dl>
                 </article>
               ))}
             </div>
