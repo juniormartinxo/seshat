@@ -27,7 +27,7 @@ ROOT           := $(abspath $(HERE)/../..)
 
 AGENTS         ?= codex,claude,ollama
 FIXTURES       ?= rust,python,typescript
-ITERATIONS     ?= 5
+ITERATIONS     ?= 2
 SHOW_SAMPLES   ?= 3
 PROFILE        ?= amjr
 OLLAMA_MODEL   ?= seshat-commit
