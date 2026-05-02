@@ -10,28 +10,28 @@ try {
 `;
 
 export const metadata: Metadata = {
-  title: "Seshat",
-  description:
-    "CLI para commits automatizados com Conventional Commits, flow por arquivo e modelo local no Ollama.",
-  openGraph: {
-    title: "Seshat",
-    description:
-      "CLI para commits automatizados com Conventional Commits, flow por arquivo e modelo local no Ollama.",
-    type: "website"
-  }
+	title: "Seshat",
+	description:
+		"CLI para commits automatizados com Conventional Commits, flow por arquivo e modelo local no Ollama.",
+	openGraph: {
+		title: "Seshat",
+		description:
+			"CLI para commits automatizados com Conventional Commits, flow por arquivo e modelo local no Ollama.",
+		type: "website"
+	}
 };
 
 export default function RootLayout({
-  children
+	children
 }: Readonly<{
-  children: React.ReactNode;
+	children: React.ReactNode;
 }>) {
-  return (
-    <html lang="pt-BR" dir="ltr" data-scroll-behavior="smooth" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
-      </head>
-      <body>{children}</body>
-    </html>
-  );
+	return (
+		<html lang="pt-BR" dir="ltr" data-scroll-behavior="smooth" suppressHydrationWarning>
+			<head>
+				<script dangerouslySetInnerHTML={{ __html: themeScript }} />
+			</head>
+			<body>{children}</body>
+		</html>
+	);
 }
