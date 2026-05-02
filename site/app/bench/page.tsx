@@ -28,15 +28,30 @@ export default function BenchPage() {
         </nav>
       </header>
 
-      <section className="benchHero">
-        <div className="min-w-0">
+      <section className="benchHero" aria-labelledby="bench-title">
+        <div className="benchHeroCopy min-w-0">
           <p className="sectionKicker">
             <BarChart3 aria-hidden="true" size={16} />
             Benchmark de agentes
           </p>
-          <h1>Benchmark analytics.</h1>
+          <h1 id="bench-title">Benchmark analytics.</h1>
+          <div className="benchHeroStats" aria-label="Parametros do bench">
+            <span>codex</span>
+            <span>claude</span>
+            <span>ollama</span>
+          </div>
         </div>
-        <pre className="min-w-0 whitespace-pre overflow-x-auto">{`seshat bench agents \\
+        <div className="benchHeroVisual">
+          <div className="benchHeroChart" aria-hidden="true">
+            <span style={{ height: "36%" }} />
+            <span style={{ height: "62%" }} />
+            <span style={{ height: "45%" }} />
+            <span style={{ height: "78%" }} />
+            <span style={{ height: "56%" }} />
+            <span style={{ height: "88%" }} />
+            <span style={{ height: "72%" }} />
+          </div>
+          <pre className="min-w-0 whitespace-pre overflow-x-auto">{`seshat bench agents \\
   --agents codex,claude,ollama \\
   --fixtures rust,python,typescript \\
   --iterations 5 \\
@@ -55,6 +70,7 @@ export default function BenchPage() {
   --claude-model claude-sonnet-4-6 \\
   --ollama-model juniormartinxo/seshat-commit \\
   --profile amjr`}</pre>
+        </div>
       </section>
 
       <BenchDashboard />
