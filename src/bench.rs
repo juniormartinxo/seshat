@@ -193,8 +193,11 @@ pub struct AgentBenchReport {
     pub overall: Vec<AgentBenchOverallSummary>,
     pub samples: Vec<AgentBenchSample>,
     pub show_samples: usize,
-    /// Resumo dos overrides aplicados (informativo para o relatório).
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    /// Resumo dos overrides aplicados (informativo para o relatório TUI/HTML).
+    /// **Não exportado no JSON** — pode conter paths privados (CODEX_HOME,
+    /// CLAUDE_CONFIG_DIR) que não devem ir pra um JSON público consumido por
+    /// site/app.
+    #[serde(skip)]
     pub override_notes: Vec<String>,
 }
 
