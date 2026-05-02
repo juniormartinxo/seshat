@@ -10,18 +10,18 @@ export const metadata: Metadata = {
 
 export default function BenchPage() {
   return (
-    <main className="benchPage">
-      <header className="benchTopbar" aria-label="Navegacao do bench">
-        <Link className="docsBrand" href="/">
+    <main className="benchPage min-h-dvh text-[#f2f5ef]">
+      <header className="benchTopbar supports-[backdrop-filter]:backdrop-blur-xl" aria-label="Navegacao do bench">
+        <Link className="docsBrand transition-colors hover:text-[#67e480]" href="/">
           <Terminal aria-hidden="true" size={20} />
           <span>Seshat</span>
         </Link>
-        <nav>
-          <Link href="/">
+        <nav className="text-sm">
+          <Link className="transition-colors hover:text-[#67e480]" href="/">
             <ArrowLeft aria-hidden="true" size={16} />
             Site
           </Link>
-          <Link href="/docs">
+          <Link className="transition-colors hover:text-[#67e480]" href="/docs">
             <FileJson aria-hidden="true" size={16} />
             Docs
           </Link>
@@ -29,25 +29,32 @@ export default function BenchPage() {
       </header>
 
       <section className="benchHero">
-        <div>
+        <div className="min-w-0">
           <p className="sectionKicker">
             <BarChart3 aria-hidden="true" size={16} />
             Benchmark de agentes
           </p>
-          <h1>Carregue o resultado do bench.</h1>
-          <p>
-            A pagina le o schema JSON v1 gerado por <code>seshat bench agents --json</code> e
-            transforma o ranking em uma visao navegavel para comparar agents, fixtures e mensagens.
-          </p>
+          <h1>Benchmark analytics.</h1>
         </div>
-        <pre>{`cd /home/junior/apps/jm/seshat-rs/site/public/data
-
-seshat bench agents \\
+        <pre className="min-w-0 whitespace-pre overflow-x-auto">{`seshat bench agents \\
   --agents codex,claude,ollama \\
   --fixtures rust,python,typescript \\
   --iterations 5 \\
+  --model seshat-commit \\
+  --format text \\
   --pt-br \\
-  --json`}</pre>
+  --keep-temp \\
+  --show-samples 3 \\
+  --report bench.html \\
+  --json bench.json \\
+  --codex-bin codex \\
+  --codex-home ~/.codex \\
+  --codex-model gpt-5.3-codex \\
+  --claude-bin claude \\
+  --claude-config-dir ~/.claude \\
+  --claude-model claude-sonnet-4-6 \\
+  --ollama-model juniormartinxo/seshat-commit \\
+  --profile amjr`}</pre>
       </section>
 
       <BenchDashboard />
