@@ -647,14 +647,41 @@ footer div {
 .benchPage {
   position: relative;
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
-    linear-gradient(135deg, rgba(103, 228, 128, 0.14) 0%, rgba(103, 228, 128, 0) 34%),
-    linear-gradient(215deg, rgba(81, 215, 255, 0.12) 0%, rgba(81, 215, 255, 0) 36%),
-    repeating-linear-gradient(90deg, rgba(242, 245, 239, 0.026) 0 1px, transparent 1px 88px),
-    repeating-linear-gradient(0deg, rgba(242, 245, 239, 0.018) 0 1px, transparent 1px 88px),
-    linear-gradient(180deg, #08100e 0%, #080b0c 44%, #090b0c 100%);
+    linear-gradient(112deg, rgba(87, 121, 131, 0.24), rgba(87, 121, 131, 0) 42%),
+    linear-gradient(248deg, rgba(62, 219, 192, 0.16), rgba(62, 219, 192, 0) 37%),
+    repeating-linear-gradient(90deg, rgba(242, 245, 239, 0.018) 0 1px, transparent 1px 96px),
+    repeating-linear-gradient(0deg, rgba(242, 245, 239, 0.014) 0 1px, transparent 1px 96px),
+    linear-gradient(180deg, #1b252c 0%, #111a20 46%, #090c0e 100%);
   color: var(--text);
+  isolation: isolate;
+}
+
+.benchPage::before,
+.benchPage::after {
+  content: "";
+  position: absolute;
+  top: 88px;
+  z-index: -1;
+  width: min(260px, 26vw);
+  height: min(760px, 74svh);
+  border: 1px solid rgba(242, 245, 239, 0.06);
+  background:
+    linear-gradient(180deg, rgba(242, 245, 239, 0.04), rgba(242, 245, 239, 0)),
+    rgba(12, 18, 23, 0.54);
+  box-shadow: 0 34px 120px rgba(0, 0, 0, 0.34);
+  opacity: 0.55;
+}
+
+.benchPage::before {
+  left: max(-120px, -7vw);
+}
+
+.benchPage::after {
+  right: max(-150px, -9vw);
+  transform: translateY(90px);
 }
 
 .benchTopbar {
@@ -666,9 +693,9 @@ footer div {
   justify-content: space-between;
   gap: 24px;
   padding: 16px clamp(18px, 5vw, 64px);
-  background: rgba(7, 10, 10, 0.74);
-  border-bottom: 1px solid rgba(103, 228, 128, 0.18);
-  backdrop-filter: blur(14px);
+  background: rgba(20, 30, 36, 0.56);
+  border-bottom: 1px solid rgba(242, 245, 239, 0.08);
+  backdrop-filter: blur(18px);
 }
 
 .benchTopbar nav,
@@ -693,16 +720,53 @@ footer div {
 
 .benchHero,
 .benchDashboard {
-  width: min(1240px, calc(100% - 40px));
+  width: min(1180px, calc(100% - 48px));
   margin: 0 auto;
 }
 
 .benchHero {
+  position: relative;
+  overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
-  gap: clamp(28px, 5vw, 72px);
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+  gap: clamp(30px, 5vw, 76px);
   align-items: center;
-  padding: clamp(42px, 7vw, 84px) 0 clamp(28px, 5vw, 48px);
+  min-height: clamp(470px, 64svh, 610px);
+  margin-top: clamp(24px, 4vw, 46px);
+  padding: clamp(34px, 6vw, 68px);
+  border: 1px solid rgba(242, 245, 239, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(118deg, rgba(242, 245, 239, 0.09), rgba(242, 245, 239, 0.02) 34%, rgba(242, 245, 239, 0.05)),
+    linear-gradient(180deg, rgba(27, 37, 44, 0.92), rgba(10, 16, 19, 0.9));
+  box-shadow:
+    0 42px 120px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(242, 245, 239, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.benchHero::before,
+.benchHero::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.benchHero::before {
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(242, 245, 239, 0.044) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(242, 245, 239, 0.032) 1px, transparent 1px);
+  background-size: 88px 88px;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.7), transparent 78%);
+}
+
+.benchHero::after {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(103, 228, 128, 0.5), rgba(81, 215, 255, 0.45), transparent);
 }
 
 .benchHero > *,
@@ -711,24 +775,42 @@ footer div {
   min-width: 0;
 }
 
+.benchHeroCopy,
+.benchHeroVisual {
+  position: relative;
+  z-index: 1;
+}
+
 .benchHero h1 {
-  max-width: 780px;
-  margin: 14px 0 0;
-  font-size: clamp(3rem, 6vw, 5rem);
+  max-width: 620px;
+  margin: 22px 0 0;
+  font-size: clamp(3.05rem, 5.8vw, 4.65rem);
   font-weight: 900;
   line-height: 0.98;
   letter-spacing: 0;
-  overflow-wrap: break-word;
+  overflow-wrap: normal;
+  word-break: normal;
   text-wrap: balance;
 }
 
-.benchHero p:not(.sectionKicker) {
-  max-width: 720px;
-  margin: 24px 0 0;
-  color: #d8dfda;
-  font-size: 1.16rem;
-  line-height: 1.62;
-  overflow-wrap: anywhere;
+.benchHeroStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 32px;
+}
+
+.benchHeroStats span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgba(242, 245, 239, 0.13);
+  border-radius: 999px;
+  background: rgba(242, 245, 239, 0.045);
+  color: #d9e2df;
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .benchHero code,
@@ -737,28 +819,56 @@ footer div {
   overflow-wrap: anywhere;
 }
 
+.benchHeroVisual {
+  display: grid;
+  gap: 14px;
+}
+
+.benchHeroChart {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  height: 136px;
+  padding: 18px 20px;
+  border: 1px solid rgba(242, 245, 239, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(81, 215, 255, 0.07), rgba(81, 215, 255, 0)),
+    rgba(6, 11, 13, 0.58);
+}
+
+.benchHeroChart span {
+  flex: 1;
+  min-width: 16px;
+  border-radius: 999px 999px 3px 3px;
+  background: linear-gradient(180deg, #8bc6bd, rgba(255, 180, 84, 0.68));
+  box-shadow: 0 0 26px rgba(139, 198, 189, 0.18);
+}
+
 .benchHero pre {
   width: 100%;
   max-width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 22px;
+  padding: 20px 22px;
   overflow-x: auto;
   overflow-wrap: anywhere;
   word-break: break-all;
-  border: 1px solid rgba(103, 228, 128, 0.32);
+  border: 1px solid rgba(139, 198, 189, 0.28);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(103, 228, 128, 0.08), rgba(81, 215, 255, 0.05)),
-    rgba(5, 8, 8, 0.84);
-  color: #d8e1dc;
-  font-size: 0.9rem;
-  line-height: 1.58;
+    linear-gradient(135deg, rgba(139, 198, 189, 0.09), rgba(255, 180, 84, 0.035)),
+    rgba(5, 9, 11, 0.82);
+  color: #edf3f0;
+  font-size: 0.84rem;
+  line-height: 1.56;
   white-space: pre-wrap;
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.24);
 }
 
 .benchDashboard {
+  position: relative;
+  z-index: 1;
   padding-bottom: 92px;
 }
 
@@ -768,26 +878,18 @@ footer div {
   font-size: 0.92rem;
 }
 
-.benchActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.benchActions input {
-  display: none;
-}
-
 .benchEmpty,
 .benchPanel,
 .benchSummaryGrid article,
 .benchMeta article {
-  border: 1px solid rgba(242, 245, 239, 0.1);
+  border: 1px solid rgba(242, 245, 239, 0.095);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(242, 245, 239, 0.044), rgba(242, 245, 239, 0)),
-    rgba(12, 17, 17, 0.88);
-  box-shadow: inset 0 1px 0 rgba(242, 245, 239, 0.04);
+    linear-gradient(180deg, rgba(242, 245, 239, 0.052), rgba(242, 245, 239, 0)),
+    rgba(13, 19, 22, 0.78);
+  box-shadow:
+    0 22px 72px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(242, 245, 239, 0.05);
 }
 
 .benchEmpty {
@@ -811,8 +913,8 @@ footer div {
 .benchMeta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 18px;
+  gap: 14px;
+  margin-top: 20px;
 }
 
 .benchMeta article,
@@ -829,8 +931,8 @@ footer div {
   position: absolute;
   inset: 0 0 auto;
   height: 3px;
-  background: linear-gradient(90deg, var(--green), var(--cyan));
-  opacity: 0.8;
+  background: linear-gradient(90deg, #8bc6bd, rgba(255, 180, 84, 0.72), #51d7ff);
+  opacity: 0.72;
 }
 
 .benchMeta span,
@@ -856,8 +958,8 @@ footer div {
 .benchSummaryGrid {
   display: grid;
   grid-template-columns: 1.2fr repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+  gap: 14px;
+  margin-top: 14px;
 }
 
 .benchSummaryGrid p {
@@ -867,14 +969,14 @@ footer div {
 }
 
 .benchSummaryGrid .benchWinner {
-  border-color: rgba(103, 228, 128, 0.34);
+  border-color: rgba(139, 198, 189, 0.34);
   background:
-    linear-gradient(135deg, rgba(103, 228, 128, 0.16), rgba(81, 215, 255, 0.04)),
-    rgba(8, 20, 14, 0.92);
+    linear-gradient(135deg, rgba(139, 198, 189, 0.18), rgba(255, 180, 84, 0.06)),
+    rgba(13, 25, 22, 0.86);
 }
 
 .benchWinner svg {
-  color: var(--green);
+  color: #8bc6bd;
 }
 
 .benchWinner strong {
@@ -884,8 +986,9 @@ footer div {
 .benchPanel {
   position: relative;
   overflow: hidden;
-  margin-top: 18px;
-  padding: 22px;
+  margin-top: 20px;
+  padding: clamp(20px, 3vw, 28px);
+  backdrop-filter: blur(10px);
 }
 
 .benchPanelHeader {
@@ -898,7 +1001,7 @@ footer div {
 
 .benchPanelHeader h2 {
   margin: 8px 0 0;
-  font-size: clamp(1.8rem, 4vw, 3rem);
+  font-size: clamp(1.7rem, 3.4vw, 2.7rem);
   font-weight: 900;
   line-height: 1;
 }
@@ -911,16 +1014,16 @@ footer div {
 .benchRanking {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .benchRankCard {
   padding: 18px;
-  border: 1px solid rgba(242, 245, 239, 0.11);
+  border: 1px solid rgba(242, 245, 239, 0.1);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(81, 215, 255, 0.052), rgba(81, 215, 255, 0)),
-    rgba(8, 12, 12, 0.78);
+    linear-gradient(180deg, rgba(139, 198, 189, 0.056), rgba(139, 198, 189, 0)),
+    rgba(8, 13, 15, 0.74);
 }
 
 .benchRankHead {
@@ -936,8 +1039,8 @@ footer div {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(103, 228, 128, 0.13);
-  color: var(--green);
+  background: rgba(139, 198, 189, 0.14);
+  color: #8bc6bd;
   font-weight: 900;
 }
 
@@ -965,7 +1068,7 @@ footer div {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--green), var(--cyan));
+  background: linear-gradient(90deg, #8bc6bd, #ffb454, #51d7ff);
 }
 
 .benchRankCard dl,
@@ -1042,24 +1145,26 @@ footer div {
 }
 
 .benchTabs button[aria-selected="true"] {
-  border-color: rgba(103, 228, 128, 0.42);
-  background: linear-gradient(90deg, rgba(103, 228, 128, 0.22), rgba(81, 215, 255, 0.12));
+  border-color: rgba(139, 198, 189, 0.42);
+  background: linear-gradient(90deg, rgba(139, 198, 189, 0.22), rgba(255, 180, 84, 0.1));
   color: var(--text);
 }
 
 .benchSamples {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .benchSample {
+  display: grid;
+  gap: 14px;
   padding: 18px;
   border: 1px solid rgba(242, 245, 239, 0.1);
   border-radius: 8px;
   background:
-    linear-gradient(180deg, rgba(103, 228, 128, 0.045), rgba(103, 228, 128, 0)),
-    rgba(8, 12, 12, 0.78);
+    linear-gradient(180deg, rgba(139, 198, 189, 0.048), rgba(139, 198, 189, 0)),
+    rgba(8, 13, 15, 0.74);
 }
 
 .benchSample header {
@@ -1076,18 +1181,27 @@ footer div {
 
 .benchSample header strong {
   color: var(--text);
+  font-size: 1.18rem;
 }
 
 .benchSample header span {
   margin-top: 4px;
-  color: var(--muted);
+  color: #ffcf98;
   font-size: 0.9rem;
+  overflow-wrap: anywhere;
 }
 
-.benchSample p {
-  margin: 16px 0;
+.benchSample code {
+  display: block;
+  min-height: 58px;
+  padding: 13px 14px;
+  border: 1px solid rgba(242, 245, 239, 0.08);
+  border-radius: 8px;
+  background: rgba(3, 7, 9, 0.42);
   color: #d8dfda;
   line-height: 1.58;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .benchSample dl {
