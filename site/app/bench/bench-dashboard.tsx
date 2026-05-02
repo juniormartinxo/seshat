@@ -203,9 +203,9 @@ export function BenchDashboard() {
   const winner = report?.overall[0];
 
   return (
-    <section className="benchDashboard pb-24">
+    <section className="benchDashboard">
       {!report ? (
-        <div className="benchEmpty mt-5">
+        <div className="benchEmpty">
           <h2>Gere o JSON de bench.</h2>
           <p>
             A pagina espera o arquivo em <code>site/public/data/bench.json</code>.
@@ -360,7 +360,6 @@ export function BenchDashboard() {
               {sampleAgents.map((agent) => (
                 <button
                   aria-selected={agent === selectedSampleAgent}
-                  className="transition-colors"
                   key={agent}
                   onClick={() => setSelectedSampleAgent(agent)}
                   role="tab"
@@ -370,7 +369,7 @@ export function BenchDashboard() {
                 </button>
               ))}
             </div>
-            <div className="flex flex-col gap-4">
+            <div className="benchSamples">
               {visibleSamples.map((sample) => (
                 <article
                   className="benchSample"
@@ -379,7 +378,10 @@ export function BenchDashboard() {
                   <header>
                     <div>
                       <strong>{sample.fixture}</strong>
-                      <span>{sample.agent}{sample.model ? ` / ${sample.model}` : ""}</span>
+                      <span>
+                        {sample.agent}
+                        {sample.model ? ` / ${sample.model}` : ""}
+                      </span>
                     </div>
                     {sample.success ? (
                       <CheckCircle2 className="sampleOk" aria-hidden="true" size={20} />
@@ -387,21 +389,23 @@ export function BenchDashboard() {
                       <XCircle className="sampleFail" aria-hidden="true" size={20} />
                     )}
                   </header>
-                  <p>{sample.message ?? sample.error ?? "sem mensagem"}</p>
-                  <dl>
-                    <div>
-                      <dt>Iteracao</dt>
+                  <code className="text-xs font-mono italic">{sample.message ?? sample.error ?? "sem mensagem"}</code>
+                  <div className="flex justify-between">
+                    <div className="font-mono text-md">
+                      <span className="text-xs">Iteracao</span>
                       <dd>{sample.iteration}</dd>
                     </div>
-                    <div>
-                      <dt>Duracao</dt>
+                    <span className="border-r border-e-green-950"></span>
+                    <div className="font-mono text-center">
+                      <span className="text-xs">Duracao</span>
                       <dd>{formatDuration(sample.duration_ms)}</dd>
                     </div>
-                    <div>
-                      <dt>CC valido</dt>
+                    <span className="border-r border-e-green-950"></span>
+                    <div className="font-mono text-right">
+                      <span className="text-xs">CC valido</span>
                       <dd>{sample.conventional_valid ? "sim" : "nao"}</dd>
                     </div>
-                  </dl>
+                  </div>
                 </article>
               ))}
             </div>
