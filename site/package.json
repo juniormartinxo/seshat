@@ -1,28 +1,34 @@
 {
-  "name": "seshat-site",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build --webpack",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "lucide-react": "latest",
-    "next": "latest",
-    "nextra": "^4.6.1",
-    "react": "latest",
-    "react-dom": "latest"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.2.4",
-    "@types/mdx": "^2.0.13",
-    "@types/node": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "postcss": "^8.5.13",
-    "tailwindcss": "^4.2.4",
-    "typescript": "latest"
-  }
+	"name": "seshat-site",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build --webpack",
+		"start": "next start",
+		"lint": "biome lint .",
+		"lint:next": "next lint",
+		"format": "biome format --write .",
+		"format:check": "biome format .",
+		"check": "biome check .",
+		"check:fix": "biome check --write ."
+	},
+	"dependencies": {
+		"lucide-react": "latest",
+		"next": "latest",
+		"nextra": "^4.6.1",
+		"react": "latest",
+		"react-dom": "latest"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.14",
+		"@tailwindcss/postcss": "^4.2.4",
+		"@types/mdx": "^2.0.13",
+		"@types/node": "latest",
+		"@types/react": "latest",
+		"@types/react-dom": "latest",
+		"postcss": "^8.5.13",
+		"tailwindcss": "^4.2.4",
+		"typescript": "latest"
+	}
 }
