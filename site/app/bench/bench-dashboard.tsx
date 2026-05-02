@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, FileUp, RefreshCw, Trophy, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { CheckCircle2, Trophy, XCircle } from "lucide-react";
 
 type AgentSummary = {
   fixture?: string;
@@ -31,9 +31,9 @@ type BenchSample = {
 };
 
 type BenchReport = {
-  schema_version: number;
-  generated_at: string;
-  seshat_version: string;
+  schema_version?: number;
+  generated_at?: string;
+  seshat_version?: string;
   iterations: number;
   agents: string[];
   agent_selection: string;
@@ -43,11 +43,9 @@ type BenchReport = {
   overall: AgentSummary[];
   samples: BenchSample[];
   show_samples: number;
-  override_notes?: string[];
 };
 
-const defaultJsonPath = "/data/seshat-bench-report.json";
-const fallbackJsonPaths = [defaultJsonPath, "/data/bench.json"];
+const benchJsonPath = "/data/bench.json";
 
 function isBenchReport(value: unknown): value is BenchReport {
   if (!value || typeof value !== "object") {
@@ -56,10 +54,6 @@ function isBenchReport(value: unknown): value is BenchReport {
 
   const report = value as Partial<BenchReport>;
   return (
-    typeof report.schema_version === "number" &&
-    report.schema_version >= 1 &&
-    typeof report.generated_at === "string" &&
-    typeof report.seshat_version === "string" &&
     Array.isArray(report.overall) &&
     Array.isArray(report.samples) &&
     Array.isArray(report.agents) &&
@@ -120,57 +114,27 @@ function fixtureKey(summary: AgentSummary) {
 
 export function BenchDashboard() {
   const [report, setReport] = useState<BenchReport | null>(null);
-  const [source, setSource] = useState(defaultJsonPath);
-  const [status, setStatus] = useState(`Buscando ${defaultJsonPath}...`);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [selectedSampleAgent, setSelectedSampleAgent] = useState("");
 
-  const loadReport = async (paths = fallbackJsonPaths) => {
-    setStatus(`Carregando ${paths.join(" ou ")}...`);
+  const loadReport = async () => {
     setError(null);
-    const errors: string[] = [];
 
-    for (const path of paths) {
-      const response = await fetch(path, { cache: "no-store" });
+    try {
+      const response = await fetch(benchJsonPath, { cache: "no-store" });
       if (!response.ok) {
-        errors.push(`${path}: HTTP ${response.status}`);
-        continue;
+        throw new Error(`HTTP ${response.status}`);
       }
 
       const json = (await response.json()) as unknown;
       if (!isBenchReport(json)) {
-        errors.push(`${path}: schema_version ou campos obrigatorios ausentes`);
-        continue;
+        throw new Error("campos obrigatorios ausentes");
       }
 
       setReport(json);
-      setSource(path);
-      setStatus(`Relatorio carregado de ${path}`);
-      return;
-    }
-
-    setReport(null);
-    setStatus("Nenhum bench publicado em /data.");
-    setError(errors.join(" | ") || "falha desconhecida");
-  };
-
-  const loadFile = async (file: File) => {
-    setError(null);
-    setStatus(`Lendo ${file.name}...`);
-
-    try {
-      const json = JSON.parse(await file.text()) as unknown;
-      if (!isBenchReport(json)) {
-        throw new Error("schema_version ou campos obrigatorios ausentes");
-      }
-
-      setReport(json);
-      setSource(file.name);
-      setStatus(`Relatorio carregado de ${file.name}`);
     } catch (err) {
       setReport(null);
-      setStatus("Nao foi possivel carregar o arquivo.");
-      setError(err instanceof Error ? err.message : "JSON invalido");
+      setError(err instanceof Error ? err.message : "falha desconhecida");
     }
   };
 
@@ -201,65 +165,67 @@ export function BenchDashboard() {
     return wins;
   }, [report]);
 
-  const visibleSamples = useMemo(() => report?.samples.slice(0, 12) ?? [], [report]);
+  const sampleAgents = useMemo(() => {
+    if (!report) {
+      return [];
+    }
+
+    const agentsWithSamples = new Set(report.samples.map((sample) => sample.agent));
+    const orderedAgents = report.agents.filter((agent) => agentsWithSamples.has(agent));
+    const extraAgents = [...agentsWithSamples].filter((agent) => !orderedAgents.includes(agent));
+    return [...orderedAgents, ...extraAgents];
+  }, [report]);
+
+  useEffect(() => {
+    if (!sampleAgents.length) {
+      if (selectedSampleAgent) {
+        setSelectedSampleAgent("");
+      }
+      return;
+    }
+
+    if (!sampleAgents.includes(selectedSampleAgent)) {
+      setSelectedSampleAgent(sampleAgents[0]);
+    }
+  }, [sampleAgents, selectedSampleAgent]);
+
+  const filteredSamples = useMemo(() => {
+    if (!report) {
+      return [];
+    }
+
+    return selectedSampleAgent
+      ? report.samples.filter((sample) => sample.agent === selectedSampleAgent)
+      : report.samples;
+  }, [report, selectedSampleAgent]);
+
+  const visibleSamples = useMemo(() => filteredSamples.slice(0, 12), [filteredSamples]);
   const winner = report?.overall[0];
 
   return (
-    <section className="benchDashboard">
-      <div className="benchLoader">
-        <div>
-          <p className="benchStatus">{status}</p>
-          {error ? <p className="benchError">Detalhe: {error}</p> : null}
-        </div>
-        <div className="benchActions">
-          <button className="button secondary" type="button" onClick={() => void loadReport()}>
-            <RefreshCw aria-hidden="true" size={17} />
-            Recarregar
-          </button>
-          <button className="button primary" type="button" onClick={() => inputRef.current?.click()}>
-            <FileUp aria-hidden="true" size={17} />
-            Carregar JSON
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) {
-                void loadFile(file);
-              }
-            }}
-          />
-        </div>
-      </div>
-
+    <section className="benchDashboard pb-24">
       {!report ? (
-        <div className="benchEmpty">
-          <h2>Publique ou carregue um JSON de bench.</h2>
+        <div className="benchEmpty mt-5">
+          <h2>Gere o JSON de bench.</h2>
           <p>
-            Gere o arquivo em <code>site/public/data/seshat-bench-report.json</code> para a
-            pagina carregar automaticamente, ou use o botao acima para inspecionar um JSON local.
+            A pagina espera o arquivo em <code>site/public/data/bench.json</code>.
           </p>
+          {error ? <p className="benchError">Detalhe: {error}</p> : null}
         </div>
       ) : (
         <>
           <div className="benchMeta">
             <article>
               <span>Gerado em</span>
-              <strong>{formatDate(report.generated_at)}</strong>
+              <strong>{report.generated_at ? formatDate(report.generated_at) : "nao informado"}</strong>
             </article>
             <article>
               <span>Versao</span>
-              <strong>seshat {report.seshat_version}</strong>
+              <strong>{report.seshat_version ? `seshat ${report.seshat_version}` : "nao informado"}</strong>
             </article>
             <article>
               <span>Iteracoes</span>
               <strong>{report.iterations}</strong>
-            </article>
-            <article>
-              <span>Fonte</span>
-              <strong>{source}</strong>
             </article>
           </div>
 
@@ -386,11 +352,25 @@ export function BenchDashboard() {
             <div className="benchPanelHeader">
               <div>
                 <p className="sectionKicker">Samples</p>
-                <h2>Execucoes individuais.</h2>
+                <h2>Execuções individuais</h2>
               </div>
-              <span>{visibleSamples.length} de {report.samples.length}</span>
+              <span>{visibleSamples.length} de {filteredSamples.length}</span>
             </div>
-            <div className="benchSamples">
+            <div className="benchTabs" role="tablist" aria-label="Samples por agente">
+              {sampleAgents.map((agent) => (
+                <button
+                  aria-selected={agent === selectedSampleAgent}
+                  className="transition-colors"
+                  key={agent}
+                  onClick={() => setSelectedSampleAgent(agent)}
+                  role="tab"
+                  type="button"
+                >
+                  {agent}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-col gap-4">
               {visibleSamples.map((sample) => (
                 <article
                   className="benchSample"
@@ -426,17 +406,6 @@ export function BenchDashboard() {
               ))}
             </div>
           </div>
-
-          {report.override_notes?.length ? (
-            <div className="benchPanel">
-              <p className="sectionKicker">Notas</p>
-              <ul className="benchNotes">
-                {report.override_notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </>
       )}
     </section>
