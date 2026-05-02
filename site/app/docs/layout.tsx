@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BookOpenText, GitBranch, Terminal } from "lucide-react";
+import { ThemeToggle } from "../theme-toggle";
 
 const docsLinks = [
   { href: "/docs", label: "Inicio" },
@@ -32,6 +33,7 @@ export default function DocsLayout({ children }: { children: ReactNode }) {
             <GitBranch aria-hidden="true" size={18} />
             GitHub
           </a>
+          <ThemeToggle />
         </nav>
       </header>
       <div className="docsFrame">
