@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   color-scheme: dark;
   --bg: #090b0c;
@@ -199,6 +201,7 @@ footer a:hover,
 .marketingPage h1 {
   margin-top: 18px;
   font-size: 9.5rem;
+  font-weight: 900;
   line-height: 0.88;
   letter-spacing: 0;
 }
@@ -265,6 +268,7 @@ footer a:hover,
   max-width: 860px;
   margin-top: 10px;
   font-size: 4rem;
+  font-weight: 900;
   line-height: 1;
   letter-spacing: 0;
 }
@@ -303,6 +307,7 @@ footer a:hover,
 .feature h3 {
   margin-top: 18px;
   font-size: 1.1rem;
+  font-weight: 900;
 }
 
 .step code {
@@ -548,6 +553,7 @@ footer div {
 .docsArticle h3,
 .docsArticle h4 {
   color: var(--text);
+  font-weight: 900;
   line-height: 1.15;
   letter-spacing: 0;
 }
@@ -639,8 +645,15 @@ footer div {
 }
 
 .benchPage {
+  position: relative;
   min-height: 100svh;
-  background: var(--bg);
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(103, 228, 128, 0.14) 0%, rgba(103, 228, 128, 0) 34%),
+    linear-gradient(215deg, rgba(81, 215, 255, 0.12) 0%, rgba(81, 215, 255, 0) 36%),
+    repeating-linear-gradient(90deg, rgba(242, 245, 239, 0.026) 0 1px, transparent 1px 88px),
+    repeating-linear-gradient(0deg, rgba(242, 245, 239, 0.018) 0 1px, transparent 1px 88px),
+    linear-gradient(180deg, #08100e 0%, #080b0c 44%, #090b0c 100%);
   color: var(--text);
 }
 
@@ -653,8 +666,8 @@ footer div {
   justify-content: space-between;
   gap: 24px;
   padding: 16px clamp(18px, 5vw, 64px);
-  background: rgba(9, 11, 12, 0.9);
-  border-bottom: 1px solid var(--line);
+  background: rgba(7, 10, 10, 0.74);
+  border-bottom: 1px solid rgba(103, 228, 128, 0.18);
   backdrop-filter: blur(14px);
 }
 
@@ -686,18 +699,27 @@ footer div {
 
 .benchHero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
   gap: clamp(28px, 5vw, 72px);
-  align-items: end;
-  padding: clamp(44px, 8vw, 92px) 0 clamp(32px, 5vw, 56px);
+  align-items: center;
+  padding: clamp(42px, 7vw, 84px) 0 clamp(28px, 5vw, 48px);
+}
+
+.benchHero > *,
+.benchRankHead > div,
+.benchSample header > div {
+  min-width: 0;
 }
 
 .benchHero h1 {
   max-width: 780px;
   margin: 14px 0 0;
-  font-size: clamp(3rem, 7vw, 5.9rem);
-  line-height: 0.95;
+  font-size: clamp(3rem, 6vw, 5rem);
+  font-weight: 900;
+  line-height: 0.98;
   letter-spacing: 0;
+  overflow-wrap: break-word;
+  text-wrap: balance;
 }
 
 .benchHero p:not(.sectionKicker) {
@@ -706,44 +728,38 @@ footer div {
   color: #d8dfda;
   font-size: 1.16rem;
   line-height: 1.62;
+  overflow-wrap: anywhere;
 }
 
 .benchHero code,
 .benchEmpty code {
   color: #ffd199;
+  overflow-wrap: anywhere;
 }
 
 .benchHero pre {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 22px;
   overflow-x: auto;
-  border: 1px solid rgba(103, 228, 128, 0.22);
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  border: 1px solid rgba(103, 228, 128, 0.32);
   border-radius: 8px;
-  background: #070909;
+  background:
+    linear-gradient(135deg, rgba(103, 228, 128, 0.08), rgba(81, 215, 255, 0.05)),
+    rgba(5, 8, 8, 0.84);
   color: #d8e1dc;
   font-size: 0.9rem;
   line-height: 1.58;
+  white-space: pre-wrap;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
 }
 
 .benchDashboard {
   padding-bottom: 92px;
-}
-
-.benchLoader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--panel);
-}
-
-.benchStatus {
-  margin: 0;
-  color: var(--text);
-  font-weight: 800;
 }
 
 .benchError {
@@ -766,9 +782,12 @@ footer div {
 .benchPanel,
 .benchSummaryGrid article,
 .benchMeta article {
-  border: 1px solid var(--line);
+  border: 1px solid rgba(242, 245, 239, 0.1);
   border-radius: 8px;
-  background: var(--panel);
+  background:
+    linear-gradient(180deg, rgba(242, 245, 239, 0.044), rgba(242, 245, 239, 0)),
+    rgba(12, 17, 17, 0.88);
+  box-shadow: inset 0 1px 0 rgba(242, 245, 239, 0.04);
 }
 
 .benchEmpty {
@@ -779,6 +798,7 @@ footer div {
 .benchEmpty h2 {
   margin: 0;
   font-size: 1.65rem;
+  font-weight: 900;
 }
 
 .benchEmpty p {
@@ -790,14 +810,27 @@ footer div {
 
 .benchMeta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
 }
 
 .benchMeta article,
 .benchSummaryGrid article {
+  position: relative;
+  overflow: hidden;
   padding: 18px;
+}
+
+.benchMeta article::before,
+.benchSummaryGrid article::before,
+.benchPanel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: linear-gradient(90deg, var(--green), var(--cyan));
+  opacity: 0.8;
 }
 
 .benchMeta span,
@@ -834,8 +867,10 @@ footer div {
 }
 
 .benchSummaryGrid .benchWinner {
-  border-color: rgba(103, 228, 128, 0.28);
-  background: #0c1510;
+  border-color: rgba(103, 228, 128, 0.34);
+  background:
+    linear-gradient(135deg, rgba(103, 228, 128, 0.16), rgba(81, 215, 255, 0.04)),
+    rgba(8, 20, 14, 0.92);
 }
 
 .benchWinner svg {
@@ -847,6 +882,8 @@ footer div {
 }
 
 .benchPanel {
+  position: relative;
+  overflow: hidden;
   margin-top: 18px;
   padding: 22px;
 }
@@ -862,6 +899,7 @@ footer div {
 .benchPanelHeader h2 {
   margin: 8px 0 0;
   font-size: clamp(1.8rem, 4vw, 3rem);
+  font-weight: 900;
   line-height: 1;
 }
 
@@ -878,9 +916,11 @@ footer div {
 
 .benchRankCard {
   padding: 18px;
-  border: 1px solid rgba(242, 245, 239, 0.1);
+  border: 1px solid rgba(242, 245, 239, 0.11);
   border-radius: 8px;
-  background: #0c1010;
+  background:
+    linear-gradient(180deg, rgba(81, 215, 255, 0.052), rgba(81, 215, 255, 0)),
+    rgba(8, 12, 12, 0.78);
 }
 
 .benchRankHead {
@@ -896,8 +936,8 @@ footer div {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: rgba(81, 215, 255, 0.12);
-  color: var(--cyan);
+  background: rgba(103, 228, 128, 0.13);
+  color: var(--green);
   font-weight: 900;
 }
 
@@ -914,11 +954,11 @@ footer div {
 }
 
 .benchBar {
-  height: 8px;
+  height: 10px;
   margin: 18px 0;
   overflow: hidden;
   border-radius: 999px;
-  background: #1b2222;
+  background: rgba(242, 245, 239, 0.08);
 }
 
 .benchBar span {
@@ -959,7 +999,7 @@ footer div {
 .benchTable th,
 .benchTable td {
   padding: 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(242, 245, 239, 0.08);
   text-align: left;
   vertical-align: top;
 }
@@ -975,6 +1015,38 @@ footer div {
   color: #d8dfda;
 }
 
+.benchTable tbody tr:hover {
+  background: rgba(81, 215, 255, 0.045);
+}
+
+.benchTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(242, 245, 239, 0.08);
+}
+
+.benchTabs button {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid rgba(242, 245, 239, 0.12);
+  border-radius: 8px;
+  background: rgba(242, 245, 239, 0.045);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.benchTabs button[aria-selected="true"] {
+  border-color: rgba(103, 228, 128, 0.42);
+  background: linear-gradient(90deg, rgba(103, 228, 128, 0.22), rgba(81, 215, 255, 0.12));
+  color: var(--text);
+}
+
 .benchSamples {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -985,7 +1057,9 @@ footer div {
   padding: 18px;
   border: 1px solid rgba(242, 245, 239, 0.1);
   border-radius: 8px;
-  background: #0c1010;
+  background:
+    linear-gradient(180deg, rgba(103, 228, 128, 0.045), rgba(103, 228, 128, 0)),
+    rgba(8, 12, 12, 0.78);
 }
 
 .benchSample header {
@@ -1028,13 +1102,6 @@ footer div {
 .sampleFail {
   flex: 0 0 auto;
   color: var(--red);
-}
-
-.benchNotes {
-  margin: 16px 0 0;
-  padding-left: 20px;
-  color: #d8dfda;
-  line-height: 1.7;
 }
 
 @keyframes scan {
@@ -1083,7 +1150,6 @@ footer div {
   footer,
   .docsTopbar,
   .benchTopbar,
-  .benchLoader,
   .benchPanelHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -1164,14 +1230,12 @@ footer div {
   }
 
   .benchHero pre,
-  .benchPanel,
-  .benchLoader {
+  .benchPanel {
     padding: 16px;
   }
 
-  .benchActions,
-  .benchActions .button {
-    width: 100%;
+  .benchHero pre {
+    font-size: 0.78rem;
   }
 
   .benchSample dl,
