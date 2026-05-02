@@ -52,7 +52,7 @@ const accentCardClass =
 	"bench-accent-fx relative overflow-hidden rounded-sm border border-(--line) bg-[var(--bench-panel)] shadow-[0_22px_72px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(242,245,239,0.05)]";
 const panelClass = `${accentCardClass} mt-5 p-[clamp(20px,3vw,28px)] backdrop-blur-lg max-[540px]:p-4`;
 const labelClass = "text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-(--muted)";
-const kickerClass = "text-[0.78rem] font-extrabold uppercase tracking-[0.12em] text-[var(--green)]";
+const kickerClass = "text-[0.78rem] font-extrabold uppercase tracking-[0.12em] text-(--green)";
 const valueClass = "mt-2 block wrap-break-words text-[1.08rem] font-extrabold text-(--text)";
 
 function isBenchReport(value: unknown): value is BenchReport {
@@ -419,7 +419,7 @@ export function BenchDashboard() {
 								{fixtureTabs.map((fixture) => (
 									<button
 										aria-selected={fixture === activeFixture}
-										className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
+										className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-(--button-secondary-bg) px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
 										key={fixture}
 										onClick={() => setSelectedFixture(fixture)}
 										role="tab"
@@ -513,7 +513,7 @@ export function BenchDashboard() {
 							{sampleAgents.map((agent) => (
 								<button
 									aria-selected={agent === selectedSampleAgent}
-									className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-[var(--button-secondary-bg)] px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
+									className="min-h-9 cursor-pointer rounded-sm border border-(--line) bg-(--button-secondary-bg) px-3.5 text-[0.9rem] font-extrabold text-(--muted) aria-selected:border-[color-mix(in_srgb,var(--cyan)_42%,var(--line))] aria-selected:bg-[linear-gradient(90deg,color-mix(in_srgb,var(--cyan)_18%,transparent),color-mix(in_srgb,var(--amber)_10%,transparent))] aria-selected:text-(--text)"
 									key={agent}
 									onClick={() => setSelectedSampleAgent(agent)}
 									role="tab"
@@ -535,17 +535,17 @@ export function BenchDashboard() {
 												{sample.fixture}
 											</strong>
 											<div className="flex flex-row align-middle items-end gap-2">
-												<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
+												<span className="rounded-sm bg-(--panel-strong) px-2 py-0.5 font-mono text-xs text-(--text)">
 													{sample.agent}
 												</span>
-												<span className="rounded-sm bg-[var(--panel-strong)] px-2 py-0.5 font-mono text-xs text-(--text)">
+												<span className="rounded-sm bg-(--panel-strong) px-2 py-0.5 font-mono text-xs text-(--text)">
 													{sample.model ? ` / ${sample.model}` : ""}
 												</span>
 											</div>
 										</div>
 										{sample.success ? (
 											<CheckCircle2
-												className="shrink-0 text-[var(--green)]"
+												className="shrink-0 text-(--green)"
 												aria-hidden="true"
 												size={20}
 											/>
@@ -553,7 +553,7 @@ export function BenchDashboard() {
 											<XCircle className="shrink-0 text-(--red)" aria-hidden="true" size={20} />
 										)}
 									</header>
-									<code className="block rounded-sm border border-(--line) bg-[var(--bench-code-bg)] px-3.5 py-3 font-mono text-xs italic leading-[1.58] text-[var(--amber)]">
+									<code className="block rounded-sm border border-(--line) bg-(--bench-code-bg) px-3.5 py-3 font-mono text-xs italic leading-[1.58] text-(--amber)">
 										{sample.message ?? sample.error ?? "sem mensagem"}
 									</code>
 									<dl className="grid grid-cols-3 gap-3 max-[540px]:grid-cols-1">
